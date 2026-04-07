@@ -1,5 +1,5 @@
 ---
-name: dial-meta
+name: tas-meta
 description: >
   MetaAgent (合) — single-step workflow executor. Runs as a separate process
   via `claude -p`. Reads workflow definition files, executes one dialectic step
@@ -205,7 +205,7 @@ Antithesis receives:
 
 ```
 TeamCreate({
-  team_name: "dial-step",
+  team_name: "tas-step",
   description: "Dialectic step: {STEP_ID} — {goal}"
 })
 ```
@@ -215,7 +215,7 @@ Spawn both agents:
 ```
 Agent({
   name: "thesis",
-  team_name: "dial-step",
+  team_name: "tas-step",
   mode: "bypassPermissions",
   prompt: "{role-injected thesis_instructions}",
   run_in_background: true
@@ -223,7 +223,7 @@ Agent({
 
 Agent({
   name: "antithesis",
-  team_name: "dial-step",
+  team_name: "tas-step",
   mode: "bypassPermissions",
   prompt: "{role-injected antithesis_instructions}",
   run_in_background: true

@@ -1,18 +1,18 @@
 ---
-name: dial
+name: tas
 description: >
-  Dialectic orchestration skill — triggers on /dial or complex multi-step requests.
+  Dialectic orchestration skill — triggers on /tas or complex multi-step requests.
   Three-layer architecture: MainOrchestrator → MetaAgent → thesis/antithesis agents.
   Uses thesis-antithesis-synthesis (정반합) for rigorous quality.
-  ALWAYS use this skill when: user types /dial, requests dialectical review,
+  ALWAYS use this skill when: user types /tas, requests dialectical review,
   mentions 정반합, wants structured quality workflow, asks for thesis-antithesis process,
-  wants rigorous multi-perspective review, says "dial" in any context, or requests
+  wants rigorous multi-perspective review, says "tas" in any context, or requests
   iterative agent review loop.
 ---
 
-# dial — Main Orchestrator
+# tas — Main Orchestrator
 
-You are the **MainOrchestrator** for the dial plugin. Your job is lightweight:
+You are the **MainOrchestrator** for the tas plugin. Your job is lightweight:
 parse the user's request, manage progress state, invoke MetaAgent as a separate process
 **per workflow step**, and present results back to the user.
 
@@ -31,8 +31,8 @@ YOU (MainOrchestrator, depth 0)
 
 ### Parse the Request
 
-Extract the user's intent from `/dial {request}`. The `$ARGUMENTS` variable contains
-everything after `/dial`.
+Extract the user's intent from `/tas {request}`. The `$ARGUMENTS` variable contains
+everything after `/tas`.
 
 If `$ARGUMENTS` is empty, ask the user what they want to accomplish with a dialectical workflow.
 
@@ -58,7 +58,7 @@ If skipping, respond directly: "This is straightforward — responding directly 
 
 ```bash
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
-WORKSPACE="$PROJECT_ROOT/_workspace/dial-$(date +%Y%m%d_%H%M%S)"
+WORKSPACE="$PROJECT_ROOT/_workspace/tas-$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$WORKSPACE"
 ```
 
@@ -174,7 +174,7 @@ For single-deliverable requests, invoke MetaAgent without a workflow file.
 MetaAgent uses `workflow-patterns.md` to design its own steps internally.
 
 ```bash
-SKILL_DIR="$(pwd)/skills/dial"
+SKILL_DIR="$(pwd)/skills/tas"
 
 META_OUTPUT=$(CLAUDECODE=0 claude -p "$(cat <<'DIAL_END'
 REQUEST: {user's request from $ARGUMENTS}
@@ -199,7 +199,7 @@ Parse output and present results (see Phase 2: Present Results).
 ### Determine Paths
 
 ```bash
-SKILL_DIR="$(pwd)/skills/dial"
+SKILL_DIR="$(pwd)/skills/tas"
 PIPELINE="sdlc"  # or "gamedev"
 ```
 
@@ -384,7 +384,7 @@ overall project summary after all phases complete.
 If the request type was Implementation or Refactoring, append:
 
 ```
-> **Recommended**: Run `/dial-verify` to independently trace boundary values
+> **Recommended**: Run `/tas-verify` to independently trace boundary values
 > through the produced code.
 ```
 
@@ -423,6 +423,6 @@ Workspace artifacts (if any): {workspace}
 | Setting | Default | Adjustable By |
 |---------|---------|---------------|
 | `--model` | opus | Fixed — always use the most capable model |
-| Workspace location | `{PROJECT_ROOT}/_workspace/dial-{timestamp}` | Fixed convention |
+| Workspace location | `{PROJECT_ROOT}/_workspace/tas-{timestamp}` | Fixed convention |
 | Max parallel stories | 3 | Configurable in sprint-planning.md |
 | Review retry limit | 2 | S06 fail → S04 loop max count |

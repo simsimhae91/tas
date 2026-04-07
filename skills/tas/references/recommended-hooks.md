@@ -1,6 +1,6 @@
-# Recommended Hooks for Projects Using dial
+# Recommended Hooks for Projects Using tas
 
-Projects that use the dial plugin can add these hooks to `.claude/settings.local.json` for automated static verification when dial produces code.
+Projects that use the tas plugin can add these hooks to `.claude/settings.local.json` for automated static verification when tas produces code.
 
 ## TypeScript Projects
 
@@ -62,7 +62,7 @@ Projects that use the dial plugin can add these hooks to `.claude/settings.local
 }
 ```
 
-## Why Hooks Matter for dial
+## Why Hooks Matter for tas
 
 The dialectic loop (thesis → antithesis → synthesis) is text-based review. Hooks add **automated static analysis** as a fourth layer:
 

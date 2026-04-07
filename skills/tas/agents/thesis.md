@@ -1,5 +1,5 @@
 ---
-name: dial-thesis
+name: tas-thesis
 description: ThesisAgent (正) — proposes positions with reasoning, defends or concedes through dialectical dialogue
 model: opus
 tools: Read, Write, Edit, Bash, Grep, Glob

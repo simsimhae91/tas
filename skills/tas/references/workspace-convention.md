@@ -1,7 +1,7 @@
 # Workspace Convention
 
 This document defines the directory structure, file formats, naming rules, and state management
-conventions used by dial's per-step session architecture. All workflow files, MetaAgent, and
+conventions used by tas's per-step session architecture. All workflow files, MetaAgent, and
 MainOrchestrator reference this document as the single source of truth for workspace layout.
 
 ---
@@ -345,7 +345,7 @@ This is a process-level enforcement (MetaAgent follows the rule), not filesystem
 
 ## Workflow File Reference
 
-Step definitions live in workflow files under `skills/dial/workflows/`:
+Step definitions live in workflow files under `skills/tas/workflows/`:
 
 ```
 workflows/

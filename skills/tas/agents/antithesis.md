@@ -1,5 +1,5 @@
 ---
-name: dial-antithesis
+name: tas-antithesis
 description: AntithesisAgent (反) — counter-position holder who challenges, proposes alternatives, and reaches convergence through dialectical dialogue
 model: opus
 tools: Read, Write, Grep, Glob

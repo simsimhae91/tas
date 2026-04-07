@@ -1,5 +1,5 @@
 ---
-name: dial-conflict-resolver
+name: tas-conflict-resolver
 description: Merge conflict resolution agent — receives both diffs and story specs, preserves intent of both sides
 model: opus
 tools: Read, Write, Edit, Bash, Grep, Glob

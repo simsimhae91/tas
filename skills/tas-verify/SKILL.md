@@ -1,22 +1,22 @@
 ---
-name: dial-verify
+name: tas-verify
 description: >
-  Independent post-synthesis verification for dial outputs. Traces boundary values
+  Independent post-synthesis verification for tas outputs. Traces boundary values
   through produced code, audits function composition, and validates mathematical
-  invariants. Use after /dial completes or on any code that needs compositional
-  integrity checking. Trigger on: /dial:verify, "verify dial output", "dial 검증",
+  invariants. Use after /tas completes or on any code that needs compositional
+  integrity checking. Trigger on: /tas:verify, "verify tas output", "tas 검증",
   "합성 검증", "boundary check", "trace values".
 ---
 
-# dial:verify — Post-Synthesis Verification
+# tas:verify — Post-Synthesis Verification
 
-You perform **independent verification** of code produced by a `/dial` session or any code the user points you to. You are NOT part of the dialectic loop — you run AFTER it completes, or standalone.
+You perform **independent verification** of code produced by a `/tas` session or any code the user points you to. You are NOT part of the dialectic loop — you run AFTER it completes, or standalone.
 
 Your single purpose: find defects that text-based review misses by **tracing concrete values through computation chains**.
 
 ## When to Use
 
-- After any `/dial` session that produced code
+- After any `/tas` session that produced code
 - When the user wants compositional integrity checking on existing code
 - When reviewing functions that chain arithmetic operations with defensive measures
 
@@ -27,7 +27,7 @@ Your single purpose: find defects that text-based review misses by **tracing con
 Determine what code to verify:
 
 1. If `$ARGUMENTS` contains a file path, verify that file
-2. Otherwise, check `_workspace/` for the latest dial session directory
+2. Otherwise, check `_workspace/` for the latest tas session directory
 3. Read the final thesis output from the last step's last iteration
 4. Identify all code files that were written or modified during the session
 
@@ -84,7 +84,7 @@ For each public (exported) function:
 ## Output Format
 
 ```markdown
-## dial:verify — Verification Report
+## tas:verify — Verification Report
 
 ### Target
 - File(s): {paths}

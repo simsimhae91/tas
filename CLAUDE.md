@@ -1,8 +1,8 @@
-# dial — Development Guide
+# tas — Development Guide
 
-## What is dial?
+## What is tas?
 
-dial is a Claude Code plugin that applies thesis-antithesis-synthesis (정반합) to produce higher-quality outputs through multi-agent dialectical review. It uses a 3-layer orchestration architecture and supports both single requests and full SDLC/GameDev pipelines.
+tas is a Claude Code plugin that applies thesis-antithesis-synthesis (정반합) to produce higher-quality outputs through multi-agent dialectical review. It uses a 3-layer orchestration architecture and supports both single requests and full SDLC/GameDev pipelines.
 
 ## Architecture
 
@@ -53,14 +53,14 @@ S06 uses **inverted convergence**: thesis attacks (finds defects), antithesis ju
 
 ## Quality Invariants
 
-The dial process must catch issues that a human expert reviewer would catch. The following are **not edge cases** — they are design defects when violated:
+The tas process must catch issues that a human expert reviewer would catch. The following are **not edge cases** — they are design defects when violated:
 
 1. **Semantic consistency** — the same concept means the same thing in every appearance (parameters, callbacks, errors, docs)
 2. **Behavioral consistency** — all code paths for the same operation behave identically under the same contract
 3. **Compositional integrity** — when function A's output feeds into function B, the composition is sound for ALL valid inputs
 4. **Value flow soundness** — no intermediate computation in the call chain produces NaN, Infinity, or an unexpected type, even if a downstream cap would "fix" it
 
-If a dial session produces code that violates any of these, the gap is in the **review process**, not in the produced code. The remedy is improving the lenses, not adding edge-case guards.
+If a tas session produces code that violates any of these, the gap is in the **review process**, not in the produced code. The remedy is improving the lenses, not adding edge-case guards.
 
 ## Defensive Measure Rule
 
@@ -70,21 +70,21 @@ A cap, clamp, or guard is correctly placed only when it is applied **before** th
 
 | File | Role |
 |------|------|
-| `skills/dial/SKILL.md` | MainOrchestrator — thin scheduler, PROGRESS.md management, per-step invocation |
-| `skills/dial/agents/meta.md` | MetaAgent (合) — single-step executor, workflow file reader, checkpoint management |
-| `skills/dial/agents/thesis.md` | ThesisAgent (正) — position holder with reasoning, defense/concession through dialogue |
-| `skills/dial/agents/antithesis.md` | AntithesisAgent (反) — counter-position with alternatives, 4 review lenses, convergence-seeking |
-| `skills/dial/agents/conflict-resolver.md` | Merge conflict resolution for sprint execution |
-| `skills/dial/references/workspace-convention.md` | Workspace directory structure, output format, PROGRESS.md format, Read Scope rules |
-| `skills/dial/references/workflow-patterns.md` | Workflow templates for single-request mode |
-| `skills/dial/references/sdlc-phases.md` | SDLC inter-phase deliverable contracts |
-| `skills/dial/references/gamedev-phases.md` | Game Dev inter-phase deliverable contracts |
-| `skills/dial/references/story-spec-format.md` | Standard format for implementation stories |
-| `skills/dial/references/sprint-planning.md` | Sprint batching algorithm for parallel implementation |
-| `skills/dial/references/recommended-hooks.md` | Hook recommendations for target projects |
-| `skills/dial/workflows/sdlc/P{1-4}-*.md` | SDLC step-by-step workflow definitions (4 files) |
-| `skills/dial/workflows/gamedev/P{1-4}-*.md` | Game Dev step-by-step workflow definitions (4 files) |
-| `skills/dial-verify/SKILL.md` | Post-synthesis independent verification |
+| `skills/tas/SKILL.md` | MainOrchestrator — thin scheduler, PROGRESS.md management, per-step invocation |
+| `skills/tas/agents/meta.md` | MetaAgent (合) — single-step executor, workflow file reader, checkpoint management |
+| `skills/tas/agents/thesis.md` | ThesisAgent (正) — position holder with reasoning, defense/concession through dialogue |
+| `skills/tas/agents/antithesis.md` | AntithesisAgent (反) — counter-position with alternatives, 4 review lenses, convergence-seeking |
+| `skills/tas/agents/conflict-resolver.md` | Merge conflict resolution for sprint execution |
+| `skills/tas/references/workspace-convention.md` | Workspace directory structure, output format, PROGRESS.md format, Read Scope rules |
+| `skills/tas/references/workflow-patterns.md` | Workflow templates for single-request mode |
+| `skills/tas/references/sdlc-phases.md` | SDLC inter-phase deliverable contracts |
+| `skills/tas/references/gamedev-phases.md` | Game Dev inter-phase deliverable contracts |
+| `skills/tas/references/story-spec-format.md` | Standard format for implementation stories |
+| `skills/tas/references/sprint-planning.md` | Sprint batching algorithm for parallel implementation |
+| `skills/tas/references/recommended-hooks.md` | Hook recommendations for target projects |
+| `skills/tas/workflows/sdlc/P{1-4}-*.md` | SDLC step-by-step workflow definitions (4 files) |
+| `skills/tas/workflows/gamedev/P{1-4}-*.md` | Game Dev step-by-step workflow definitions (4 files) |
+| `skills/tas-verify/SKILL.md` | Post-synthesis independent verification |
 
 ## Development Conventions
 
