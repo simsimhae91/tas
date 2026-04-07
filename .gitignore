@@ -1,1 +1,8 @@
-.openchrome
+node_modules/
+src/
+.openchrome/
+.claude/
+_workspace/
+package.json
+package-lock.json
+tsconfig.json
