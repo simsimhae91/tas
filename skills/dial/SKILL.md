@@ -171,24 +171,24 @@ TeamCreate({
    - Read `agents/thesis.md` from this skill's directory → store as `thesis_instructions`
    - Read `agents/antithesis.md` from this skill's directory → store as `antithesis_instructions`
 
-3. Spawn ThesisAgent:
+3. Spawn ThesisAgent (starts idle — will be triggered by SendMessage):
 ```
 Agent({
   name: "thesis",
   team_name: "dial-session",
   mode: "bypassPermissions",
-  prompt: "{thesis_instructions}\n\n---\n\n## Your Assignment\n\n**Step Goal**: {step.goal}\n\n**Pass Criteria**:\n{step.pass_criteria formatted as numbered list}\n\n**Project Context**:\n{relevant file paths, code snippets, constraints}\n\n**Max Iterations**: {step.max_iterations}\n\nBegin by producing your deliverable and sending it to antithesis.",
+  prompt: "{thesis_instructions}\n\n---\n\nYou are ThesisAgent in team 'dial-session'. You will receive step assignments via SendMessage from the team lead (MetaAgent). When you receive an assignment, execute it IMMEDIATELY and send your deliverable to 'antithesis'. Wait for your first assignment now.",
   run_in_background: true
 })
 ```
 
-4. Spawn AntithesisAgent:
+4. Spawn AntithesisAgent (starts idle — waits for thesis output):
 ```
 Agent({
   name: "antithesis",
   team_name: "dial-session",
   mode: "bypassPermissions",
-  prompt: "{antithesis_instructions}\n\n---\n\n## Your Assignment\n\n**Step Goal** (context only): {step.goal}\n\n**Pass Criteria to Evaluate**:\n{step.pass_criteria formatted as numbered list}\n\nWait for ThesisAgent to send you their output, then review it.",
+  prompt: "{antithesis_instructions}\n\n---\n\nYou are AntithesisAgent in team 'dial-session'. You will receive ThesisAgent's deliverables via SendMessage. When you receive output from 'thesis', review it against the pass criteria and send your verdict back to 'thesis' AND to the team lead. Wait for your first review assignment now.",
   run_in_background: true
 })
 ```
@@ -200,21 +200,23 @@ For each workflow step, first mark the task as in-progress:
 TaskUpdate({ id: {task_id}, status: "in_progress" })
 ```
 
-1. If not step 1: Send new step assignment to ThesisAgent via `SendMessage`:
+**IMPORTANT: MetaAgent must explicitly trigger each step via SendMessage. Do not rely on spawn prompts for step assignments.**
+
+1. Send step assignment to ThesisAgent (triggers execution):
 ```
 SendMessage({
   to: "thesis",
-  summary: "New step: {step.goal}",
-  message: "## New Step Assignment\n\n**Step Goal**: {step.goal}\n\n**Pass Criteria**:\n{criteria}\n\n**Context from previous steps**:\n{relevant output from prior steps}\n\nProduce your deliverable and send to antithesis."
+  summary: "Step {N}: {step.goal}",
+  message: "## Step {N} Assignment\n\n**Step Goal**: {step.goal}\n\n**Pass Criteria**:\n{criteria}\n\n**Project Context**:\n{relevant file paths, code snippets, constraints}\n\n**Context from previous steps** (if any):\n{relevant output from prior steps}\n\nExecute this goal NOW and send your deliverable to antithesis."
 })
 ```
 
-2. Send step criteria to AntithesisAgent:
+2. Send review criteria to AntithesisAgent:
 ```
 SendMessage({
   to: "antithesis",
   summary: "Review criteria for step {N}",
-  message: "## New Review Assignment\n\n**Step Goal** (context): {step.goal}\n\n**Pass Criteria**:\n{criteria}\n\nWait for thesis to send their output."
+  message: "## Step {N} Review Criteria\n\n**Step Goal** (context only): {step.goal}\n\n**Pass Criteria**:\n{criteria}\n\nThesisAgent has been assigned this step. Wait for their output, then review."
 })
 ```
 
