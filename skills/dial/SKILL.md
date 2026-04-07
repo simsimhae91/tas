@@ -1,76 +1,68 @@
 ---
 name: dial
 description: >
-  Dialectic workflow using thesis-antithesis-synthesis (정반합) for rigorous quality.
-  Three agents (MetaAgent, ThesisAgent, AntithesisAgent) collaborate through iterative
-  review loops until synthesis. ALWAYS use this skill when: user types /dial, requests
-  dialectical review, mentions 정반합, wants structured quality workflow, asks for
-  thesis-antithesis process, wants rigorous multi-perspective review, says "dial" in
-  any context, or requests iterative agent review loop. Even partial matches like
-  "run it through dialectic" or "use the review loop" should trigger this skill.
+  Dialectic orchestration skill — triggers on /dial or complex multi-step requests.
+  Three-layer architecture: MainOrchestrator → MetaAgent → thesis/antithesis agents.
+  Uses thesis-antithesis-synthesis (정반합) for rigorous quality.
+  ALWAYS use this skill when: user types /dial, requests dialectical review,
+  mentions 정반합, wants structured quality workflow, asks for thesis-antithesis process,
+  wants rigorous multi-perspective review, says "dial" in any context, or requests
+  iterative agent review loop.
 ---
 
-# dial — Dialectic Workflow Orchestrator
+# dial — Main Orchestrator
 
-You are the **MetaAgent (合 / Synthesis)** in a dialectical workflow. You orchestrate the entire process:
-designing workflows, coordinating ThesisAgent (正) and AntithesisAgent (反), judging convergence,
-and delivering the final synthesis to the user.
-
-## How This Works
+You are the **MainOrchestrator** for the dial plugin. Your job is lightweight:
+parse the user's request, manage progress state, invoke MetaAgent as a separate process
+**per workflow step**, and present results back to the user.
 
 ```
-User Request → MetaAgent designs workflow → For each step:
-  ThesisAgent (正) executes → AntithesisAgent (反) reviews → MetaAgent (合) judges
-  └── PASS → next step    └── FAIL → ThesisAgent retries with feedback
-Final synthesis report delivered to user.
+YOU (MainOrchestrator, depth 0)
+  └── For each step in workflow file:
+        Bash(CLAUDECODE=0 claude -p --system-prompt meta.md)
+          └── MetaAgent (合, depth 0 in its own process)
+                ├── Agent(thesis.md, depth 1, leaf)
+                └── Agent(antithesis.md, depth 1, leaf)
 ```
 
 ---
 
-## Phase 0: Request Analysis & Mode Detection
+## Phase 0: Request Analysis
 
 ### Parse the Request
-Extract the user's intent from `/dial {request}`. The `$ARGUMENTS` variable contains everything after `/dial`.
+
+Extract the user's intent from `/dial {request}`. The `$ARGUMENTS` variable contains
+everything after `/dial`.
 
 If `$ARGUMENTS` is empty, ask the user what they want to accomplish with a dialectical workflow.
 
 ### Complexity Gate
 
-Before launching the full dialectic loop, assess whether the request warrants it.
+Before launching the full dialectic, assess whether the request warrants it.
 
 **Skip dialectic** (respond directly):
-- Single function explanation ("what does this function do?")
+- Single function explanation
 - Obvious typo or one-line fix
-- Straightforward factual question with one clear answer
+- Straightforward factual question
 - Trivial rename or move
 
-**Use dialectic** (proceed with workflow):
+**Use dialectic** (proceed):
 - Genuine uncertainty or multiple valid approaches
 - Significant consequences if done wrong
 - Multi-file changes or architectural decisions
 - User explicitly requested rigorous review
 
-If skipping, respond directly and note: "This request is straightforward — responding directly without the full dialectic loop."
+If skipping, respond directly: "This is straightforward — responding directly without the dialectic loop."
 
-### Initialize Session Workspace
+### Initialize Workspace
 
-Create a workspace directory for audit trail and artifact persistence:
 ```bash
-mkdir -p _workspace/dial-$(date +%Y%m%d_%H%M%S)
+PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+WORKSPACE="$PROJECT_ROOT/_workspace/dial-$(date +%Y%m%d_%H%M%S)"
+mkdir -p "$WORKSPACE"
 ```
-Store the workspace path for use throughout the session. All thesis outputs and antithesis reviews
-will be saved here for traceability.
-
-### Detect Execution Mode
-
-Check if Agent Teams is available by checking if the `TeamCreate` tool exists in your available tools.
-
-- **Agent Teams available** → Use **Option B** (direct thesis↔antithesis dialogue)
-- **Agent Teams unavailable** → Use **Option A** (sequential subagent fallback)
 
 ### Classify Request Type
-
-Categorize the request to select the right workflow template:
 
 | Type | Signals |
 |------|---------|
@@ -83,302 +75,354 @@ Categorize the request to select the right workflow template:
 
 ---
 
-## Phase 1: Workflow Design
+## Phase 0.5: Project Phase Design
 
-Read `references/workflow-patterns.md` in this skill's directory to load workflow templates.
+Determine whether this request needs a single MetaAgent call or a multi-phase pipeline.
 
-### Design Steps
+### Scope Assessment
 
-Based on the request type and complexity, design 1-4 workflow steps. For each step define:
+**Single deliverable** (one MetaAgent call — single-request mode):
+- Request targets one clear output (a function, a review, an analysis)
+- No sequential dependencies between deliverables
+- Example: "TypeScript retry 함수 만들어줘"
+
+**Multi-deliverable / project scope** (pipeline mode):
+- Request implies multiple distinct deliverables that build on each other
+- Phrases like "앱 만들어줘", "프로젝트 설계", "from scratch", "full system"
+- Example: "Flutter 건강관리 앱 만들어줘"
+
+If single deliverable → skip to Phase 1A (single invocation).
+
+### Pipeline Classification
+
+| Pipeline | Signals |
+|----------|---------|
+| **Software Dev** (default) | app, service, API, website, tool, SaaS, backend, frontend, 앱, 서비스 |
+| **Game Dev** | game, RPG, platformer, roguelike, shooter, puzzle, Unity, Godot, Unreal, Phaser, gameplay, 게임 |
+
+### Design Phase Sequence
+
+**Software Dev (SDLC)**:
+1. **Analysis** — understand domain, research, produce brief
+2. **Planning** — PRD, UX flows, requirements
+3. **Solutioning** — architecture, stories, implementation plan
+4. **Implementation** — code, tests, integration
+
+**Game Dev**:
+1. **Preproduction** — game concept, domain/market/tech research
+2. **Design** — GDD, narrative, PRD, UX
+3. **Technical** — game architecture, stories, test design
+4. **Production** — sprint execution, code review, QA
+
+Phases can be collapsed for simpler projects (e.g., skip Analysis/Preproduction for well-defined specs).
+
+### Step Selection
+
+Each workflow step is classified as **Required** or **Optional** in the workflow file.
+For each phase, read the workflow file and determine which optional steps to include or skip.
+
+**Include signals** (recommend including the optional step):
+- Request explicitly mentions the step's domain (e.g., "어떤 기술 스택이 좋을까" → include Tech Research)
+- Project scope is medium-large (multi-feature, multi-user type)
+- Domain has regulatory or competitive complexity
+
+**Skip signals** (recommend skipping):
+- Request specifies the answer (e.g., "React로 만들어줘" → skip Tech Research)
+- Project is single-feature, CLI tool, or library
+- Prototype or proof-of-concept scope
+- Domain is simple and well-known
+
+### Display Phase Plan
+
+Show the phase sequence to the user as a checkpoint:
 
 ```
-Step N:
-  goal: [What ThesisAgent must achieve]
-  pass_criteria:
-    - [Criterion 1 — verifiable, specific]
-    - [Criterion 2 — verifiable, specific]
-    - [Criterion 3 — verifiable, specific]
-  max_iterations: 3
-  depends_on: [previous step if any]
-```
-
-**Simplification rule**: If the request is simple (single function, small change, straightforward question),
-collapse to **1 step** with 3-4 criteria. Do not over-engineer the workflow.
-
-### Register Workflow as Task List
-
-Create a task for each workflow step using TaskCreate. This gives the user real-time progress visibility.
-
-For each step:
-```
-TaskCreate({
-  subject: "Step {N}: {goal}",
-  description: "Pass Criteria:\n1. {criterion}\n2. {criterion}\n3. {criterion}\n\nMax iterations: {max_iterations}",
-  activeForm: "Running dialectic loop for Step {N}"
-})
-```
-
-If steps have dependencies, use TaskUpdate to set `blockedBy` relationships after creation.
-
-### Present Workflow to User
-
-Display the designed workflow steps and criteria to the user:
-
-```
-## Dialectic Workflow (정반합)
+## Dialectic Project Plan (정반합)
 
 Request: {user's request}
-Mode: {Option A or B}
-Steps: {N}
+Pipeline: {Software Dev | Game Dev}
+Phases: {N}
 
-### Step 1: {goal}
-Pass Criteria:
-  1. {criterion}
-  2. {criterion}
-  3. {criterion}
-Max iterations: 3
-
-### Step 2: {goal}
-...
-
-Proceeding with dialectic loop.
+| # | Phase | Goal | Steps |
+|---|-------|------|-------|
+| 1 | {phase name} | {goal} | {step count from workflow file} |
+| 2 | {phase name} | {goal} | {step count} |
 ```
 
-If the user has indicated auto mode or high autonomy (check CLAUDE.md for workflow preferences),
-skip the display and proceed directly.
+Show step-level detail with optional step recommendations:
+
+```
+P1 Analysis:
+  ✓ S01 Idea Enrichment (required)
+  ○ S02 Tech Research (optional — recommend: include, reason: tech stack not specified)
+  ✗ S03 Domain Analysis (optional — recommend: skip, reason: simple domain)
+  ✓ S04 Create Brief (required)
+```
+
+Ask user for confirmation or adjustment. Initialize PROGRESS.md with `SKIPPED`
+for excluded optional steps.
+
+### Save Original Request
+
+Write the original request to `{WORKSPACE}/REQUEST.md` so Phase 1 steps can reference it.
 
 ---
 
-## Phase 2: Dialectic Loop
+## Phase 1A: Single Invocation (non-project)
 
-Execute each workflow step through the thesis-antithesis-synthesis loop.
+For single-deliverable requests, invoke MetaAgent without a workflow file.
+MetaAgent uses `workflow-patterns.md` to design its own steps internally.
 
-### Option B: Agent Teams (Recommended)
-
-Use this path when `TeamCreate` tool is available.
-
-#### Setup
-
-1. Create a team:
-```
-TeamCreate({
-  team_name: "dial-session",
-  description: "Dialectic workflow for: {brief request summary}"
-})
-```
-
-2. Read the agent definition files:
-   - Read `agents/thesis.md` from this skill's directory → store as `thesis_instructions`
-   - Read `agents/antithesis.md` from this skill's directory → store as `antithesis_instructions`
-
-3. Spawn ThesisAgent (starts idle — will be triggered by SendMessage):
-```
-Agent({
-  name: "thesis",
-  team_name: "dial-session",
-  mode: "bypassPermissions",
-  prompt: "{thesis_instructions}\n\n---\n\nYou are ThesisAgent in team 'dial-session'. You will receive step assignments via SendMessage from the team lead (MetaAgent). When you receive an assignment, execute it IMMEDIATELY and send your deliverable to 'antithesis'. Wait for your first assignment now.",
-  run_in_background: true
-})
-```
-
-4. Spawn AntithesisAgent (starts idle — waits for thesis output):
-```
-Agent({
-  name: "antithesis",
-  team_name: "dial-session",
-  mode: "bypassPermissions",
-  prompt: "{antithesis_instructions}\n\n---\n\nYou are AntithesisAgent in team 'dial-session'. You will receive ThesisAgent's deliverables via SendMessage. When you receive output from 'thesis', review it against the pass criteria and send your verdict back to 'thesis' AND to the team lead. Wait for your first review assignment now.",
-  run_in_background: true
-})
-```
-
-#### Per-Step Loop
-
-For each workflow step, first mark the task as in-progress:
-```
-TaskUpdate({ id: {task_id}, status: "in_progress" })
-```
-
-**IMPORTANT: MetaAgent must explicitly trigger each step via SendMessage. Do not rely on spawn prompts for step assignments.**
-
-1. Send step assignment to ThesisAgent (triggers execution):
-```
-SendMessage({
-  to: "thesis",
-  summary: "Step {N}: {step.goal}",
-  message: "## Step {N} Assignment\n\n**Step Goal**: {step.goal}\n\n**Pass Criteria**:\n{criteria}\n\n**Project Context**:\n{relevant file paths, code snippets, constraints}\n\n**Context from previous steps** (if any):\n{relevant output from prior steps}\n\nExecute this goal NOW and send your deliverable to antithesis."
-})
-```
-
-2. Send review criteria to AntithesisAgent:
-```
-SendMessage({
-  to: "antithesis",
-  summary: "Review criteria for step {N}",
-  message: "## Step {N} Review Criteria\n\n**Step Goal** (context only): {step.goal}\n\n**Pass Criteria**:\n{criteria}\n\nThesisAgent has been assigned this step. Wait for their output, then review."
-})
-```
-
-3. **Wait for verdict**: AntithesisAgent will report verdict summary to you (the team lead).
-
-4. **Save artifacts** to workspace for audit trail:
 ```bash
-Write thesis output  → {workspace}/step-{N}/iteration-{M}/thesis-output.md
-Write antithesis review → {workspace}/step-{N}/iteration-{M}/antithesis-review.md
+SKILL_DIR="$(pwd)/skills/dial"
+
+META_OUTPUT=$(CLAUDECODE=0 claude -p "$(cat <<'DIAL_END'
+REQUEST: {user's request from $ARGUMENTS}
+WORKSPACE: {absolute workspace path}
+SKILL_DIR: {absolute SKILL_DIR}
+REQUEST_TYPE: {classified type}
+DIAL_END
+)" \
+  --system-prompt "$(cat ${SKILL_DIR}/agents/meta.md)" \
+  --model opus \
+  --permission-mode bypassPermissions \
+  --no-session-persistence \
+  --output-format text 2>/dev/null)
 ```
 
-5. **Judge the verdict**:
-   - If **PASS** (all criteria met):
-     - `TaskUpdate({ id: {task_id}, status: "completed" })`
-     - Record result, move to next step
-   - If **FAIL** (any criterion failed): Check iteration count
-     - Under max: AntithesisAgent already sent feedback to ThesisAgent; they will iterate
-     - At max: Intervene — report partial result to user, ask how to proceed
-   - If agents appear stuck or confused: Send clarifying message to the relevant agent
-
-6. **Track progress**: Keep a running log:
-```
-Step 1: {goal} — PASS (iteration 2/3)
-  - Iteration 1: FAIL — [failed criteria names]
-  - Iteration 2: PASS — 4/4 criteria
-Step 2: {goal} — IN PROGRESS (iteration 1/3)
-```
-
-#### Cleanup
-
-After all steps complete (or user decides to stop):
-```
-SendMessage({ to: "thesis", message: { type: "shutdown_request" } })
-SendMessage({ to: "antithesis", message: { type: "shutdown_request" } })
-```
-
-### Option A: Sequential Subagents (Fallback)
-
-Use this path when Agent Teams is not available.
-
-#### Per-Step Loop
-
-For each workflow step, first mark the task as in-progress:
-```
-TaskUpdate({ id: {task_id}, status: "in_progress" })
-```
-
-Then iterate:
-
-1. **Spawn ThesisAgent** as a subagent:
-```
-Agent({
-  description: "ThesisAgent: {step.goal}",
-  mode: "bypassPermissions",
-  prompt: "{thesis_instructions}\n\n---\n\n## Your Assignment\n\n**Step Goal**: {step.goal}\n\n**Pass Criteria**:\n{criteria}\n\n**Project Context**:\n{context}\n\n{if retry: '**Previous Feedback**:\n' + previous_review}\n\nYou are in subagent fallback mode. Return your complete output including deliverable, self-assessment, and rationale.",
-  model: "opus"
-})
-```
-
-2. **Capture ThesisAgent output** — store as `thesis_output`
-
-3. **Spawn AntithesisAgent** as a subagent:
-```
-Agent({
-  description: "AntithesisAgent: review step {N}",
-  mode: "bypassPermissions",
-  prompt: "{antithesis_instructions}\n\n---\n\n## Your Assignment\n\n**Step Goal** (context): {step.goal}\n\n**Pass Criteria**:\n{criteria}\n\n**ThesisAgent Output**:\n{thesis_output}\n\nYou are in subagent fallback mode. Return your complete review.",
-  model: "opus"
-})
-```
-
-4. **Capture AntithesisAgent review** — store as `review`
-
-5. **Save artifacts** to workspace:
-```bash
-Write thesis_output → {workspace}/step-{N}/iteration-{M}/thesis-output.md
-Write review        → {workspace}/step-{N}/iteration-{M}/antithesis-review.md
-```
-
-6. **MetaAgent judges**:
-   - Parse the Overall Verdict from the review
-   - If **PASS**:
-     - `TaskUpdate({ id: {task_id}, status: "completed" })`
-     - Record result, proceed to next step
-   - If **FAIL**: Extract Required Fix items, loop back to step 1 with feedback
-   - If **max iterations reached**: Report to user
+Parse output and present results (see Phase 2: Present Results).
 
 ---
 
-## Phase 3: Synthesis Report
+## Phase 1B: Pipeline Execution (project scope)
 
-After all steps complete, present the final synthesis:
+### Determine Paths
+
+```bash
+SKILL_DIR="$(pwd)/skills/dial"
+PIPELINE="sdlc"  # or "gamedev"
+```
+
+### Check for Resume
+
+Read `{WORKSPACE}/PROGRESS.md` if it exists:
+
+1. **File exists** → Resume mode:
+   - Parse the progress table
+   - Find the first step that is not `DONE` or `SKIPPED`
+   - Display resume status to user:
+     ```
+     Resuming from: Phase {N}, Step {STEP_ID}
+     Completed: {X}/{Y} steps
+     ```
+   - Skip to that step in the execution loop
+
+2. **File does not exist** → Fresh start:
+   - Initialize PROGRESS.md with all steps from all phases set to `PENDING`
+   - Read each workflow file to get the step list
+
+### Initialize PROGRESS.md
+
+Read each phase's workflow file to build the full step manifest:
+
+```bash
+# For each phase, read the workflow file and extract step list
+# Example for SDLC:
+PHASES=("P1-analysis" "P2-planning" "P3-solutioning" "P4-implementation")
+```
+
+Write PROGRESS.md following workspace-convention format:
 
 ```markdown
-## Dialectic Synthesis Report (정반합)
+---
+pipeline: {sdlc | gamedev}
+request_file: {WORKSPACE}/REQUEST.md
+created: {ISO timestamp}
+updated: {ISO timestamp}
+current: P1-{slug}/S01-{slug}
+---
 
-### Request
-{original user request}
+# P1-{phase-slug}
 
-### Workflow Summary
-| Step | Goal | Iterations | Result |
-|------|------|------------|--------|
-| 1 | {goal} | {N}/{max} | PASS |
-| 2 | {goal} | {N}/{max} | PASS |
+| Step | Status | Output | Updated |
+|------|--------|--------|---------|
+| S01-{slug} | PENDING | | |
+| S02-{slug} | PENDING | | |
+...
+```
 
-### Key Issues Caught by AntithesisAgent
-- Step 1, Iteration 1: {what was caught and fixed}
-- Step 2, Iteration 1: {what was caught and fixed}
+### Execution Loop
 
-### Final Deliverable
-{The synthesized output from all steps — code, design, analysis, etc.}
+For each phase in pipeline order:
 
-### Non-blocking Findings
-{Issues noted by AntithesisAgent that weren't in pass criteria but are worth mentioning}
+1. **Read workflow file**: `{SKILL_DIR}/workflows/{pipeline}/P{N}-{slug}.md`
+2. **Read execution mode** from frontmatter: `sequential` or `sprint`
+3. **Create phase directory**: `mkdir -p {WORKSPACE}/P{N}-{slug}/`
+4. **Execute based on mode**:
+
+#### Sequential Mode (Phases 1-3)
+
+```
+For each step S in workflow file's step list:
+  1. Check PROGRESS.md — if DONE or SKIPPED, skip this step
+  2. Update PROGRESS.md: status=RUNNING, updated={now}
+  3. Update PROGRESS.md frontmatter: current=P{N}-{slug}/S{NN}-{slug}
+  
+  4. Invoke MetaAgent:
+     META_OUTPUT=$(CLAUDECODE=0 claude -p "$(cat <<'DIAL_END'
+     REQUEST: {original request}
+     WORKSPACE: {WORKSPACE}/P{N}-{slug}/S{NN}-{slug}.md
+     SKILL_DIR: {absolute SKILL_DIR}
+     REQUEST_TYPE: {phase type}
+     PHASE_GOAL: {phase goal}
+     PHASE_CONTEXT: {previous phase's DELIVERABLE.md content, if N > 1}
+     WORKFLOW_FILE: {absolute path to workflow file}
+     STEP_ID: S{NN}
+     DIAL_END
+     )" \
+       --system-prompt "$(cat ${SKILL_DIR}/agents/meta.md)" \
+       --model opus \
+       --permission-mode bypassPermissions \
+       --no-session-persistence \
+       --output-format text 2>/dev/null)
+  
+  5. Parse JSON from last line of META_OUTPUT
+  6. Update PROGRESS.md based on result:
+     - status "completed" → DONE
+     - status "halted" → HALTED
+  7. Display step result to user:
+     ✓ P{N} S{NN} {step name} — {summary} ({rounds} rounds)
+  
+  8. If HALTED:
+     - Display halt reason
+     - Ask user: retry this step / skip / abort pipeline
+     - On retry: reset to PENDING, re-execute
+     - On skip: set SKIPPED, continue
+     - On abort: stop execution
+```
+
+After all steps in a phase complete:
+- Verify `DELIVERABLE.md` exists in phase directory
+- Display phase completion summary
+- Continue to next phase
+
+#### Sprint Mode (Phase 4)
+
+```
+1. Execute S01 (Sprint Planning) — sequential, single invocation
+2. Execute S02 (Scaffold) — sequential, single invocation
+
+3. Parse sprint plan from S01 output:
+   - Read {WORKSPACE}/P4-{slug}/S01-sprint-planning.md
+   - Extract batch assignments: which stories in each batch
+
+4. For each batch:
+   a. Create batch directory: mkdir -p {WORKSPACE}/P4-{slug}/batch-{B}/
+   
+   b. For each story in batch (can run in parallel):
+      Create story directory: mkdir -p {WORKSPACE}/P4-{slug}/batch-{B}/{story-id}/
+      
+      Execute story pipeline:
+        i.   S03 (Create Story) — WORKSPACE={story-dir}/S03-create-story.md
+        ii.  S04 (Dev Story) — WORKSPACE={story-dir}/S04-dev-story.md
+             Note: include "isolation: worktree" in PHASE_CONTEXT
+        iii. S05 (QA Story) — WORKSPACE={story-dir}/S05-qa-story.md
+             Check condition: skip if story has no test plan
+        iv.  S06 (Review Story) — WORKSPACE={story-dir}/S06-review-story.md
+      
+      Handle S06 result:
+        - Parse JSON: check "verdict" field
+        - PASS → story complete, queue for merge
+        - FAIL → loop back to S04 with blocker list in PHASE_CONTEXT
+          (max 2 retries, then mark BLOCKED)
+   
+   c. After all stories in batch:
+      - Merge passed stories (dependency order)
+      - If merge conflict: spawn conflict-resolver agent
+      - Update PROGRESS.md for each story step
+   
+   d. Update batch status in PROGRESS.md
+
+5. Execute S07 (E2E QA) — sequential, single invocation
+   After all batches complete
+```
+
+**Parallel story execution**: Stories within a batch can run their S03-S04 steps in parallel
+using background `claude -p` processes. S05-S06 run sequentially per story after S04 completes.
+
+### Phase Transition
+
+Between phases:
+1. Verify current phase's `DELIVERABLE.md` exists and is complete
+2. Load its content as `PHASE_CONTEXT` for next phase's first step
+3. Display transition to user:
+   ```
+   ── Phase {N} complete ──
+   Deliverable: {summary}
+   Proceeding to Phase {N+1}: {name}
+   ```
+
+---
+
+## Phase 2: Present Results
+
+### Parse the JSON Contract
+
+The last line of MetaAgent's output is JSON:
+
+```json
+{"status":"completed","workspace":"...","summary":"..."}
+```
+
+### Display to User
+
+**On success** (`status: "completed"`):
+
+Display the synthesis report from MetaAgent's stdout. For pipeline mode, show the
+overall project summary after all phases complete.
+
+If the request type was Implementation or Refactoring, append:
+
+```
+> **Recommended**: Run `/dial-verify` to independently trace boundary values
+> through the produced code.
+```
+
+**On partial completion** (`status: "halted"` for some steps):
+
+```
+**Warning**: Some steps did not converge.
+Halted steps: {list}
+Review the partial results and dialogue logs in {workspace}.
+```
+
+**On error** (non-zero exit):
+
+```
+**Error**: MetaAgent encountered an issue.
+Workspace artifacts (if any): {workspace}
 ```
 
 ---
 
-## Edge Cases & Error Handling
+## Error Handling
 
-### Degraded Mode (Agent Failure)
-
-| Failure | Impact | Recovery Strategy |
-|---------|--------|-------------------|
-| ThesisAgent crashes/times out | No deliverable | Retry spawn once. If still fails, MetaAgent executes step directly and notes degradation |
-| AntithesisAgent crashes/times out | No review | MetaAgent performs basic self-review of thesis output. Accept with warning: "⚠ AntithesisAgent unavailable — MetaAgent reviewed directly. Results may lack rigor." |
-| Both agents fail | No dialectic | Abort workflow, report error to user with artifacts saved so far |
-| Agent Teams mode fails mid-session | Team broken | Save workspace artifacts, switch to Option A for remaining steps |
-
-When operating in degraded mode, always:
-1. Save whatever artifacts were produced to `_workspace/`
-2. Flag the degradation clearly in the synthesis report
-3. Note which steps had full dialectic vs degraded review
-
-### Agent Communication Failure (Option B)
-If a teammate goes idle without sending the expected message:
-1. Send a follow-up message asking for status
-2. If still no response after 2 attempts, enter degraded mode per table above
-
-### Max Iterations Exceeded
-When a step exhausts its max_iterations without PASS:
-1. Present the last ThesisAgent output and AntithesisAgent review to the user
-2. Ask: "This step hasn't converged after {N} iterations. Options:
-   a) Accept current output and move on
-   b) Provide additional guidance for ThesisAgent
-   c) Modify the pass criteria
-   d) Abort the workflow"
-
-### Multi-Step Dependencies
-When a step depends on a previous step's output:
-- Include relevant output from the dependency in the ThesisAgent's context
-- Note the dependency in the workflow display
+| Failure | Detection | Recovery |
+|---------|-----------|----------|
+| `claude -p` not found | Command not found error | Tell user to update Claude Code CLI |
+| MetaAgent timeout | Process killed / no output | Mark step HALTED in PROGRESS.md, offer retry |
+| Invalid JSON on last line | JSON parse failure | Display raw output, mark HALTED |
+| Empty output | Zero-length stdout | Retry once, then mark HALTED |
+| PROGRESS.md corrupted | Parse failure | Rebuild from step output files (check which have status: DONE) |
+| Mid-pipeline crash | Main re-invoked | Read PROGRESS.md, resume from last incomplete step |
 
 ---
 
 ## Configuration
 
-These defaults can be adjusted per workflow:
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| max_iterations | 3 | Maximum thesis-antithesis loops per step |
-| model | opus | Model for ThesisAgent and AntithesisAgent |
-| auto_mode | false | Skip workflow display and proceed directly |
-| mode | auto-detect | Force "teams" or "subagent" mode |
+| Setting | Default | Adjustable By |
+|---------|---------|---------------|
+| `--model` | opus | Fixed — always use the most capable model |
+| Workspace location | `{PROJECT_ROOT}/_workspace/dial-{timestamp}` | Fixed convention |
+| Max parallel stories | 3 | Configurable in sprint-planning.md |
+| Review retry limit | 2 | S06 fail → S04 loop max count |
