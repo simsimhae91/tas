@@ -118,40 +118,60 @@ Return your complete review as the response.
 **Summary**: [1-2 sentence synthesis of the review]
 ```
 
-## Code Quality Baseline (Always Check)
+## Review Lenses (Always Apply)
 
-In addition to the explicit pass criteria, ALWAYS scan for these issues. Report them in
-**Non-blocking Findings** if minor, or **FAIL the nearest related criterion** if they
-indicate a substantive defect.
+Beyond the explicit pass criteria, apply these review lenses to every deliverable.
+These are not edge-case checklists — they are **perspectives** for evaluating design quality.
 
-### 1. Dead Code & Residue
-- Unused functions, variables, imports, or type parameters
-- Leftover artifacts from a previous approach (e.g., helper function that was replaced by a closure)
-- Commented-out code or stale TODO comments
+### Lens 1: Caller Perspective (API Design)
 
-### 2. Race Conditions & TOCTOU Bugs
-- Gap between condition check and action where state can change
-- Event listeners that miss already-fired events (e.g., checking `signal.aborted` then calling `addEventListener('abort', ...)` — if abort fires between the two, listener never triggers)
-- Sleep/delay that cannot be interrupted by cancellation signal
+Review the deliverable as if you are the person **calling/using** this code:
 
-### 3. Exhaustive Type Handling
-- Switch/if chains on union types without a `default: never` or equivalent exhaustive check
-- Missing cases that silently return `undefined` or `NaN` instead of throwing
-- Any path where invalid input causes silent failure rather than explicit error
+- **Semantic consistency**: Trace the same concept (a parameter name, a number, an error)
+  across every place it appears. If `attempt` means "just failed" in one callback and "about to try"
+  in another, that is a design bug — FAIL the relevant criterion.
 
-### 4. Idiomatic & Standard Patterns
-- Manual reimplementation of standard APIs (e.g., `this.cause = cause` vs `super(msg, { cause })`)
-- Patterns that work but conflict with ecosystem conventions (e.g., error monitoring tools expect standard `cause` chain)
-- Shadowing prototype properties with own properties when standard API manages them
+- **Behavioral consistency**: Walk every code path for the same operation. If built-in strategies
+  apply a cap but custom functions don't, the caller's mental model breaks. Inconsistent paths
+  are not edge cases — they are contract violations.
 
-### 5. Boundary Cross-Comparison (from Harness QA)
-- Does the producer's output shape match the consumer's expected type?
-- Are naming conventions consistent across boundaries (snake_case vs camelCase)?
-- Do error types thrown match the catch clauses that handle them?
+- **Interface completeness**: Does the type signature accept everything a reasonable caller would
+  pass? If the implementation works with sync values (e.g., `await` handles non-Promises), but
+  the type rejects them, the interface is needlessly restrictive.
 
-When you find baseline issues, cite the specific line/code and categorize:
-- **Blocking** (FAIL criterion): substantive bug, race condition, silent failure path
-- **Non-blocking Finding**: style issue, non-idiomatic pattern, minor dead code
+- **Least Surprise**: Read every name, message, and default. Does the name promise something the
+  code doesn't deliver? Does an error message describe what actually happened, or what a
+  different code path would have caused?
+
+### Lens 2: Domain Expertise
+
+For well-known problem domains, check against established practice:
+
+- **Missing standard patterns**: exponential backoff without jitter, auth without CSRF, cache
+  without invalidation — these are design gaps, not optional features. If the domain has a
+  well-known failure mode and the implementation doesn't address it, FAIL.
+
+- **Type-contract alignment**: Does the type signature match the runtime reality? Optional fields
+  that are always provided internally, required fields that can be undefined — these force
+  callers to handle phantom cases.
+
+### Lens 3: Implementation Integrity
+
+- **Dead code**: Unused functions, parameters, imports, type parameters
+- **Race conditions**: TOCTOU gaps, event listeners that miss already-fired events
+- **Exhaustiveness**: Switch/union handling without `default: never`, silent undefined returns
+- **Idiomatic usage**: Manual reimplementation of standard APIs, prototype shadowing
+
+### How to Apply
+
+Do NOT treat these as a sequential checklist. Instead:
+1. Read the deliverable once as an implementer (does it work?)
+2. Read it again as a caller (would I trust this API?)
+3. Read it once more as a domain expert (does this match established practice?)
+
+Issues found through these lenses:
+- **Blocking** (FAIL): semantic inconsistency, behavioral inconsistency, missing domain standards, contract violations
+- **Non-blocking**: style preferences, alternative approaches that aren't clearly better
 
 ## Anti-Patterns to Avoid
 

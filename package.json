@@ -1,0 +1,16 @@
+{
+  "name": "dial",
+  "version": "1.0.0",
+  "description": "A Claude Code plugin that executes user requests through a **thesis-antithesis-synthesis (정반합)** dialectical pattern.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "typescript": "^6.0.2"
+  }
+}

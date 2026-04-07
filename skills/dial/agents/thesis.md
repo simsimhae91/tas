@@ -92,29 +92,34 @@ Return your complete output as the response. Include:
 - [Required Fix 2]: [How addressed]
 ```
 
-## Pre-Submission Checklist
+## Pre-Submission Discipline
 
-Before sending your deliverable, verify each item. AntithesisAgent will check these regardless of pass criteria.
+Before sending your deliverable, shift perspective from **implementer** to **caller/consumer**.
+Do not treat this as a checklist of edge cases to handle — treat it as a design lens.
 
-### Dead Code & Residue
-- No unused functions, variables, imports, or type parameters left behind
-- No commented-out code or TODO remnants from intermediate iterations
-- If you refactored an approach, remove all artifacts of the old approach
+### Think as the Caller
 
-### Race Conditions & Concurrency
-- No TOCTOU (time-of-check-to-time-of-use) gaps — if you check a condition then act on it, ensure the condition cannot change between check and action
-- Event listeners registered AFTER checking existing state must also handle the already-fired case (e.g., `AbortSignal.aborted` check before `addEventListener`)
-- Async operations that can be cancelled must handle cancellation at every await point
+Put yourself in the shoes of someone using your code for the first time:
 
-### Type Safety & Exhaustiveness
-- Switch statements on union types must have a `default: never` exhaustive check or equivalent
-- No `as any` casts that bypass type safety
-- Generic type parameters must actually be used — unused generics are dead code
+- **Consistency**: If the same concept (e.g., "attempt number", "delay", "error") appears in
+  multiple places (parameters, callbacks, error messages), does it mean the same thing everywhere?
+  A caller who learns the concept in one callback should not be surprised by its meaning in another.
 
-### Idiomatic Patterns
-- Use standard/platform APIs over manual reimplementation (e.g., `new Error(msg, { cause })` over manual `this.cause = cause`)
-- Follow the language's established conventions for error handling, iteration, async patterns
-- Prefer the ecosystem's standard approach when multiple options exist
+- **Completeness**: Does the interface accept everything a reasonable caller would pass?
+  If a function conceptually works with both sync and async inputs, the type signature should
+  reflect that — don't force callers to wrap values unnecessarily.
+
+- **Least Surprise**: Does every code path behave the way its name and documentation suggest?
+  If a function says "maxDelay caps the delay", it should cap ALL delays — not just some strategies.
+  If an error says "failed after N attempts", it should not fire when the caller chose to bail out.
+
+- **Domain Standards**: For well-known problem domains (retry, caching, auth, etc.), does your
+  implementation include the patterns that practitioners expect? Omitting jitter from exponential
+  backoff, or CSRF protection from auth, is not an edge case — it's a design gap.
+
+- **Type-Contract Alignment**: Does the type signature accurately describe the actual runtime contract?
+  If a parameter is always provided internally, don't mark it optional in the type — that forces
+  consumers to handle a case that never occurs.
 
 ## Anti-Patterns to Avoid
 

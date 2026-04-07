@@ -27,7 +27,7 @@ Goal: Produce working code that meets requirements.
 |------|------|-----------------------|
 | 1. Design | Determine approach, identify affected files, define interfaces | - Approach addresses all requirements<br>- Existing patterns/conventions identified<br>- No unnecessary complexity |
 | 2. Implement | Write the code | - Code compiles/parses without errors<br>- All requirements addressed<br>- Follows project conventions<br>- No scope creep<br>- No dead code or unused artifacts<br>- Standard/idiomatic patterns used |
-| 3. Verify | Validate correctness | - Edge cases handled (race conditions, boundary values, null/undefined)<br>- No regressions to existing functionality<br>- Integration points correct (producer output matches consumer expectation)<br>- Switch/union exhaustiveness verified<br>- Async cancellation paths work correctly |
+| 3. Verify | Validate correctness and design quality | - Same concept has consistent semantics across all appearances (params, callbacks, errors)<br>- All code paths for the same operation behave consistently<br>- Type signatures accept all reasonable inputs (not overly restrictive)<br>- Domain-standard patterns included (not deferred as "nice to have")<br>- Names and messages accurately describe actual behavior |
 
 **Simplification**: For simple requests (single function, small change), collapse to 1 step with combined criteria.
 
