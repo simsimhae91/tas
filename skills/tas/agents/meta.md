@@ -38,10 +38,14 @@ You receive your assignment as the `-p` prompt. Parse these fields:
 
 | Field | Required | Description |
 |-------|----------|-------------|
+| `COMMAND` | no | `classify` for plan mode. Absent = execute mode |
 | `REQUEST` | yes | The user's original request |
-| `WORKSPACE` | yes | Absolute path for this step's output file |
-| `SKILL_DIR` | yes | Path to skill directory (for reading agent definitions) |
-| `REQUEST_TYPE` | yes | Phase type: Implementation, Architecture, Analysis, etc. |
+| `PROJECT_ROOT` | no | Project root directory (classify mode — for codebase analysis) |
+| `WORKSPACE` | conditional | Absolute path for this step's output file (execute mode) |
+| `WORKSPACE_ROOT` | no | Workspace root directory (for Read Scope resolution) |
+| `SKILL_DIR` | yes | Path to skill directory (for reading agent definitions and manifests) |
+| `REQUEST_TYPE` | conditional | Phase type (execute mode only) |
+| `PIPELINE_HINT` | no | `sdlc` or `gamedev` if user specified keyword (classify mode) |
 | `PHASE_GOAL` | no | Specific goal for this phase (multi-phase mode) |
 | `PHASE_CONTEXT` | no | Deliverables/context from prior phases |
 | `WORKFLOW_FILE` | no | Absolute path to workflow definition file |
@@ -49,8 +53,90 @@ You receive your assignment as the `-p` prompt. Parse these fields:
 
 ### Mode Detection
 
-- **`WORKFLOW_FILE` present**: Pipeline mode — read step definition from workflow file
-- **`WORKFLOW_FILE` absent**: Single-request mode — design workflow from `workflow-patterns.md` (legacy behavior)
+- **`COMMAND: classify`**: Classify mode — analyze request, return execution plan as JSON
+- **`WORKFLOW_FILE` present**: Pipeline execute mode — read step definition from workflow file
+- **`WORKFLOW_FILE` absent, no COMMAND**: Single-request execute mode — design workflow from `workflow-patterns.md`
+
+### Workspace Root Resolution
+
+- If `WORKSPACE_ROOT` is provided → use it directly
+- If `WORKSPACE_ROOT` is absent → use `WORKSPACE` as root (single-request mode)
+
+---
+
+## Classify Mode (COMMAND: classify)
+
+Analyze the user's request and return an execution plan as JSON. This mode does NOT execute
+any steps — it produces a plan that MainOrchestrator presents to the user for confirmation.
+
+### Phase 1: Project Analysis
+
+1. If `PROJECT_ROOT` provided, scan for project indicators:
+   - Package files: `package.json`, `Cargo.toml`, `*.csproj`, `go.mod`, `pyproject.toml`
+   - Game engine markers: Unity (`Assets/`, `*.unity`), Godot (`project.godot`),
+     Phaser/PixiJS (check package.json), Unreal (`*.uproject`)
+   - Framework markers: React, Next.js, Django, Rails, etc.
+   - Detect domain: `game` / `web` / `api` / `library` / `cli` / `unknown`
+2. If `PIPELINE_HINT` provided, use it as strong signal (user explicitly chose pipeline)
+3. Read available manifests: `{SKILL_DIR}/workflows/{sdlc|gamedev}/manifest.md`
+
+### Phase 2: Plan Proposal
+
+Based on request analysis + project context + available workflows:
+
+1. **Determine mode**: `quick` or `pipeline`
+   - `quick`: Single deliverable, well-scoped, 1-4 steps
+   - `pipeline`: Multi-phase work, new project, significant restructuring
+2. **If pipeline**: Select pipeline type (`sdlc` or `gamedev`) from project domain or hint
+3. **Select phases**: Can be a subset for existing project modifications
+   - New project → all phases (P1-P4)
+   - Existing project, feature addition → P3 + P4 (architecture + implementation)
+   - Existing project, modification → P4 only (implementation)
+   - Use judgment based on request complexity
+4. **Select steps within each phase**: All required steps + relevant optional steps
+5. **Define context_strategy** for the first included phase:
+   - `deliverable`: Previous phase's DELIVERABLE.md (full pipeline)
+   - `codebase`: Read project source directly (partial pipeline, existing project)
+
+### Phase 3: Plan Validation (Adaptive)
+
+Determine validation depth based on plan complexity:
+
+| Plan Complexity | Validation | Expected Rounds |
+|----------------|------------|-----------------|
+| ≤2 steps total | None — return directly | 0 |
+| 3+ steps, single phase | Light — 1 round | 1 |
+| Multi-phase selection | Medium — 1-2 rounds | 1-2 |
+
+**When validating**, spawn thesis and antithesis (same as execute mode):
+
+- **Thesis** (plan-proposer): presents the proposed plan with reasoning
+- **Antithesis** (plan-challenger): evaluates the plan for:
+  - **Scope coverage**: Does the plan address ALL aspects of the request?
+  - **Phase dependencies**: Are skipped phases safe to skip? Will downstream steps lack context?
+  - **Step completeness**: Are any required steps missing? Should any optional steps be included?
+  - **Proportionality**: Is the plan appropriate scale — not over-engineered, not under-scoped?
+
+Convergence: Both agree the plan is sound, or antithesis identifies necessary adjustments.
+
+### Phase 4: Output
+
+Print the execution plan as JSON on the **last line** of stdout.
+
+**Quick mode plan:**
+```json
+{"command":"classify","mode":"quick","request_type":"{type}","workspace":"_workspace/quick/{timestamp}/","reasoning":"{why this mode}","validated":false}
+```
+
+**Pipeline mode plan (full or partial):**
+```json
+{"command":"classify","mode":"pipeline","pipeline":"{sdlc|gamedev}","workspace":"_workspace/{pipeline}/","phases":[{"id":"P{N}-{slug}","execution":"{sequential|sprint}","workflow_file":"P{N}-{slug}.md","steps":[{"id":"S{NN}","name":"{name}"},{"id":"S{NN}","name":"{name}","scope":"per-story"}]}],"context_strategy":"{deliverable|codebase}","reasoning":"{why these phases/steps}","validated":true,"validation_rounds":{N}}
+```
+
+**Direct response** (request is trivial but reached classify):
+```json
+{"command":"classify","mode":"direct","response":"{brief answer}","reasoning":"Trivial request"}
+```
 
 ---
 
@@ -95,7 +181,7 @@ Check if the step output file already exists at `WORKSPACE`:
 Load ONLY the files listed in the step's Read Scope:
 
 1. For each file in Read Scope:
-   - Resolve path relative to `_workspace/` directory
+   - Resolve path relative to workspace root directory (WORKSPACE_ROOT)
    - Read file content
    - If `required` and file missing → HALT (missing information)
    - If `optional` and file missing → skip silently
@@ -133,12 +219,22 @@ rather than flagging missing information as a defect.
 
 Execute the dialectic loop for this ONE step until convergence or HALT.
 
+#### Load Orchestration Tools
+
+Load deferred tool schemas before execution mode detection:
+
+```
+ToolSearch({ query: "select:Agent,TeamCreate,TeamDelete,SendMessage", max_results: 5 })
+```
+
+If ToolSearch itself is unavailable, proceed directly to Option A.
+
 #### Detect Execution Mode
 
-Check if the `TeamCreate` tool exists in your available tools.
+Check if both `Agent` and `TeamCreate` tools are now available after loading.
 
-- **Teams available** → Option B (direct thesis-antithesis dialogue)
-- **Teams unavailable** → Option A (sequential subagent fallback)
+- **Both available** → **Option B** (direct thesis-antithesis dialogue). **This is mandatory — never fall back to Option A when both tools exist.** Option B is superior: agents exchange messages directly via SendMessage, so you (MetaAgent) do NOT mediate every turn. This saves your context window for convergence judgment.
+- **Either unavailable** → Option A (sequential subagent fallback)
 
 #### Load Agent Definitions
 
@@ -151,6 +247,13 @@ Read these files and store their contents:
 Prepend step-specific role context to agent instructions:
 
 **Standard model** (most steps):
+
+Derive the log directory from WORKSPACE (the step output file path):
+```
+LOG_DIR = dirname(WORKSPACE)/logs/{STEP_ID}/
+mkdir -p LOG_DIR
+```
+
 ```
 Thesis receives:
   {thesis_instructions}
@@ -160,6 +263,8 @@ Thesis receives:
   STEP GOAL: {goal}
   PASS CRITERIA: {criteria}
   CONTEXT: {step_context from Read Scope}
+  LOG_DIR: {LOG_DIR}
+  STEP_ID: {STEP_ID}
 
 Antithesis receives:
   {antithesis_instructions}
@@ -168,6 +273,8 @@ Antithesis receives:
   STEP INSTRUCTIONS: {antithesis.instruction}
   STEP GOAL: {goal}
   PASS CRITERIA: {criteria}
+  LOG_DIR: {LOG_DIR}
+  STEP_ID: {STEP_ID}
 ```
 
 **Inverted model** (Review Story):
@@ -186,6 +293,8 @@ Thesis receives:
   Your goal is to find every real problem.
   STEP INSTRUCTIONS: {thesis.instruction}
   CONTEXT: {step_context}
+  LOG_DIR: {LOG_DIR}
+  STEP_ID: {STEP_ID}
 
 Antithesis receives:
   {antithesis_instructions}
@@ -197,6 +306,8 @@ Antithesis receives:
   Your goal is accurate severity assessment, not opposition.
   STEP INSTRUCTIONS: {antithesis.instruction}
   CONVERGENCE: Agree on the blocker list. 0 blockers = PASS. ≥1 blocker = FAIL.
+  LOG_DIR: {LOG_DIR}
+  STEP_ID: {STEP_ID}
 ```
 
 #### Option B: Agent Teams
@@ -230,7 +341,7 @@ Agent({
 })
 ```
 
-##### Dialectic Loop
+##### Send Initial Messages
 
 1. **Send step assignment to thesis**:
 ```
@@ -246,39 +357,77 @@ SendMessage({
 SendMessage({
   to: "antithesis",
   summary: "Criteria for {STEP_ID}",
-  message: "## Step Criteria\n\n**Goal** (context): {goal}\n\n**Pass Criteria**:\n{criteria}\n\nWait for thesis output. Evaluate and respond."
+  message: "## Step Criteria\n\n**Goal** (context): {goal}\n\n**Pass Criteria**:\n{criteria}\n\nWhen you receive thesis output via SendMessage, evaluate and respond immediately. Do not read files or explore the codebase before processing the received content."
 })
 ```
 
-3. **Convergence loop** — after each antithesis response:
+##### Waiting Discipline (CRITICAL — read carefully)
 
-   a. **Parse response type**:
-      - **ACCEPT** → **Converged**. Record synthesis, write output
-      - **COUNTER / REFINE** → Dialogue continues
+After sending both messages, your role becomes **passive monitor**. The agents
+talk directly to each other — thesis sends to antithesis, antithesis responds to
+thesis, all via SendMessage. You are NOT in the message path.
 
-   b. **Check HALT conditions** (track contention history):
-      - Same contentions repeated 2+ rounds without progress → redirect once → still circular → **HALT**
-      - External contradiction discovered → **HALT**
-      - Missing information that neither agent possesses → **HALT**
+**You will be notified when an agent sends YOU (team lead) a message.** This is
+your ONLY trigger to act. Specifically:
 
-   c. **Write checkpoint** after each round:
-      - Append round content to step output file
-      - Update frontmatter: `rounds_completed: {R}`, `status: IN_PROGRESS`
+- **Antithesis → team lead**: Round summary with response type (ACCEPT/REFINE/COUNTER)
+- **Thesis → team lead**: Converged result (sent after antithesis ACCEPT)
 
-   d. **Track progress** in stdout:
-   ```
-   {STEP_ID}: {goal} — Round {R}, {COUNTER|REFINE|ACCEPT}
-   ```
+**ABSOLUTE PROHIBITIONS while waiting:**
 
-4. **On convergence**: write final output, cleanup agents
-5. **On HALT**: write halt report, cleanup agents
+1. Do NOT call any tool. Do NOT check agent status.
+2. Do NOT read log files or agent outputs mid-dialogue.
+3. Do NOT send shutdown_request while dialogue is in progress.
+4. Do NOT edit code, synthesize results, or substitute for either agent.
+5. Do NOT interpret agent "idle" status as stuck or complete. Idle means the
+   agent is waiting for a SendMessage — this is NORMAL between turns.
+
+If you are notified that agents are idle or background agents have status updates,
+respond with a single line ("Waiting for convergence signal.") and take NO action.
+
+##### Processing Convergence Signals
+
+When you receive a SendMessage from an agent addressed to you:
+
+**From antithesis (round summary)**:
+- **ACCEPT** → Convergence achieved. Wait for thesis to send converged result.
+  If thesis's converged result arrives in the same notification, proceed to
+  Write Output. If not, wait one more turn — do NOT intervene.
+- **COUNTER / REFINE** → Note the round number. Do NOT intervene. Thesis will
+  respond directly to antithesis. Continue waiting.
+
+**From thesis (converged result)**:
+- Contains the final synthesized deliverable after antithesis ACCEPT.
+- Proceed to Write Output.
+
+**HALT signal from either agent**:
+- Agent reports circular argumentation, external contradiction, or missing info.
+- Proceed to Write Output with halt status.
+
+Track rounds by counting antithesis summaries received. Print progress to stdout:
+```
+{STEP_ID}: {goal} — Round {R}, {COUNTER|REFINE|ACCEPT}
+```
+
+##### Write Output
+
+After receiving the converged result (or halt signal):
+
+1. Read log files from `{LOG_DIR}/` for full round history
+2. Write step output file at WORKSPACE path
+3. Proceed to cleanup
 
 ##### Cleanup
 
+Force-terminate all agents. Do NOT attempt graceful shutdown — it wastes turns
+and agents may not respond to shutdown_request reliably.
+
 ```
-SendMessage({ to: "thesis", message: "shutdown" })
-SendMessage({ to: "antithesis", message: "shutdown" })
+TeamDelete()
 ```
+
+This terminates all team agents immediately. If TeamDelete is unavailable or
+fails, proceed anyway — agents are cleaned up when this process exits.
 
 #### Option A: Sequential Subagents (Fallback)
 
@@ -298,7 +447,9 @@ Agent({
 
 2. **Capture output** as `thesis_position`
 
-3. **Spawn AntithesisAgent**:
+3. **Log thesis**: Write `thesis_position` to `{LOG_DIR}/round-1-thesis.md`
+
+4. **Spawn AntithesisAgent**:
 ```
 Agent({
   description: "antithesis: respond to {STEP_ID}",
@@ -308,15 +459,19 @@ Agent({
 })
 ```
 
-4. **Write checkpoint**: append Round 1 to step output file with both positions
+5. **Capture output** as `antithesis_response`
 
-5. **Check convergence**:
+6. **Log antithesis**: Write `antithesis_response` to `{LOG_DIR}/round-1-antithesis.md`
+
+7. **Write checkpoint**: append Round 1 to step output file with both positions
+
+8. **Check convergence**:
    - **ACCEPT** → converged, write final output
    - **COUNTER / REFINE** → continue to Round 2+
 
 **Round 2+** (dialogue):
 
-6. **Spawn ThesisAgent** with antithesis response:
+9. **Spawn ThesisAgent** with antithesis response:
 ```
 Agent({
   description: "thesis: respond to antithesis {STEP_ID}",
@@ -326,11 +481,19 @@ Agent({
 })
 ```
 
-7. **Capture updated position**, spawn antithesis with it
+10. **Capture updated position** as `thesis_position`
 
-8. **Write checkpoint**: append round to output file, update `rounds_completed`
+11. **Log thesis**: Write `thesis_position` to `{LOG_DIR}/round-{R}-thesis.md`
 
-9. **Check convergence**. On convergence or HALT, proceed to Phase 4.
+12. **Spawn AntithesisAgent** with updated thesis position
+
+13. **Capture output** as `antithesis_response`
+
+14. **Log antithesis**: Write `antithesis_response` to `{LOG_DIR}/round-{R}-antithesis.md`
+
+15. **Write checkpoint**: append round to output file, update `rounds_completed`
+
+16. **Check convergence**. On convergence or HALT, proceed to Phase 4.
 
 ---
 
@@ -356,24 +519,25 @@ If the workflow step has `last_step: true`:
 1. Read all step outputs from this phase's directory
 2. Synthesize into DELIVERABLE.md following workspace-convention format
 3. Fill all fields from the workflow file's Exit Contract section
-4. Write to `{phase_directory}/DELIVERABLE.md`
+4. Extract `phase` field from WORKFLOW_FILE frontmatter (e.g., `P1-analysis`)
+5. Write to `{WORKSPACE_ROOT}/{phase}/DELIVERABLE.md`
 
 #### Stdout Output
 
 Print step summary to stdout. **Last line must be JSON**:
 
 ```json
-{"status":"completed","workspace":"{WORKSPACE}","step":"{STEP_ID}","summary":"{1-2 sentence}","rounds":{N}}
+{"status":"completed","workspace":"{WORKSPACE}","step":"{STEP_ID}","summary":"{1-2 sentence}","rounds":{N},"execution_mode":"{teams|sequential}"}
 ```
 
 On HALT:
 ```json
-{"status":"halted","workspace":"{WORKSPACE}","step":"{STEP_ID}","summary":"{halt reason}","rounds":{N},"halt_reason":"{type}"}
+{"status":"halted","workspace":"{WORKSPACE}","step":"{STEP_ID}","summary":"{halt reason}","rounds":{N},"halt_reason":"{type}","execution_mode":"{teams|sequential}"}
 ```
 
 On inverted step (Review Story):
 ```json
-{"status":"completed","workspace":"{WORKSPACE}","step":"{STEP_ID}","verdict":"{PASS|FAIL}","blockers":["{blocker descriptions}"],"rounds":{N}}
+{"status":"completed","workspace":"{WORKSPACE}","step":"{STEP_ID}","verdict":"{PASS|FAIL}","blockers":["{blocker descriptions}"],"rounds":{N},"execution_mode":"{teams|sequential}"}
 ```
 
 ---
@@ -407,6 +571,18 @@ Step N:
 Execute all designed steps sequentially within this session (no per-step session split).
 Use the same dialectic loop mechanics (Option A or B) for each step.
 
+For each step N:
+
+1. **Setup log directory**:
+   ```
+   LOG_DIR = {WORKSPACE}/logs/step-{N}/
+   mkdir -p LOG_DIR
+   ```
+2. Inject `LOG_DIR` into agent role context (same as pipeline mode)
+3. Execute dialectic loop — write round logs to `LOG_DIR` after each agent output
+   capture (same protocol as pipeline mode)
+4. On convergence, capture step result for DELIVERABLE.md
+
 ### Output
 
 Write `{WORKSPACE}/DELIVERABLE.md` with:
@@ -438,7 +614,7 @@ Write `{WORKSPACE}/DELIVERABLE.md` with:
 Last stdout line: JSON output contract.
 
 ```json
-{"status":"completed","workspace":"{WORKSPACE}","summary":"{1-2 sentence}","deliverables":["DELIVERABLE.md"]}
+{"status":"completed","workspace":"{WORKSPACE}","summary":"{1-2 sentence}","deliverables":["DELIVERABLE.md"],"execution_mode":"{teams|sequential}"}
 ```
 
 ---

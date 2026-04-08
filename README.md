@@ -1,183 +1,158 @@
-# dial — Dialectic Workflow Plugin for Claude Code
+# tas — Dialectic Workflow Plugin for Claude Code
 
-A Claude Code plugin that executes user requests through a **thesis-antithesis-synthesis (정반합)** dialectical pattern using a 3-layer agent orchestration architecture. Supports both single requests and full SDLC/GameDev pipelines.
+A Claude Code plugin that runs user requests through **thesis-antithesis-synthesis (정반합)** using multi-agent orchestration. Supports single requests (quick mode) and full project pipelines (SDLC / GameDev).
 
-## Architecture
+## How It Works
 
 ```
-/dial {request}  →  MainOrchestrator (SKILL.md, depth 0)
-                      │
-                      ├── Simple request → single MetaAgent call
-                      │
-                      └── Project scope → per-step session pipeline
-                            │
-                            For each step (separate claude -p session):
-                            └── MetaAgent (合, depth 0)
-                                  ├── ThesisAgent (正, depth 1)
-                                  └── AntithesisAgent (反, depth 1)
-                                  │
-                                  ┌────────────────────────────────────┐
-                                  │  正 proposes → 反 responds          │
-                                  │  (COUNTER / REFINE / ACCEPT)       │
-                                  │  Dialogue until convergence or HALT │
-                                  └────────────────────────────────────┘
-                                  │
-                                  Step output → next step
-                            │
-                            Phase DELIVERABLE.md → next phase
+/tas {request}  →  MainOrchestrator
+                     │
+                     ├── Trivial? → respond directly
+                     └── Non-trivial → MetaAgent (separate process)
+                                         │
+                                         正 proposes → 反 responds
+                                         Dialogue until convergence
+                                         │
+                                         Synthesized output
 ```
 
-### Three Layers
+Three layers, each with a strict boundary:
 
-| Layer | Agent | Role |
-|-------|-------|------|
-| **Layer 0** | MainOrchestrator (SKILL.md) | Thin scheduler — request parsing, PROGRESS.md, per-step invocation |
-| **Layer 1** | MetaAgent (合) | Single-step executor — reads workflow file, runs 정반합, checkpoints |
-| **Layer 2** | ThesisAgent (正) / AntithesisAgent (反) | Execution and review (leaf agents) |
+| Layer | Agent | Boundary |
+|-------|-------|----------|
+| 0 | MainOrchestrator | Thin scheduler — never sees internal dialectic |
+| 1 | MetaAgent (合) | Runs in its own `claude -p` process per step |
+| 2 | ThesisAgent (正) / AntithesisAgent (反) | Leaf agents, internal to MetaAgent |
 
-### Key Design Decisions
-
-- **Per-step sessions**: Each workflow step runs in its own `claude -p` process with fresh context, preventing context pollution and enabling resume
-- **Workflow definition files**: Step details (goals, roles, criteria) are defined in markdown files under `workflows/`, not embedded in agent code
-- **Required/Optional steps**: Each step is classified as Required or Optional. Optional steps can be skipped based on project scope, reducing overhead for simple projects
-- **PROGRESS.md**: Tracks completion state across sessions. Re-running the pipeline resumes from the last incomplete step
-- **Intra-step checkpointing**: Each round of thesis/antithesis dialogue is saved to the step output file for mid-step resume
-
-### Execution Modes
-
-- **Option B (Agent Teams)**: ThesisAgent and AntithesisAgent communicate directly via SendMessage
-- **Option A (Fallback)**: Sequential subagent spawning with MetaAgent relay
+**Process isolation** prevents context exhaustion. MainOrchestrator provides inputs, parses JSON output, manages PROGRESS.md. MetaAgent handles everything else.
 
 ## Installation
 
 ```bash
-# Symlink into Claude Code skills
-ln -s /path/to/dial/skills/dial ~/.claude/skills/dial
-ln -s /path/to/dial/skills/dial-verify ~/.claude/skills/dial-verify
+# Clone and register as a plugin
+git clone <repo-url> /path/to/tas
+claude plugins add /path/to/tas
 ```
+
+Registers two skills: `/tas` (dialectic orchestration) and `/tas-verify` (post-synthesis verification).
 
 ## Usage
 
 ```
-/dial {your request}
+/tas {request}                  # quick mode — single dialectic
+/tas sdlc {request}             # full SDLC pipeline
+/tas game {request}             # game development pipeline
 ```
 
 ### Examples
 
 ```
-/dial TypeScript retry 함수 설계
-/dial 이 코드의 에러 핸들링 리뷰
-/dial 인증 모듈 리팩토링 계획
-/dial Flutter 건강관리 앱 만들어줘       ← triggers SDLC pipeline
-/dial Unity 로그라이크 게임 만들어줘     ← triggers Game Dev pipeline
+/tas TypeScript retry 함수 설계해줘              # quick — design review
+/tas 이 코드의 에러 핸들링 리뷰                   # quick — code review
+/tas sdlc Flutter 건강관리 앱 만들어줘            # SDLC pipeline
+/tas game Unity 로그라이크 게임 만들어줘          # GameDev pipeline
 ```
 
-### Single Request Flow
+### Quick Mode
 
-1. MainOrchestrator parses request, creates workspace, classifies type
-2. MetaAgent invoked as `claude -p` process
-3. MetaAgent designs workflow steps with pass criteria (uses `workflow-patterns.md`)
-4. ThesisAgent proposes position → AntithesisAgent responds (COUNTER/REFINE/ACCEPT)
-5. Dialogue continues until genuine convergence; synthesis report returned to user
+Single MetaAgent session. Classifies the request type (implementation, architecture, code review, refactoring, analysis), designs internal workflow steps, runs dialectic until convergence. Output: synthesis report.
 
-### Pipeline Flow (Project Scope)
+### Pipeline Mode
 
-1. MainOrchestrator classifies pipeline (SDLC / Game Dev) and selects steps
-2. User confirms step selection (optional steps can be included/skipped)
-3. For each step: separate `claude -p` session, MetaAgent reads workflow definition
-4. Step output saved with rounds for checkpoint/resume
-5. Phase DELIVERABLE.md flows forward as context to next phase
+Multi-phase project execution. Each phase produces a `DELIVERABLE.md` that flows to the next. Each step runs in its own `claude -p` process. PROGRESS.md enables resume across sessions.
 
-## Pipeline Types
+**SDLC** — 4 phases, 14 steps (+ optional):
 
-### Software Dev (SDLC) — 4 phases, 17 steps
+| Phase | Steps |
+|-------|-------|
+| P1 Analysis | Idea Enrichment, Tech Research*, Domain Analysis*, Create Brief |
+| P2 Planning | Create PRD, UX Flows*, Validate PRD |
+| P3 Solutioning | Architecture, Epic & Story Breakdown, Readiness Check* |
+| P4 Implementation | Sprint Planning, Scaffold*, Create/Dev/QA*/Review Story (per-story), E2E QA* |
 
-| Phase | Goal | Steps (R=Required, O=Optional) |
-|-------|------|------|
-| 1. Analysis | Domain research, feasibility | S01 Enrichment(R), S02 Tech(O), S03 Domain(O), S04 Brief(R) |
-| 2. Planning | Requirements, UX | S01 PRD(R), S02 UX Flows(O), S03 Validate(R) |
-| 3. Solutioning | Architecture, stories | S01 Architecture(R), S02 Stories(R), S03 Readiness(O) |
-| 4. Implementation | Sprint execution | 7 steps — see below |
+**GameDev** — 4 phases, 24 steps (+ optional):
 
-### Game Dev — 4 phases, 24 steps
+| Phase | Steps |
+|-------|-------|
+| P1 Preproduction | Game Concept Enrichment, Game Brief, Domain Research*, Market Research*, Tech Research*, Create Summary |
+| P2 Design | GDD, Narrative Design*, Create PRD, Create UX*, Validate PRD |
+| P3 Technical | Game Architecture, Create Stories, Check Readiness*, Project Context*, Test Framework*, Test Design* |
+| P4 Production | Same sprint pattern as SDLC P4 |
 
-| Phase | Goal | Steps (R=Required, O=Optional) |
-|-------|------|------|
-| 1. Preproduction | Game concept, research | S01 Enrichment(R), S02 Brief(R), S03 Domain(O), S04 Market(O), S05 Tech(O), S06 Summary(R) |
-| 2. Design | GDD, narrative, PRD, UX | S01 GDD(R), S02 Narrative(O), S03 PRD(R), S04 UX(O), S05 Validate(R) |
-| 3. Technical | Architecture, stories, tests | S01 Architecture(R), S02 Stories(R), S03 Readiness(O), S04 Context(O), S05 Test Framework(O), S06 Test Design(O) |
-| 4. Production | Sprint execution | 7 steps — same as SDLC Phase 4 |
+Steps marked with * are optional — skippable based on project scope.
 
-### Phase 4: Implementation / Production (7 Steps)
+### Phase 4: Sprint Pattern (Shared)
 
-Both pipelines share the same 7-step sprint pattern:
-
-| Step | Role (Thesis / Antithesis) | Required |
-|------|---------------------------|----------|
-| S01 Sprint Planning | planner / plan-auditor | R |
-| S02 Scaffold | builder / arch-verifier | O |
-| S03 Create Story | spec-writer / spec-reviewer | R |
-| S04 Dev Story | implementer / diff-reviewer | R |
-| S05 QA Story | test-runner / — | O |
-| **S06 Review Story** | **attacker / judge** (inverted) | R |
-| S07 E2E QA | integration-tester / gap-finder | O |
-
-S06 uses **inverted convergence**: thesis aggressively finds defects, antithesis judges whether each is a real blocker. FAIL → loop back to S04.
+Both pipelines use the same 7-step sprint execution:
 
 ```
-Per batch:
-  Stories in parallel → S03 → S04 → S05 → S06
-                                              ├─ PASS → merge
-                                              └─ FAIL → S04 (retry)
-After all batches → S07 E2E QA
+S01 Sprint Planning → S02 Scaffold*
+  │
+  For each batch (stories in parallel):
+    S03 Create Story → S04 Dev Story → S05 QA Story* → S06 Review Story
+                                                           ├─ PASS → merge
+                                                           └─ FAIL → S04 retry (max 2)
+  │
+  S07 E2E QA*
 ```
 
-## Workflow Types (Single Request)
+S06 uses **inverted convergence**: thesis finds defects, antithesis judges whether each is a real blocker.
 
-| Type | Steps |
-|------|-------|
-| Implementation | Design → Implement → Verify |
-| Architecture | Requirements → Design → Trade-off Review |
-| Code Review | Analysis → Issues → Improvements |
-| Refactoring | Current State → Plan → Execute → Regression Check |
-| Analysis | Scope → Investigation → Conclusions |
+### Workspace
+
+```
+_workspace/
+  sdlc/            # active SDLC pipeline (stable path, resumable)
+  gamedev/         # active GameDev pipeline (stable path, resumable)
+  quick/           # quick mode runs (timestamped, independent)
+    20260408_140000/
+  archive/         # completed/abandoned pipelines
+```
+
+Pipeline workspaces use stable paths — re-running `/tas sdlc` resumes from the last incomplete step. Starting a new pipeline archives the previous one.
+
+### Post-Synthesis Verification
+
+```
+/tas-verify                     # verify last tas output
+/tas-verify path/to/file.ts     # verify specific file
+/tas-verify sdlc                # verify pipeline output
+```
+
+Traces concrete values through computation chains. Independent from the dialectic — runs after synthesis to catch compositional defects that text-based review misses.
 
 ## File Structure
 
 ```
-dial/
+tas/
 ├── .claude-plugin/
-│   └── plugin.json
+│   └── plugin.json                 # Plugin metadata (v0.2.0)
 ├── skills/
-│   ├── dial/
-│   │   ├── SKILL.md                    # MainOrchestrator — thin scheduler
+│   ├── tas/
+│   │   ├── SKILL.md                # MainOrchestrator
 │   │   ├── agents/
-│   │   │   ├── meta.md                 # MetaAgent 合 — single-step executor
-│   │   │   ├── thesis.md               # ThesisAgent 正 — first mover
-│   │   │   ├── antithesis.md           # AntithesisAgent 反 — reactive reviewer
-│   │   │   └── conflict-resolver.md    # Merge conflict resolution
+│   │   │   ├── meta.md             # MetaAgent (合)
+│   │   │   ├── thesis.md           # ThesisAgent (正)
+│   │   │   ├── antithesis.md       # AntithesisAgent (反)
+│   │   │   └── conflict-resolver.md
 │   │   ├── workflows/
-│   │   │   ├── sdlc/                   # SDLC step definitions (4 files)
-│   │   │   │   ├── P1-analysis.md
-│   │   │   │   ├── P2-planning.md
-│   │   │   │   ├── P3-solutioning.md
-│   │   │   │   └── P4-implementation.md
-│   │   │   └── gamedev/                # Game Dev step definitions (4 files)
-│   │   │       ├── P1-preproduction.md
-│   │   │       ├── P2-design.md
-│   │   │       ├── P3-technical.md
-│   │   │       └── P4-production.md
+│   │   │   ├── sdlc/
+│   │   │   │   ├── manifest.md     # Step metadata (MainOrchestrator reads this)
+│   │   │   │   └── P{1-4}-*.md     # Step definitions (MetaAgent reads these)
+│   │   │   └── gamedev/
+│   │   │       ├── manifest.md
+│   │   │       └── P{1-4}-*.md
 │   │   └── references/
-│   │       ├── workspace-convention.md # Directory structure, output format, naming rules
-│   │       ├── workflow-patterns.md    # Single-request workflow templates
-│   │       ├── sdlc-phases.md          # SDLC inter-phase contracts
-│   │       ├── gamedev-phases.md       # Game Dev inter-phase contracts
-│   │       ├── story-spec-format.md    # Story spec standard format
-│   │       ├── sprint-planning.md      # Sprint batching algorithm
-│   │       └── recommended-hooks.md    # Hook recommendations
-│   └── dial-verify/
-│       └── SKILL.md                    # Independent post-synthesis verification
-├── CLAUDE.md
+│   │       ├── workspace-convention.md
+│   │       ├── workflow-patterns.md
+│   │       ├── sdlc-phases.md
+│   │       ├── gamedev-phases.md
+│   │       ├── story-spec-format.md
+│   │       ├── sprint-planning.md
+│   │       └── recommended-hooks.md
+│   └── tas-verify/
+│       └── SKILL.md                # Post-synthesis verification
+├── CLAUDE.md                       # Development meta-guide
 └── README.md
 ```
 

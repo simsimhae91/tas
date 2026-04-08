@@ -27,9 +27,14 @@ Your single purpose: find defects that text-based review misses by **tracing con
 Determine what code to verify:
 
 1. If `$ARGUMENTS` contains a file path, verify that file
-2. Otherwise, check `_workspace/` for the latest tas session directory
-3. Read the final thesis output from the last step's last iteration
-4. Identify all code files that were written or modified during the session
+2. If `$ARGUMENTS` starts with a mode keyword (`sdlc`, `game`), check `_workspace/{mode}/`
+3. Otherwise, auto-detect:
+   a. Check `_workspace/sdlc/` and `_workspace/gamedev/` for active sessions
+   b. If multiple found, use the one with more recent `PROGRESS.md` `updated:` timestamp
+   c. Also check `_workspace/quick/` for the latest timestamped directory
+   d. Use the most recently updated workspace across all modes
+4. Read the final deliverable from the identified workspace
+5. Identify all code files that were written or modified during the session
 
 If no target is found, ask the user what to verify.
 

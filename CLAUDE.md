@@ -1,118 +1,86 @@
-# tas — Development Guide
+# tas — Meta-Cognitive Development Guide
 
-## What is tas?
+This project is a **Claude Code plugin**. The files you edit here are prompts and instructions that other Claude instances will execute. A "code change" in this repo is a **behavior change** in a running agent system.
 
-tas is a Claude Code plugin that applies thesis-antithesis-synthesis (정반합) to produce higher-quality outputs through multi-agent dialectical review. It uses a 3-layer orchestration architecture and supports both single requests and full SDLC/GameDev pipelines.
+## The Core Paradox
 
-## Architecture
+You (Claude) are editing instructions for yourself (Claude). This creates unique failure modes that don't exist in normal software:
 
-```
-MainOrchestrator (SKILL.md, depth 0)
-  └── For each step in workflow file:
-        claude -p (separate process, per step)
-          └── MetaAgent (合, depth 0 in own process)
-                ├── ThesisAgent (正, depth 1, leaf)
-                ├── AntithesisAgent (反, depth 1, leaf)
-                └── ConflictResolver (depth 1, leaf, sprint only)
-```
+1. **You can't test prompt changes** — there's no compiler, no unit test. You must reason about how a receiving Claude will interpret your edits under diverse user inputs.
+2. **Your intuitions are miscalibrated** — you know what you *meant* to write. The receiving Claude only sees what you *actually* wrote, without your conversational context.
+3. **You're tempted to optimize for yourself** — the instructions that feel clearest to you right now may be ambiguous to a fresh instance with a different conversation history.
 
-### Architecture Invariants
+## What You Must Be Aware Of
 
-- **MainOrchestrator** (SKILL.md) is a thin scheduler — parses request, manages PROGRESS.md, invokes MetaAgent per step, presents results
-- **MetaAgent** (合) is the per-step workflow executor — reads workflow definition file, runs single-step 정반합, manages checkpoints
-- **ThesisAgent** (正) is always **FIRST MOVER** — proposes position with reasoning, defends or concedes through dialogue
-- **AntithesisAgent** (反) is always **REACTIVE** — responds with COUNTER, REFINE, or ACCEPT; proposes alternatives, not just critique
-- MetaAgent runs in its own process (`CLAUDECODE=0 claude -p`) with its own context window
-- **One step per session**: Each workflow step gets its own MetaAgent process with fresh context
-- These roles prevent the deadlock resolved in commit e38ec8d
-- **Convergence model**: No fixed iteration caps — dialogue continues until genuine agreement (ACCEPT) or irrecoverable HALT (circular argumentation, external contradiction, missing information)
-- Multi-phase projects: each **step** gets its own MetaAgent process with `WORKFLOW_FILE` + `STEP_ID`
+### Information Hiding Is Load-Bearing
 
-### Execution Modes
+SKILL.md (MainOrchestrator) intentionally does not know MetaAgent internals — thesis/antithesis roles, convergence model, review lenses. This is not an oversight.
 
-| Mode | Trigger | Session Granularity |
-|------|---------|---------------------|
-| Single-request | Non-project scope | 1 session, MetaAgent handles multi-step internally |
-| Pipeline | Project scope | 1 session per step, MainOrchestrator iterates |
+**Why**: If the MainOrchestrator Claude learns how 정반합 works internally, it develops a behavioral bias to skip the subprocess call and run the dialectic itself via `Agent()`. This has been observed and is the reason for the strict `claude -p` boundary.
 
-### Phase 4 Implementation Pattern (7 Steps)
+**Implication**: When editing SKILL.md, never add references to agent internals. When editing agent files (meta.md, thesis.md, antithesis.md), don't worry about what SKILL.md knows — they run in separate processes.
 
-Both SDLC and GameDev use the same 7-step sprint pattern:
+### Role Separation Prevents Deadlock
 
-| Step | 정반합 Role | Convergence |
-|------|------------|-------------|
-| S01 Sprint Planning | planner / plan-auditor | plan-validity (light) |
-| S02 Scaffold | builder / arch-verifier | arch-conformance (light) |
-| S03 Create Story | spec-writer / spec-reviewer | spec-quality (medium) |
-| S04 Dev Story | implementer / diff-reviewer | ac-fulfillment (heavy) |
-| S05 QA Story | test-runner / - | automated (minimal, conditional) |
-| S06 Review Story | **attacker / judge** | **issue-verdict (heavy, inverted)** |
-| S07 E2E QA | integration-tester / gap-finder | integration-quality (medium) |
+ThesisAgent is always FIRST MOVER. AntithesisAgent is always REACTIVE. This asymmetry was established to resolve a deadlock (commit e38ec8d) where both agents waited for the other to speak first.
 
-S06 uses **inverted convergence**: thesis attacks (finds defects), antithesis judges (filters false positives). FAIL → loop to S04.
+**Implication**: Any edit that blurs who speaks first reintroduces the deadlock. If you're changing agent roles, trace the turn-taking protocol through the full dialogue sequence.
 
-## Quality Invariants
+### Process Isolation Is the Context Strategy
 
-The tas process must catch issues that a human expert reviewer would catch. The following are **not edge cases** — they are design defects when violated:
+Each workflow step runs in its own `claude -p` process. This is not an implementation detail — it's the mechanism that prevents context window exhaustion during long pipelines. One step = one process = one context window.
 
-1. **Semantic consistency** — the same concept means the same thing in every appearance (parameters, callbacks, errors, docs)
-2. **Behavioral consistency** — all code paths for the same operation behave identically under the same contract
-3. **Compositional integrity** — when function A's output feeds into function B, the composition is sound for ALL valid inputs
-4. **Value flow soundness** — no intermediate computation in the call chain produces NaN, Infinity, or an unexpected type, even if a downstream cap would "fix" it
+**Implication**: Don't add mechanisms that share state between steps except through explicit files (DELIVERABLE.md, PROGRESS.md, step output files). In-memory state dies with each process.
 
-If a tas session produces code that violates any of these, the gap is in the **review process**, not in the produced code. The remedy is improving the lenses, not adding edge-case guards.
+### Scope Prohibition Is a Behavioral Guardrail
 
-## Defensive Measure Rule
+MainOrchestrator must never read project source code. Trivial Gate judges from request text alone. These rules exist because Claude has a strong drive to be helpful — without explicit prohibition, it will read the codebase "to better understand the request" and then skip MetaAgent entirely.
 
-A cap, clamp, or guard is correctly placed only when it is applied **before** the value is consumed by further computation. If `computeDelay` returns Infinity and the caller caps it afterward, any intermediate use (like `Math.random() * Infinity`) is already corrupted. This is a **composition order** defect.
+**Implication**: If you add any new capability to SKILL.md, verify it doesn't create a path where MainOrchestrator reads project files and decides to handle the request directly.
 
-## Key Files
+## Edit Checklist
 
-| File | Role |
-|------|------|
-| `skills/tas/SKILL.md` | MainOrchestrator — thin scheduler, PROGRESS.md management, per-step invocation |
-| `skills/tas/agents/meta.md` | MetaAgent (合) — single-step executor, workflow file reader, checkpoint management |
-| `skills/tas/agents/thesis.md` | ThesisAgent (正) — position holder with reasoning, defense/concession through dialogue |
-| `skills/tas/agents/antithesis.md` | AntithesisAgent (反) — counter-position with alternatives, 4 review lenses, convergence-seeking |
-| `skills/tas/agents/conflict-resolver.md` | Merge conflict resolution for sprint execution |
-| `skills/tas/references/workspace-convention.md` | Workspace directory structure, output format, PROGRESS.md format, Read Scope rules |
-| `skills/tas/references/workflow-patterns.md` | Workflow templates for single-request mode |
-| `skills/tas/references/sdlc-phases.md` | SDLC inter-phase deliverable contracts |
-| `skills/tas/references/gamedev-phases.md` | Game Dev inter-phase deliverable contracts |
-| `skills/tas/references/story-spec-format.md` | Standard format for implementation stories |
-| `skills/tas/references/sprint-planning.md` | Sprint batching algorithm for parallel implementation |
-| `skills/tas/references/recommended-hooks.md` | Hook recommendations for target projects |
-| `skills/tas/workflows/sdlc/P{1-4}-*.md` | SDLC step-by-step workflow definitions (4 files) |
-| `skills/tas/workflows/gamedev/P{1-4}-*.md` | Game Dev step-by-step workflow definitions (4 files) |
-| `skills/tas-verify/SKILL.md` | Post-synthesis independent verification |
+Before finalizing any edit to an agent file:
 
-## Development Conventions
+- [ ] **Who executes this?** Identify which Claude instance (MainOrchestrator, MetaAgent, ThesisAgent, AntithesisAgent) will read this text.
+- [ ] **What context does it have?** That instance has only its system prompt + the input parameters passed to it. Not your current conversation. Not the other agent files.
+- [ ] **Does this leak across boundaries?** SKILL.md shouldn't reference agent internals. Agent files shouldn't assume MainOrchestrator behavior.
+- [ ] **Is the instruction falsifiable?** "Be thorough" is noise. "Trace the return value of function A through every call site" is actionable.
+- [ ] **Would a fresh Claude misread this?** Read your edit as if you had zero context about what it's supposed to do.
 
-- All agent definitions are markdown — no build step required
-- Lenses in antithesis.md are **perspectives**, not checklists — apply them by reading the deliverable through each perspective
-- Pass criteria: verifiable, specific, relevant, countable (3-6 per step)
-- Workspace audit trails in `_workspace/` are the source of truth for session history
-- Review lenses must require **concrete value tracing**, not just semantic assertion
-- MetaAgent's last stdout line is always a JSON output contract
-- Inter-phase context flows via `DELIVERABLE.md` → `PHASE_CONTEXT` parameter
-- Implementation phase uses worktree isolation (`isolation: "worktree"`) for parallel stories
+## File Roles
 
-### Per-Step Session Conventions
+| File | Executed By | Edits Affect |
+|------|-------------|--------------|
+| `SKILL.md` | MainOrchestrator (user's Claude) | Request routing, workspace management, MetaAgent invocation |
+| `agents/meta.md` | MetaAgent (subprocess) | Step execution, 정반합 orchestration, convergence logic |
+| `agents/thesis.md` | ThesisAgent (sub-subprocess) | Position proposal, defense, concession protocol |
+| `agents/antithesis.md` | AntithesisAgent (sub-subprocess) | Counter-position, review lenses, convergence seeking |
+| `agents/conflict-resolver.md` | ConflictResolver (subprocess) | Merge conflict resolution during sprint |
+| `workflows/*/manifest.md` | MainOrchestrator | Step listing, required/optional classification |
+| `workflows/*/P{N}-*.md` | MetaAgent only | Step details, goals, roles, pass criteria |
+| `references/*.md` | MetaAgent or agents | Shared conventions, formats, patterns |
 
-- Workflow step definitions live in `workflows/` directory, not in agent code
-- MainOrchestrator reads step lists from workflow files; MetaAgent reads step details
-- **Read Scope enforcement**: cross-phase only DELIVERABLE.md, within-phase only explicit step outputs
-- **PROGRESS.md** is the resume mechanism — MainOrchestrator reads it on startup to find resume point
-- **Checkpoint**: each step's output file has frontmatter with `status` and `rounds_completed`
-- Each round's thesis/antithesis output is saved to the step file for intra-step resume
-- After convergence, round content is compressed to summaries; `# Output` section holds the final deliverable
-- `Next Step Input` section in each step output provides structured context for the following step
+## Convergence Model
 
-### Step Selection (Required/Optional)
+No fixed iteration caps. Dialogue continues until ACCEPT or HALT. This is intentional — artificial caps produce premature consensus. If you're tempted to add a round limit, the real problem is probably unclear pass criteria or role ambiguity.
 
-- Each workflow step is classified as **Required** or **Optional** (defined in workflow files with `### Required` field)
-- Optional steps have a `### Skip Condition` describing when to skip
-- MainOrchestrator recommends step inclusion/exclusion based on project scope during Phase 0.5
-- Optional step outputs are always referenced as `optional:` in downstream Read Scopes
-- Required steps must function correctly with only `required:` inputs — optional inputs enrich but are not necessary
-- When optional inputs are absent, MetaAgent notifies agents so they adapt expectations
+## Quality Standard
+
+tas must catch what a human expert reviewer would catch. Four invariants:
+
+1. **Semantic consistency** — same concept, same meaning everywhere
+2. **Behavioral consistency** — same operation, same behavior under same contract
+3. **Compositional integrity** — function A's output into function B is sound for ALL valid inputs
+4. **Value flow soundness** — no intermediate NaN/Infinity/type-mismatch, even if downstream caps "fix" it
+
+If review misses these, improve the review lenses — don't add defensive guards.
+
+## Common Mistakes When Editing This Repo
+
+- **Adding implementation details to SKILL.md** — breaks information hiding
+- **Making convergence depend on round count** — produces shallow consensus
+- **Adding `Agent()` calls** — defeats process isolation; always use `Bash(claude -p ...)`
+- **Editing workflow files without updating manifest.md** — MainOrchestrator sees only the manifest
+- **Adding codebase-reading logic to SKILL.md** — breaks scope prohibition
+- **Writing instructions that assume shared context between steps** — each step is a fresh process

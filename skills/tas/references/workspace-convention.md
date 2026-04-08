@@ -8,38 +8,81 @@ MainOrchestrator reference this document as the single source of truth for works
 
 ## Directory Structure
 
+### Top-Level Layout
+
+Workspaces are organized by **mode** — the first argument to `/tas`:
+
 ```
 _workspace/
-  REQUEST.md                                    ← original user request
-  PROGRESS.md                                   ← main-level progress log
-  P1-{phase-slug}/
-    S01-{step-slug}.md                          ← step output (rounds + final output)
-    S02-{step-slug}.md
-    ...
-    DELIVERABLE.md                              ← phase exit contract
-  P2-{phase-slug}/
-    ...
-  P4-{phase-slug}/
-    S01-sprint-planning.md
-    S02-scaffold.md
-    batch-1/
-      {story-id}/
-        S03-create-story.md
-        S04-dev-story.md
-        S05-qa-story.md
-        S06-review-story.md
-      {story-id}/
-        ...
-    batch-2/
+  sdlc/                                         ← active SDLC pipeline (stable path)
+    REQUEST.md                                   ← original user request
+    PROGRESS.md                                  ← main-level progress log
+    P1-analysis/
+      S01-{step-slug}.md                         ← step output (rounds + final output)
+      S02-{step-slug}.md
       ...
-    S07-e2e-qa.md
-    DELIVERABLE.md
+      logs/                                      ← agent dialogue audit trail
+        S01/
+          round-1-thesis.md
+          round-1-antithesis.md
+          round-2-thesis.md
+          round-2-antithesis.md
+        S02/
+          ...
+      DELIVERABLE.md                             ← phase exit contract
+    P2-planning/
+    P3-solutioning/
+    P4-implementation/
+      S01-sprint-planning.md
+      S02-scaffold.md
+      batch-1/
+        {story-id}/
+          S03-create-story.md
+          S04-dev-story.md
+          S05-qa-story.md
+          S06-review-story.md
+        {story-id}/
+          ...
+      batch-2/
+        ...
+      S07-e2e-qa.md
+      DELIVERABLE.md
+  gamedev/                                       ← active GameDev pipeline (stable path)
+    REQUEST.md
+    PROGRESS.md
+    P1-preproduction/
+    P2-design/
+    P3-technical/
+    P4-production/
+      ...
+  quick/                                         ← quick mode runs (timestamped)
+    {YYYYmmdd_HHMMSS}/
+      DELIVERABLE.md
+      ...
+  archive/                                       ← completed/abandoned pipelines
+    sdlc-{YYYYmmdd_HHMMSS}/
+    gamedev-{YYYYmmdd_HHMMSS}/
 ```
+
+### Mode-Based Workspace Semantics
+
+| Mode | Invocation | Path | Timestamp | Resume |
+|------|-----------|------|-----------|--------|
+| SDLC pipeline | `/tas sdlc {request}` | `_workspace/sdlc/` | No (stable) | Yes |
+| GameDev pipeline | `/tas game {request}` | `_workspace/gamedev/` | No (stable) | Yes |
+| Quick (default) | `/tas {request}` | `_workspace/quick/{timestamp}/` | Yes (isolation) | No |
+
+Pipeline workspaces use **stable paths** — the mode parameter is the identity.
+Only one active session per mode per project. Resume is free (deterministic path lookup).
+Quick mode uses timestamps for isolation across multiple independent runs.
 
 ### Naming Rules
 
 | Element | Pattern | Example |
 |---------|---------|---------|
+| Pipeline workspace | `{mode}/` | `sdlc/`, `gamedev/` |
+| Quick workspace | `quick/{timestamp}/` | `quick/20260408_140000/` |
+| Archive entry | `archive/{mode}-{timestamp}/` | `archive/sdlc-20260408_140000/` |
 | Phase directory | `P{N}-{slug}` | `P1-analysis`, `P3-solutioning` |
 | Step output file | `S{NN}-{slug}.md` | `S01-idea-enrichment.md` |
 | Phase deliverable | `DELIVERABLE.md` | (always this exact name) |
@@ -52,6 +95,7 @@ _workspace/
 - Step `NN`: 01-padded, unique within phase
 - Slugs: English kebab-case, 1:1 match with step names in workflow files
 - Story IDs: match story spec filenames (e.g., `AUTH-001` from `stories/AUTH-001-login-flow.md`)
+- Timestamp format: `YYYYmmdd_HHMMSS` (e.g., `20260408_140000`)
 
 ---
 
@@ -176,33 +220,49 @@ halt_reason: "{circular_argumentation | external_contradiction | missing_informa
 ## PROGRESS.md Format
 
 The progress log tracks overall project state. MainOrchestrator reads this on startup to
-determine resume point.
+determine resume point. The `classify_plan` field stores the original execution plan from
+MetaAgent's classify mode, enabling resume without re-classification.
 
 ```markdown
 ---
 pipeline: {sdlc | gamedev}
-request_file: _workspace/REQUEST.md
+request_file: REQUEST.md
+classify_plan: |
+  {"command":"classify","mode":"pipeline","pipeline":"...","phases":[...],"context_strategy":"..."}
+context_strategy: {deliverable | codebase}
 created: {ISO 8601 timestamp}
 updated: {ISO 8601 timestamp}
-current: {P{N}-{slug}/S{NN}-{slug}}
+current: {phase-id/S{NN}-{slug}}
 ---
 
-# P1-{phase-slug}
+# {phase-id from classify plan}
 
 | Step | Status | Output | Updated |
 |------|--------|--------|---------|
-| S01-{slug} | DONE | P1-{slug}/S01-{slug}.md | {timestamp} |
-| S02-{slug} | DONE | P1-{slug}/S02-{slug}.md | {timestamp} |
-| S03-{slug} | RUNNING | | {timestamp} |
-| S04-{slug} | PENDING | | |
+| S01-{slug} | DONE | {phase-id}/S01-{slug}.md | {timestamp} |
+| S02-{slug} | RUNNING | | {timestamp} |
+| S03-{slug} | PENDING | | |
 
-# P2-{phase-slug}
+# {next phase-id from classify plan}
 
 | Step | Status | Output | Updated |
 |------|--------|--------|---------|
 | S01-{slug} | PENDING | | |
 | ... | | | |
 ```
+
+**Partial pipeline**: Only phases and steps from the classify plan appear in PROGRESS.md.
+Phases not selected by classify are simply absent — not marked SKIPPED.
+
+### Context Strategy
+
+| Value | Meaning | When used |
+|-------|---------|-----------|
+| `deliverable` | Use previous phase's DELIVERABLE.md as context | Full pipeline, standard flow |
+| `codebase` | MetaAgent reads project source directly for context | Partial pipeline, existing project modification |
+
+For `codebase` strategy, the first phase receives `PHASE_CONTEXT: CODEBASE` instead of
+deliverable content. MetaAgent then reads relevant project files during step execution.
 
 ### Phase 4 with Story Pipelines
 
@@ -233,17 +293,51 @@ current: {P{N}-{slug}/S{NN}-{slug}}
 
 ### Resume Logic (MainOrchestrator)
 
+Resume is triggered by the **PIPELINE_HINT** or existing workspace detection.
+For pipeline mode, the hint determines the workspace path deterministically.
+For resumed sessions, `classify_plan` in PROGRESS.md provides the execution plan
+without re-invoking MetaAgent classify.
+
 ```
-1. Read PROGRESS.md
-2. Find first non-terminal step (not DONE, not SKIPPED):
+1. User invokes /tas [hint] {request}
+2. If hint present: check _workspace/{hint}/PROGRESS.md
+3. PROGRESS.md found:
+   a. Parse error → warn user, offer: Repair / New
+   b. Has incomplete steps → offer Resume / New
+      - Resume → load classify_plan from PROGRESS.md, find first non-terminal step
+      - New → archive old workspace, invoke classify for fresh plan
+   c. All terminal (DONE/SKIPPED) → offer View results / New / Quick dev
+4. PROGRESS.md not found → invoke classify for fresh plan
+```
+
+**Within a resumed session**, step-level resume is unchanged:
+
+```
+1. Find first non-terminal step (not DONE, not SKIPPED):
    a. RUNNING → check step output file:
       - output exists with status: DONE → mark DONE in PROGRESS, move to next
       - output exists with status: IN_PROGRESS → re-invoke step (Meta resumes from checkpoint)
       - output missing → reset to PENDING, start fresh
    b. PENDING → start this step
    c. HALTED → report to user, offer retry or skip
-3. Update PROGRESS.md before and after each step invocation
+2. Update PROGRESS.md before and after each step invocation
 ```
+
+### Archive Convention
+
+When the user starts a new pipeline while an existing workspace exists,
+the old workspace is moved to `_workspace/archive/`:
+
+```
+mkdir -p _workspace/archive
+mv _workspace/{mode} _workspace/archive/{mode}-{timestamp}
+mkdir -p _workspace/{mode}
+```
+
+Archive entries are read-only references. They are not resumable.
+The archive directory is never auto-cleaned — users manage it manually.
+
+Quick mode workspaces (`_workspace/quick/`) accumulate and are not archived.
 
 ---
 

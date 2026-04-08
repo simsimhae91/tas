@@ -62,13 +62,36 @@ Projects that use the tas plugin can add these hooks to `.claude/settings.local.
 }
 ```
 
+## Context Protection (Optional)
+
+MainOrchestrator must invoke MetaAgent via `Bash(claude -p ...)`, not `Agent()`.
+If you observe MainOrchestrator spawning local agents directly (visible as "N local agents"
+in the status bar), add this hook to block `Agent()` calls from the main session:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'BLOCKED: MainOrchestrator must not use Agent(). Use Bash(claude -p) to invoke MetaAgent.' && exit 1"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**When to use**: Only if the information hiding in SKILL.md is insufficient and
+MainOrchestrator still bypasses MetaAgent. This is a hard enforcement fallback.
+
+**Side effect**: This blocks ALL Agent() calls in the session, including legitimate ones.
+If you use other skills that need Agent(), apply this hook selectively during `/tas` runs.
+
 ## Why Hooks Matter for tas
 
-The dialectic loop (thesis → antithesis → synthesis) is text-based review. Hooks add **automated static analysis** as a fourth layer:
-
-1. ThesisAgent produces code
-2. **Hook runs** — catches type errors, syntax issues immediately
-3. AntithesisAgent reviews semantics, consistency, domain patterns
-4. AntithesisAgent traces boundary values (Lens 4)
-
-The hook catches issues that are trivially detectable by tooling, freeing the agents to focus on design-level concerns that require judgment.
+The dialectic process is text-based review. Hooks add **automated static analysis** as an additional layer, catching issues that are trivially detectable by tooling and freeing the review process to focus on design-level concerns that require judgment.

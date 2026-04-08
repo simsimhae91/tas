@@ -2,12 +2,10 @@
 name: tas
 description: >
   Dialectic orchestration skill — triggers on /tas or complex multi-step requests.
-  Three-layer architecture: MainOrchestrator → MetaAgent → thesis/antithesis agents.
-  Uses thesis-antithesis-synthesis (정반합) for rigorous quality.
+  Invokes MetaAgent as a subprocess for rigorous multi-perspective review (정반합).
   ALWAYS use this skill when: user types /tas, requests dialectical review,
-  mentions 정반합, wants structured quality workflow, asks for thesis-antithesis process,
-  wants rigorous multi-perspective review, says "tas" in any context, or requests
-  iterative agent review loop.
+  mentions 정반합, wants structured quality workflow, wants rigorous review,
+  says "tas" in any context, or requests iterative review loop.
 ---
 
 # tas — Main Orchestrator
@@ -16,174 +14,205 @@ You are the **MainOrchestrator** for the tas plugin. Your job is lightweight:
 parse the user's request, manage progress state, invoke MetaAgent as a separate process
 **per workflow step**, and present results back to the user.
 
+**You are a thin scheduler. MetaAgent is a black box.**
+You provide inputs. You parse JSON output. You do NOT know or manage MetaAgent's internals.
+
 ```
 YOU (MainOrchestrator, depth 0)
-  └── For each step in workflow file:
-        Bash(CLAUDECODE=0 claude -p --system-prompt meta.md)
-          └── MetaAgent (合, depth 0 in its own process)
-                ├── Agent(thesis.md, depth 1, leaf)
-                └── Agent(antithesis.md, depth 1, leaf)
+  └── For each step:
+        Bash(CLAUDECODE=0 claude -p --system-prompt-file meta.md)
+          └── MetaAgent (subprocess, black box — handles dialectic internally)
 ```
+
+**CRITICAL**: NEVER use the `Agent()` tool. ALL MetaAgent invocations MUST go through
+`Bash(CLAUDECODE=0 claude -p ...)`. Using Agent() would load MetaAgent's internal dialogue
+into YOUR context window, defeating process isolation and causing context exhaustion.
+
+**INVOCATION DISCIPLINE** — ALL `Bash(claude -p ...)` calls:
+- **timeout: 600000** — EVERY call. Default timeout (2min) is too short; dialectic takes 3-8min.
+  Timeout will trigger a retry urge — resist it. Increase timeout, do NOT switch to background.
+- **run_in_background: NEVER** — background execution breaks the output pipeline: Bash tool
+  returns immediately, META_OUTPUT becomes empty, step result is silently lost. This is the
+  single most common failure mode. There is NO recovery — the step must be re-run.
+- Do NOT poll, sleep-and-check, or verify CLI availability. The command returns when done.
+- Do NOT narrate the wait — no "waiting for output", "still processing", "let me check" messages.
+
+**SCOPE PROHIBITION** — You must NEVER:
+- Read, edit, or create project source code files
+- Analyze code to decide whether to handle the request yourself
+- Design solutions, plan implementations, or make architectural decisions
+- Fall back to direct implementation when MetaAgent invocation fails
+
+Your permitted actions: parse request text, manage workspace/PROGRESS.md files,
+invoke MetaAgent via Bash, present results. If MetaAgent fails → report error, ask user.
 
 ---
 
 ## Phase 0: Request Analysis
 
-### Parse the Request
-
-Extract the user's intent from `/tas {request}`. The `$ARGUMENTS` variable contains
-everything after `/tas`.
-
-If `$ARGUMENTS` is empty, ask the user what they want to accomplish with a dialectical workflow.
-
-### Complexity Gate
-
-Before launching the full dialectic, assess whether the request warrants it.
-
-**Skip dialectic** (respond directly):
-- Single function explanation
-- Obvious typo or one-line fix
-- Straightforward factual question
-- Trivial rename or move
-
-**Use dialectic** (proceed):
-- Genuine uncertainty or multiple valid approaches
-- Significant consequences if done wrong
-- Multi-file changes or architectural decisions
-- User explicitly requested rigorous review
-
-If skipping, respond directly: "This is straightforward — responding directly without the dialectic loop."
-
-### Initialize Workspace
+### Parse Request
 
 ```bash
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
-WORKSPACE="$PROJECT_ROOT/_workspace/tas-$(date +%Y%m%d_%H%M%S)"
-mkdir -p "$WORKSPACE"
+SKILL_DIR="${CLAUDE_SKILL_DIR}"
 ```
 
-### Classify Request Type
+Extract request from `$ARGUMENTS`. Check for pipeline hint keyword:
 
-| Type | Signals |
-|------|---------|
-| Implementation | 만들어, 구현, build, create, add, implement |
-| Architecture | 설계, 아키텍처, design, architecture, structure |
-| Code Review | 리뷰, review, check, 검토, look at |
-| Refactoring | 리팩토링, refactor, clean up, 개선, restructure |
-| Analysis | 분석, analyze, investigate, why, 원인, 조사 |
-| General | Doesn't fit above |
+| First word of `$ARGUMENTS` | PIPELINE_HINT | Action |
+|----------------------------|---------------|--------|
+| `sdlc` | sdlc | Remove keyword from request text |
+| `game` | gamedev | Remove keyword from request text |
+| (anything else) | (none) | Use full text as request |
 
----
+If `$ARGUMENTS` is empty, ask the user what they want to accomplish.
 
-## Phase 0.5: Project Phase Design
+### Trivial Gate
 
-Determine whether this request needs a single MetaAgent call or a multi-phase pipeline.
+Judge from the **request text alone** — do NOT read project files for this decision.
 
-### Scope Assessment
+**Respond directly** ONLY when ALL conditions met:
+1. Zero code changes requested, OR a single-character typo explicitly identified by user
+2. A complete answer requires no code analysis (pure factual/conceptual question)
+3. You are certain — any doubt → Classify
 
-**Single deliverable** (one MetaAgent call — single-request mode):
-- Request targets one clear output (a function, a review, an analysis)
-- No sequential dependencies between deliverables
-- Example: "TypeScript retry 함수 만들어줘"
+Examples — trivial: "what does this function name mean?", "fix typo 'conts' → 'const' on line 5"
+Examples — NOT trivial: "add sparkle effect", "refactor X", "improve Y", any UI/feature change
 
-**Multi-deliverable / project scope** (pipeline mode):
-- Request implies multiple distinct deliverables that build on each other
-- Phrases like "앱 만들어줘", "프로젝트 설계", "from scratch", "full system"
-- Example: "Flutter 건강관리 앱 만들어줘"
+**Everything else → Classify.** Cost of unnecessary Classify: one subprocess.
+Cost of bypassing MetaAgent: unreviewed output.
 
-If single deliverable → skip to Phase 1A (single invocation).
+If trivial, respond directly: "This is straightforward — responding directly."
 
-### Pipeline Classification
+### Resume Check
 
-| Pipeline | Signals |
-|----------|---------|
-| **Software Dev** (default) | app, service, API, website, tool, SaaS, backend, frontend, 앱, 서비스 |
-| **Game Dev** | game, RPG, platformer, roguelike, shooter, puzzle, Unity, Godot, Unreal, Phaser, gameplay, 게임 |
-
-### Design Phase Sequence
-
-**Software Dev (SDLC)**:
-1. **Analysis** — understand domain, research, produce brief
-2. **Planning** — PRD, UX flows, requirements
-3. **Solutioning** — architecture, stories, implementation plan
-4. **Implementation** — code, tests, integration
-
-**Game Dev**:
-1. **Preproduction** — game concept, domain/market/tech research
-2. **Design** — GDD, narrative, PRD, UX
-3. **Technical** — game architecture, stories, test design
-4. **Production** — sprint execution, code review, QA
-
-Phases can be collapsed for simpler projects (e.g., skip Analysis/Preproduction for well-defined specs).
-
-### Step Selection
-
-Each workflow step is classified as **Required** or **Optional** in the workflow file.
-For each phase, read the workflow file and determine which optional steps to include or skip.
-
-**Include signals** (recommend including the optional step):
-- Request explicitly mentions the step's domain (e.g., "어떤 기술 스택이 좋을까" → include Tech Research)
-- Project scope is medium-large (multi-feature, multi-user type)
-- Domain has regulatory or competitive complexity
-
-**Skip signals** (recommend skipping):
-- Request specifies the answer (e.g., "React로 만들어줘" → skip Tech Research)
-- Project is single-feature, CLI tool, or library
-- Prototype or proof-of-concept scope
-- Domain is simple and well-known
-
-### Display Phase Plan
-
-Show the phase sequence to the user as a checkpoint:
-
-```
-## Dialectic Project Plan (정반합)
-
-Request: {user's request}
-Pipeline: {Software Dev | Game Dev}
-Phases: {N}
-
-| # | Phase | Goal | Steps |
-|---|-------|------|-------|
-| 1 | {phase name} | {goal} | {step count from workflow file} |
-| 2 | {phase name} | {goal} | {step count} |
-```
-
-Show step-level detail with optional step recommendations:
-
-```
-P1 Analysis:
-  ✓ S01 Idea Enrichment (required)
-  ○ S02 Tech Research (optional — recommend: include, reason: tech stack not specified)
-  ✗ S03 Domain Analysis (optional — recommend: skip, reason: simple domain)
-  ✓ S04 Create Brief (required)
-```
-
-Ask user for confirmation or adjustment. Initialize PROGRESS.md with `SKIPPED`
-for excluded optional steps.
-
-### Save Original Request
-
-Write the original request to `{WORKSPACE}/REQUEST.md` so Phase 1 steps can reference it.
-
----
-
-## Phase 1A: Single Invocation (non-project)
-
-For single-deliverable requests, invoke MetaAgent without a workflow file.
-MetaAgent uses `workflow-patterns.md` to design its own steps internally.
+If PIPELINE_HINT is present, check for existing workspace:
 
 ```bash
-SKILL_DIR="$(pwd)/skills/tas"
+WORKSPACE_ROOT="$PROJECT_ROOT/_workspace/${PIPELINE_HINT}"
+```
 
-META_OUTPUT=$(CLAUDECODE=0 claude -p "$(cat <<'DIAL_END'
-REQUEST: {user's request from $ARGUMENTS}
-WORKSPACE: {absolute workspace path}
-SKILL_DIR: {absolute SKILL_DIR}
-REQUEST_TYPE: {classified type}
-DIAL_END
+Check if `$WORKSPACE_ROOT/PROGRESS.md` exists:
+
+1. **Not found** → proceed to Classify
+2. **Parse error** → Warn user, offer: Repair / New
+3. **Has incomplete steps** →
+   Display:
+   ```
+   이전 세션 발견: {REQUEST.md 첫 줄 요약}
+   진행: {done}/{total} steps, 현재: {current step}
+   ```
+   Offer: **Resume** / **New**
+   - **Resume** → use PROGRESS.md plan (skip Classify), → Phase 1
+   - **New** → Archive, then Classify
+4. **All DONE/SKIPPED** →
+   Offer: **Quick dev** / **New** / **View results**
+   - **Quick dev** → Phase 1A-Context
+   - **New** → Archive, then Classify
+   - **View** → display DELIVERABLE.md summaries, done
+
+Archive:
+```bash
+mkdir -p "$PROJECT_ROOT/_workspace/archive"
+mv "$WORKSPACE_ROOT" "$PROJECT_ROOT/_workspace/archive/${PIPELINE_HINT}-$(date +%Y%m%d_%H%M%S)"
+```
+
+### Classify
+
+MetaAgent analyzes the request and returns an execution plan. This determines mode
+(quick/pipeline), pipeline type, phases, steps, and context strategy.
+
+**INVOCATION CONSTRAINT**: Use ONLY the Bash command below. Do NOT use Agent().
+
+```bash
+# ⚠ Bash tool: timeout=600000, run_in_background=NEVER
+PLAN_JSON=$(CLAUDECODE=0 claude -p "$(cat <<'TAS_END'
+COMMAND: classify
+REQUEST: {request text}
+PROJECT_ROOT: {PROJECT_ROOT}
+SKILL_DIR: {SKILL_DIR}
+PIPELINE_HINT: {hint, if any — omit if none}
+TAS_END
 )" \
-  --system-prompt "$(cat ${SKILL_DIR}/agents/meta.md)" \
+  --system-prompt-file "${SKILL_DIR}/agents/meta.md" \
+  --model opus \
+  --permission-mode bypassPermissions \
+  --no-session-persistence \
+  --output-format text 2>/dev/null)
+```
+
+Parse JSON from last line of `PLAN_JSON`.
+
+### Display Plan
+
+**If `mode: "direct"`**: Display MetaAgent's response. Done.
+
+**If `mode: "quick"`**:
+```
+요청: {request}
+모드: Quick ({request_type})
+진행할까요?
+```
+
+**If `mode: "pipeline"`**:
+```
+## Execution Plan (정반합)
+
+요청: {request}
+파이프라인: {pipeline}
+Phases: {count}
+
+| # | Phase | Steps |
+|---|-------|-------|
+| 1 | {phase name} | {step names} |
+| 2 | {phase name} | {step names} |
+
+{reasoning}
+
+수정하거나 승인해주세요.
+```
+
+### Handle User Response
+
+- **승인** → Initialize workspace and PROGRESS.md, → Phase 1
+- **수정 요청** → Adjust plan manually or re-classify, → Display Plan again
+- **거부** → Done
+
+### Initialize Workspace
+
+Based on classify result:
+
+```bash
+WORKSPACE_ROOT="$PROJECT_ROOT/{workspace from classify JSON}"
+mkdir -p "$WORKSPACE_ROOT"
+```
+
+Write `$WORKSPACE_ROOT/REQUEST.md` with original request.
+Initialize `$WORKSPACE_ROOT/PROGRESS.md` with classify plan (see workspace-convention).
+
+---
+
+## Phase 1A: Single Invocation (quick mode)
+
+For single-deliverable requests (classify returned `mode: "quick"`).
+MetaAgent uses `workflow-patterns.md` to design its own steps internally.
+
+`WORKSPACE_ROOT` is set from classify result. `REQUEST_TYPE` is from classify's `request_type`.
+
+**INVOCATION CONSTRAINT**: Use ONLY the Bash command below. Do NOT use Agent() —
+it would load MetaAgent's internal dialogue into your context, defeating process isolation.
+You provide inputs via the prompt. You parse JSON from stdout. That is your entire role.
+
+```bash
+# ⚠ Bash tool: timeout=600000, run_in_background=NEVER
+META_OUTPUT=$(CLAUDECODE=0 claude -p "$(cat <<'TAS_END'
+REQUEST: {user's request}
+WORKSPACE: {WORKSPACE_ROOT}
+SKILL_DIR: {SKILL_DIR}
+REQUEST_TYPE: {request_type from classify}
+TAS_END
+)" \
+  --system-prompt-file "${SKILL_DIR}/agents/meta.md" \
   --model opus \
   --permission-mode bypassPermissions \
   --no-session-persistence \
@@ -194,60 +223,82 @@ Parse output and present results (see Phase 2: Present Results).
 
 ---
 
+## Phase 1A-Context: Quick Dev with Pipeline Context
+
+For quick tasks after a completed pipeline. Uses the pipeline's deliverables as context
+so MetaAgent knows the project's architecture, stories, and design decisions.
+
+`WORKSPACE_ROOT` and `PIPELINE` are already set in Phase 0-Pipeline.
+
+**INVOCATION CONSTRAINT**: Use ONLY the Bash command below. Do NOT use Agent() —
+it would load MetaAgent's internal dialogue into your context, defeating process isolation.
+
+```bash
+# Collect context from completed pipeline's deliverables
+PHASE_CONTEXT=""
+for DELIVERABLE in "$WORKSPACE_ROOT"/P*-*/DELIVERABLE.md; do
+  PHASE_CONTEXT="${PHASE_CONTEXT}\n---\n$(cat "$DELIVERABLE")"
+done
+
+# Quick output goes under the pipeline workspace
+QUICK_OUTPUT="$WORKSPACE_ROOT/quick-$(date +%Y%m%d_%H%M%S)"
+mkdir -p "$QUICK_OUTPUT"
+
+# ⚠ Bash tool: timeout=600000, run_in_background=NEVER
+META_OUTPUT=$(CLAUDECODE=0 claude -p "$(cat <<'TAS_END'
+REQUEST: {user's request}
+WORKSPACE: {QUICK_OUTPUT}
+SKILL_DIR: {SKILL_DIR}
+REQUEST_TYPE: {classified type}
+PHASE_CONTEXT: {PHASE_CONTEXT — all pipeline deliverables concatenated}
+TAS_END
+)" \
+  --system-prompt-file "${SKILL_DIR}/agents/meta.md" \
+  --model opus \
+  --permission-mode bypassPermissions \
+  --no-session-persistence \
+  --output-format text 2>/dev/null)
+```
+
+MetaAgent runs in single-request mode (no WORKFLOW_FILE) but receives the full pipeline
+context via PHASE_CONTEXT. This lets it make architecture-aware decisions for bug fixes,
+small features, or quick reviews.
+
+Quick dev outputs are stored under the pipeline workspace (`_workspace/sdlc/quick-{timestamp}/`)
+so they remain associated with the project.
+
+Parse output and present results (see Phase 2: Present Results).
+
+---
+
 ## Phase 1B: Pipeline Execution (project scope)
 
-### Determine Paths
+`SKILL_DIR`, `PIPELINE`, and `WORKSPACE_ROOT` are set from classify result or resumed
+PROGRESS.md. The classify plan determines which phases and steps to execute.
 
-```bash
-SKILL_DIR="$(pwd)/skills/tas"
-PIPELINE="sdlc"  # or "gamedev"
-```
+### Initialize PROGRESS.md (fresh start only)
 
-### Check for Resume
-
-Read `{WORKSPACE}/PROGRESS.md` if it exists:
-
-1. **File exists** → Resume mode:
-   - Parse the progress table
-   - Find the first step that is not `DONE` or `SKIPPED`
-   - Display resume status to user:
-     ```
-     Resuming from: Phase {N}, Step {STEP_ID}
-     Completed: {X}/{Y} steps
-     ```
-   - Skip to that step in the execution loop
-
-2. **File does not exist** → Fresh start:
-   - Initialize PROGRESS.md with all steps from all phases set to `PENDING`
-   - Read each workflow file to get the step list
-
-### Initialize PROGRESS.md
-
-Read each phase's workflow file to build the full step manifest:
-
-```bash
-# For each phase, read the workflow file and extract step list
-# Example for SDLC:
-PHASES=("P1-analysis" "P2-planning" "P3-solutioning" "P4-implementation")
-```
-
-Write PROGRESS.md following workspace-convention format:
+Build PROGRESS.md from the classify plan's `phases` array. Each phase lists its steps.
+Steps not included in the classify plan are omitted (not marked SKIPPED — they simply
+don't exist in this execution plan).
 
 ```markdown
 ---
-pipeline: {sdlc | gamedev}
-request_file: {WORKSPACE}/REQUEST.md
+pipeline: {pipeline from classify}
+request_file: REQUEST.md
+classify_plan: {classify JSON embedded for resume}
+context_strategy: {codebase | deliverable}
 created: {ISO timestamp}
 updated: {ISO timestamp}
-current: P1-{slug}/S01-{slug}
+current: {first phase/step}
 ---
 
-# P1-{phase-slug}
+# {first phase id}
 
 | Step | Status | Output | Updated |
 |------|--------|--------|---------|
-| S01-{slug} | PENDING | | |
-| S02-{slug} | PENDING | | |
+| {step id} | PENDING | | |
+| {step id} | PENDING | | |
 ...
 ```
 
@@ -255,32 +306,40 @@ current: P1-{slug}/S01-{slug}
 
 For each phase in pipeline order:
 
-1. **Read workflow file**: `{SKILL_DIR}/workflows/{pipeline}/P{N}-{slug}.md`
-2. **Read execution mode** from frontmatter: `sequential` or `sprint`
-3. **Create phase directory**: `mkdir -p {WORKSPACE}/P{N}-{slug}/`
-4. **Execute based on mode**:
+1. **Read step list and execution mode** from the classify plan (PROGRESS.md `classify_plan`)
+2. **Determine workflow file path**: `{SKILL_DIR}/workflows/{PIPELINE}/{phase.workflow_file}`
+   (pass this PATH to MetaAgent — do NOT read the file yourself)
+3. **Create phase directory**: `mkdir -p {WORKSPACE_ROOT}/{phase.id}/`
+4. **Determine PHASE_CONTEXT**:
+   - `context_strategy: deliverable` → read previous phase's DELIVERABLE.md
+   - `context_strategy: codebase` → pass `PHASE_CONTEXT: CODEBASE` (MetaAgent reads project directly)
+   - First phase with `deliverable` strategy and no prior phase → omit PHASE_CONTEXT
+5. **Execute based on mode**:
 
-#### Sequential Mode (Phases 1-3)
+#### Sequential Mode
 
 ```
-For each step S in workflow file's step list:
+For each step S in phase's step list (from classify plan):
   1. Check PROGRESS.md — if DONE or SKIPPED, skip this step
   2. Update PROGRESS.md: status=RUNNING, updated={now}
   3. Update PROGRESS.md frontmatter: current=P{N}-{slug}/S{NN}-{slug}
   
-  4. Invoke MetaAgent:
-     META_OUTPUT=$(CLAUDECODE=0 claude -p "$(cat <<'DIAL_END'
+  4. INVOCATION CONSTRAINT: Use ONLY Bash below. Do NOT use Agent().
+     Invoke MetaAgent:
+     # ⚠ Bash tool: timeout=600000, run_in_background=NEVER
+     META_OUTPUT=$(CLAUDECODE=0 claude -p "$(cat <<'TAS_END'
      REQUEST: {original request}
-     WORKSPACE: {WORKSPACE}/P{N}-{slug}/S{NN}-{slug}.md
-     SKILL_DIR: {absolute SKILL_DIR}
+     WORKSPACE: {WORKSPACE_ROOT}/P{N}-{slug}/S{NN}-{slug}.md
+     WORKSPACE_ROOT: {WORKSPACE_ROOT}
+     SKILL_DIR: {SKILL_DIR}
      REQUEST_TYPE: {phase type}
      PHASE_GOAL: {phase goal}
      PHASE_CONTEXT: {previous phase's DELIVERABLE.md content, if N > 1}
      WORKFLOW_FILE: {absolute path to workflow file}
      STEP_ID: S{NN}
-     DIAL_END
+     TAS_END
      )" \
-       --system-prompt "$(cat ${SKILL_DIR}/agents/meta.md)" \
+       --system-prompt-file "${SKILL_DIR}/agents/meta.md" \
        --model opus \
        --permission-mode bypassPermissions \
        --no-session-persistence \
@@ -308,32 +367,36 @@ After all steps in a phase complete:
 
 #### Sprint Mode (Phase 4)
 
+**INVOCATION CONSTRAINT**: Every step invocation below uses Bash(claude -p), same as
+sequential mode. Do NOT use Agent() for any step — including parallel story execution.
+
 ```
-1. Execute S01 (Sprint Planning) — sequential, single invocation
-2. Execute S02 (Scaffold) — sequential, single invocation
+1. Execute S01 (Sprint Planning) — sequential, single MetaAgent invocation via Bash
+2. Execute S02 (Scaffold) — sequential, single MetaAgent invocation via Bash
 
 3. Parse sprint plan from S01 output:
-   - Read {WORKSPACE}/P4-{slug}/S01-sprint-planning.md
+   - Read {WORKSPACE_ROOT}/P4-{slug}/S01-sprint-planning.md
    - Extract batch assignments: which stories in each batch
 
 4. For each batch:
-   a. Create batch directory: mkdir -p {WORKSPACE}/P4-{slug}/batch-{B}/
+   a. Create batch directory: mkdir -p {WORKSPACE_ROOT}/P4-{slug}/batch-{B}/
    
-   b. For each story in batch (can run in parallel):
-      Create story directory: mkdir -p {WORKSPACE}/P4-{slug}/batch-{B}/{story-id}/
+   b. For each step S03 → S04 → S05 → S06:
+      Invoke the SAME step for ALL stories in the batch as parallel foreground
+      Bash calls in a single response. Each call is a separate MetaAgent process.
       
-      Execute story pipeline:
-        i.   S03 (Create Story) — WORKSPACE={story-dir}/S03-create-story.md
-        ii.  S04 (Dev Story) — WORKSPACE={story-dir}/S04-dev-story.md
+      Step details per story:
+        - S03 (Create Story) — WORKSPACE={story-dir}/S03-create-story.md
+        - S04 (Dev Story) — WORKSPACE={story-dir}/S04-dev-story.md
              Note: include "isolation: worktree" in PHASE_CONTEXT
-        iii. S05 (QA Story) — WORKSPACE={story-dir}/S05-qa-story.md
+        - S05 (QA Story) — WORKSPACE={story-dir}/S05-qa-story.md
              Check condition: skip if story has no test plan
-        iv.  S06 (Review Story) — WORKSPACE={story-dir}/S06-review-story.md
+        - S06 (Review Story) — WORKSPACE={story-dir}/S06-review-story.md
       
-      Handle S06 result:
-        - Parse JSON: check "verdict" field
-        - PASS → story complete, queue for merge
-        - FAIL → loop back to S04 with blocker list in PHASE_CONTEXT
+      After all S06 results return:
+        - Parse JSON: check "verdict" field per story
+        - PASS → queue for merge
+        - FAIL → re-run S04→S05→S06 for failed stories only
           (max 2 retries, then mark BLOCKED)
    
    c. After all stories in batch:
@@ -347,19 +410,24 @@ After all steps in a phase complete:
    After all batches complete
 ```
 
-**Parallel story execution**: Stories within a batch can run their S03-S04 steps in parallel
-using background `claude -p` processes. S05-S06 run sequentially per story after S04 completes.
+**Parallel story execution**: Stories within a batch are parallelized at the **step level** —
+invoke the same step for all stories as multiple foreground Bash calls in a single response.
+Claude Code runs these concurrently. NEVER use `run_in_background` for MetaAgent calls.
+Each step is always a separate MetaAgent process — never Agent().
 
 ### Phase Transition
 
-Between phases:
+Between phases (iterate classify plan's `phases` array in order):
 1. Verify current phase's `DELIVERABLE.md` exists and is complete
-2. Load its content as `PHASE_CONTEXT` for next phase's first step
+2. Determine next phase's context:
+   - `context_strategy: deliverable` → load DELIVERABLE.md as `PHASE_CONTEXT`
+   - `context_strategy: codebase` → set `PHASE_CONTEXT: CODEBASE` (first phase only)
+   - Subsequent phases after the first always use `deliverable` strategy
 3. Display transition to user:
    ```
-   ── Phase {N} complete ──
+   ── Phase {phase.id} complete ──
    Deliverable: {summary}
-   Proceeding to Phase {N+1}: {name}
+   Proceeding to next phase: {next phase.id}
    ```
 
 ---
@@ -414,7 +482,9 @@ Workspace artifacts (if any): {workspace}
 | Invalid JSON on last line | JSON parse failure | Display raw output, mark HALTED |
 | Empty output | Zero-length stdout | Retry once, then mark HALTED |
 | PROGRESS.md corrupted | Parse failure | Rebuild from step output files (check which have status: DONE) |
-| Mid-pipeline crash | Main re-invoked | Read PROGRESS.md, resume from last incomplete step |
+| Mid-pipeline crash | Main re-invoked with same mode | Mode → stable path → PROGRESS.md → resume from last incomplete step |
+| Background execution | META_OUTPUT empty after Bash returns immediately | This is a bug, not a feature. Re-run in foreground with timeout: 600000. NEVER use run_in_background as a timeout workaround. |
+| Any MetaAgent failure | Any of the above | **NEVER fall back to direct implementation. Report error to user and offer: retry / abort.** |
 
 ---
 
@@ -423,6 +493,8 @@ Workspace artifacts (if any): {workspace}
 | Setting | Default | Adjustable By |
 |---------|---------|---------------|
 | `--model` | opus | Fixed — always use the most capable model |
-| Workspace location | `{PROJECT_ROOT}/_workspace/tas-{timestamp}` | Fixed convention |
+| Pipeline workspace | `{PROJECT_ROOT}/_workspace/{sdlc\|gamedev}/` | Stable per mode |
+| Quick workspace | `{PROJECT_ROOT}/_workspace/quick/{timestamp}/` | Timestamped |
+| Archive location | `{PROJECT_ROOT}/_workspace/archive/{mode}-{timestamp}/` | On new/complete |
 | Max parallel stories | 3 | Configurable in sprint-planning.md |
 | Review retry limit | 2 | S06 fail → S04 loop max count |
