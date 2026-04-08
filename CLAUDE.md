@@ -20,15 +20,32 @@ SKILL.md (MainOrchestrator) intentionally does not know MetaAgent internals — 
 
 **Implication**: When editing SKILL.md, never add references to agent internals. When editing agent files (meta.md, thesis.md, antithesis.md), don't worry about what SKILL.md knows — they run in separate processes.
 
-### Role Separation Prevents Deadlock
+### Turn Order Is Enforced by Python, Not Prompts
 
-ThesisAgent is always FIRST MOVER. AntithesisAgent is always REACTIVE. This asymmetry was established to resolve a deadlock (commit e38ec8d) where both agents waited for the other to speak first.
+The dialectic engine (`runtime/dialectic.py`) controls turn order deterministically:
+Thesis always goes first, Antithesis always responds. This is enforced by the Python
+PingPong loop — not by agent prompts. The previous SendMessage-based architecture
+required prompt-level "FIRST MOVER" / "REACTIVE" discipline to prevent deadlock;
+the Python loop makes this structurally impossible.
 
-**Implication**: Any edit that blurs who speaks first reintroduces the deadlock. If you're changing agent roles, trace the turn-taking protocol through the full dialogue sequence.
+**Implication**: If you're modifying `dialectic.py`, preserve the strict
+thesis-then-antithesis ordering in the main loop. Agent prompts no longer need
+turn-order instructions.
 
 ### Process Isolation Is the Context Strategy
 
-Each workflow step runs in its own `claude -p` process. This is not an implementation detail — it's the mechanism that prevents context window exhaustion during long pipelines. One step = one process = one context window.
+Each workflow step runs in its own `claude -p` process. Within each step, the dialectic
+runs via `python3 dialectic.py` which manages two `ClaudeSDKClient` sessions.
+
+```
+MainOrchestrator → MetaAgent: claude -p subprocess (process boundary)
+MetaAgent → Dialectic: python3 dialectic.py subprocess (process boundary)
+Dialectic → Thesis/Antithesis: ClaudeSDKClient stateful sessions (SDK boundary)
+```
+
+Each boundary prevents context window contamination. Thesis and Antithesis maintain
+their own conversation history within a step (stateful sessions), but state dies
+between steps.
 
 **Implication**: Don't add mechanisms that share state between steps except through explicit files (DELIVERABLE.md, PROGRESS.md, step output files). In-memory state dies with each process.
 
@@ -54,8 +71,9 @@ Before finalizing any edit to an agent file:
 |------|-------------|--------------|
 | `SKILL.md` | MainOrchestrator (user's Claude) | Request routing, workspace management, MetaAgent invocation |
 | `agents/meta.md` | MetaAgent (subprocess) | Step execution, 정반합 orchestration, convergence logic |
-| `agents/thesis.md` | ThesisAgent (sub-subprocess) | Position proposal, defense, concession protocol |
-| `agents/antithesis.md` | AntithesisAgent (sub-subprocess) | Counter-position, review lenses, convergence seeking |
+| `agents/thesis.md` | ThesisAgent (ClaudeSDKClient session) | Position proposal, defense, concession protocol |
+| `agents/antithesis.md` | AntithesisAgent (ClaudeSDKClient session) | Counter-position, review lenses, convergence seeking |
+| `runtime/dialectic.py` | Python subprocess (invoked by MetaAgent) | PingPong dialogue loop, SDK session management |
 | `agents/conflict-resolver.md` | ConflictResolver (subprocess) | Merge conflict resolution during sprint |
 | `workflows/*/manifest.md` | MainOrchestrator | Step listing, required/optional classification |
 | `workflows/*/P{N}-*.md` | MetaAgent only | Step details, goals, roles, pass criteria |
@@ -80,7 +98,7 @@ If review misses these, improve the review lenses — don't add defensive guards
 
 - **Adding implementation details to SKILL.md** — breaks information hiding
 - **Making convergence depend on round count** — produces shallow consensus
-- **Adding `Agent()` calls** — defeats process isolation; always use `Bash(claude -p ...)`
+- **Bypassing dialectic.py** — MetaAgent must never spawn thesis/antithesis via `Agent()` directly; always use `Bash(python3 dialectic.py ...)`
 - **Editing workflow files without updating manifest.md** — MainOrchestrator sees only the manifest
 - **Adding codebase-reading logic to SKILL.md** — breaks scope prohibition
 - **Writing instructions that assume shared context between steps** — each step is a fresh process

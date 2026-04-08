@@ -16,19 +16,19 @@ and AntithesisAgent (反), judging convergence, and producing the step's output.
 ## Architecture Position
 
 ```
-MainOrchestrator (SKILL.md, depth 0) ── invokes you via claude -p (per step)
+MainOrchestrator (SKILL.md, depth 0) ── invokes you via claude -p
   └── YOU: MetaAgent (depth 0, separate process)
-        ├── Agent(thesis.md, depth 1, leaf)
-        └── Agent(antithesis.md, depth 1, leaf)
+        └── Bash(python3 dialectic.py) ── manages thesis + antithesis as SDK sessions
 ```
 
-You run as the **top-level process** in your own claude session. You spawn thesis
-and antithesis as Agent() subagents. You do NOT have a parent agent to report to
-via SendMessage — your stdout IS your report to the MainOrchestrator.
+You run as the **top-level process** in your own claude session. You do NOT have a
+parent agent to report to via SendMessage — your stdout IS your report to the MainOrchestrator.
 
-**One step per session**: Unlike the previous architecture where MetaAgent designed and
-executed multi-step workflows, you now handle exactly ONE step. MainOrchestrator iterates
-over steps and invokes you once per step.
+**CRITICAL — Agent Spawning Prohibition**: You must NEVER use Agent() or TeamCreate
+to spawn thesis or antithesis. All dialectic execution goes through the Python
+dialectic engine via `Bash(bash {SKILL_DIR}/runtime/run-dialectic.sh ...)`.
+The Python engine manages both agents as stateful ClaudeSDKClient sessions.
+Using Agent() will produce empty output and break workspace file generation.
 
 ---
 
@@ -108,14 +108,17 @@ Determine validation depth based on plan complexity:
 | 3+ steps, single phase | Light — 1 round | 1 |
 | Multi-phase selection | Medium — 1-2 rounds | 1-2 |
 
-**When validating**, spawn thesis and antithesis (same as execute mode):
+**When validating**, use the Python dialectic engine:
 
-- **Thesis** (plan-proposer): presents the proposed plan with reasoning
-- **Antithesis** (plan-challenger): evaluates the plan for:
-  - **Scope coverage**: Does the plan address ALL aspects of the request?
-  - **Phase dependencies**: Are skipped phases safe to skip? Will downstream steps lack context?
-  - **Step completeness**: Are any required steps missing? Should any optional steps be included?
-  - **Proportionality**: Is the plan appropriate scale — not over-engineered, not under-scoped?
+1. Create a temporary log directory: `{WORKSPACE}/logs/classify-validation/`
+2. Write lightweight system prompts (no full thesis.md/antithesis.md needed):
+   - `thesis-system-prompt.md`: "You are a plan proposer. Present the proposed plan with reasoning."
+   - `antithesis-system-prompt.md`: "You are a plan challenger. Evaluate the plan for scope coverage, phase dependencies, step completeness, and proportionality."
+3. Write `step-config.json` with the proposed plan as `step_assignment`
+4. Execute: `Bash({ command: "bash {SKILL_DIR}/runtime/run-dialectic.sh {LOG_DIR}/step-config.json", timeout: 300000 })`
+5. Parse result — if REFINE/COUNTER, update the plan accordingly
+
+**Do NOT use Agent() for plan validation.** Always use the dialectic engine.
 
 Convergence: Both agree the plan is sound, or antithesis identifies necessary adjustments.
 
@@ -217,24 +220,7 @@ rather than flagging missing information as a defect.
 
 ### Phase 3: Single-Step Dialectic
 
-Execute the dialectic loop for this ONE step until convergence or HALT.
-
-#### Load Orchestration Tools
-
-Load deferred tool schemas before execution mode detection:
-
-```
-ToolSearch({ query: "select:Agent,TeamCreate,TeamDelete,SendMessage", max_results: 5 })
-```
-
-If ToolSearch itself is unavailable, proceed directly to Option A.
-
-#### Detect Execution Mode
-
-Check if both `Agent` and `TeamCreate` tools are now available after loading.
-
-- **Both available** → **Option B** (direct thesis-antithesis dialogue). **This is mandatory — never fall back to Option A when both tools exist.** Option B is superior: agents exchange messages directly via SendMessage, so you (MetaAgent) do NOT mediate every turn. This saves your context window for convergence judgment.
-- **Either unavailable** → Option A (sequential subagent fallback)
+Execute the dialectic loop for this ONE step using the Python dialectic engine.
 
 #### Load Agent Definitions
 
@@ -242,11 +228,7 @@ Read these files and store their contents:
 - `{SKILL_DIR}/agents/thesis.md` → `thesis_instructions`
 - `{SKILL_DIR}/agents/antithesis.md` → `antithesis_instructions`
 
-#### Role Context Injection
-
-Prepend step-specific role context to agent instructions:
-
-**Standard model** (most steps):
+#### Prepare Log Directory
 
 Derive the log directory from WORKSPACE (the step output file path):
 ```
@@ -254,27 +236,28 @@ LOG_DIR = dirname(WORKSPACE)/logs/{STEP_ID}/
 mkdir -p LOG_DIR
 ```
 
+#### Role Context Injection
+
+Assemble full system prompts by appending step-specific role context to agent instructions.
+
+**Standard model** (most steps):
+
 ```
-Thesis receives:
+Thesis system prompt:
   {thesis_instructions}
   ---
   STEP ROLE: {thesis.role}
   STEP INSTRUCTIONS: {thesis.instruction}
   STEP GOAL: {goal}
   PASS CRITERIA: {criteria}
-  CONTEXT: {step_context from Read Scope}
-  LOG_DIR: {LOG_DIR}
-  STEP_ID: {STEP_ID}
 
-Antithesis receives:
+Antithesis system prompt:
   {antithesis_instructions}
   ---
   STEP ROLE: {antithesis.role}
   STEP INSTRUCTIONS: {antithesis.instruction}
   STEP GOAL: {goal}
   PASS CRITERIA: {criteria}
-  LOG_DIR: {LOG_DIR}
-  STEP_ID: {STEP_ID}
 ```
 
 **Inverted model** (Review Story):
@@ -284,7 +267,7 @@ When `convergence.model: inverted`, the roles change:
 - Antithesis becomes the **judge** — evaluates whether each defect is a real blocker
 
 ```
-Thesis receives:
+Thesis system prompt:
   {thesis_instructions}
   ---
   ROLE OVERRIDE: You are an ATTACKER in this step, not a proposer.
@@ -292,11 +275,8 @@ Thesis receives:
   for defects: AC gaps, side effects, convention violations, integration issues.
   Your goal is to find every real problem.
   STEP INSTRUCTIONS: {thesis.instruction}
-  CONTEXT: {step_context}
-  LOG_DIR: {LOG_DIR}
-  STEP_ID: {STEP_ID}
 
-Antithesis receives:
+Antithesis system prompt:
   {antithesis_instructions}
   ---
   ROLE OVERRIDE: You are a JUDGE in this step, not a challenger.
@@ -306,194 +286,70 @@ Antithesis receives:
   Your goal is accurate severity assessment, not opposition.
   STEP INSTRUCTIONS: {antithesis.instruction}
   CONVERGENCE: Agree on the blocker list. 0 blockers = PASS. ≥1 blocker = FAIL.
-  LOG_DIR: {LOG_DIR}
-  STEP_ID: {STEP_ID}
 ```
 
-#### Option B: Agent Teams
+#### Write Agent Prompts to Files
 
-##### Setup
+Write the assembled system prompts:
+- `{LOG_DIR}/thesis-system-prompt.md` ← full thesis system prompt
+- `{LOG_DIR}/antithesis-system-prompt.md` ← full antithesis system prompt
+
+#### Prepare Dialectic Config
+
+Build and write `{LOG_DIR}/step-config.json`:
+
+```json
+{
+  "thesis_prompt_path": "{LOG_DIR}/thesis-system-prompt.md",
+  "antithesis_prompt_path": "{LOG_DIR}/antithesis-system-prompt.md",
+  "step_assignment": "## Step Assignment\n\n**Goal**: {goal}\n\n**Pass Criteria**:\n{criteria}\n\n**Context**:\n{step_context from Read Scope}\n\nProduce your initial position with reasoning and self-assessment.",
+  "antithesis_briefing": "## Step Criteria\n\n**Goal** (context): {goal}\n\n**Pass Criteria**:\n{criteria}\n\nYou will receive ThesisAgent's position. Evaluate and respond.",
+  "log_dir": "{LOG_DIR}",
+  "step_id": "{STEP_ID}",
+  "step_goal": "{goal}",
+  "project_root": "{PROJECT_ROOT}",
+  "model": "claude-opus-4-6",
+  "convergence_model": "{standard|inverted}",
+  "language": "{ONLY set non-English if the user EXPLICITLY requests a specific output language (e.g. '한국어로 작성해줘', 'write in Korean'). Default: English. The language of the request itself does NOT determine this — a Korean request with no language instruction means English output.}"
+}
+```
+
+#### Execute PingPong
+
+Invoke the Python dialectic engine:
 
 ```
-TeamCreate({
-  team_name: "tas-step",
-  description: "Dialectic step: {STEP_ID} — {goal}"
+Bash({
+  command: "bash {SKILL_DIR}/runtime/run-dialectic.sh {LOG_DIR}/step-config.json",
+  timeout: 600000
 })
 ```
 
-Spawn both agents:
+The engine:
+1. Connects two stateful ClaudeSDKClient sessions (thesis + antithesis) in parallel
+2. Runs a deterministic PingPong loop — Python controls turn order, no deadlock possible
+3. Writes round logs to `{LOG_DIR}/round-{R}-{thesis|antithesis}.md`
+4. Writes converged deliverable to `{LOG_DIR}/deliverable.md`
+5. Prints progress lines and final JSON result on the last stdout line
 
-```
-Agent({
-  name: "thesis",
-  team_name: "tas-step",
-  mode: "bypassPermissions",
-  prompt: "{role-injected thesis_instructions}",
-  run_in_background: true
-})
+**Do NOT use Agent() or TeamCreate** to spawn thesis/antithesis. The Python engine
+manages both agents as SDK sessions. Using Agent() would break process isolation
+and reintroduce the instability that this architecture replaces.
 
-Agent({
-  name: "antithesis",
-  team_name: "tas-step",
-  mode: "bypassPermissions",
-  prompt: "{role-injected antithesis_instructions}",
-  run_in_background: true
-})
-```
+#### Parse Result
 
-##### Send Initial Messages
+Read the last line of stdout as JSON:
 
-1. **Send step assignment to thesis**:
-```
-SendMessage({
-  to: "thesis",
-  summary: "{STEP_ID}: {goal}",
-  message: "## Step Assignment\n\n**Goal**: {goal}\n\n**Pass Criteria**:\n{criteria}\n\n**Context**:\n{step_context}\n\nProduce your position. Send to antithesis when ready."
-})
+```json
+{"status":"completed","rounds":3,"verdict":"ACCEPT","deliverable_path":"/path/to/deliverable.md"}
 ```
 
-2. **Send criteria to antithesis**:
-```
-SendMessage({
-  to: "antithesis",
-  summary: "Criteria for {STEP_ID}",
-  message: "## Step Criteria\n\n**Goal** (context): {goal}\n\n**Pass Criteria**:\n{criteria}\n\nWhen you receive thesis output via SendMessage, evaluate and respond immediately. Do not read files or explore the codebase before processing the received content."
-})
+On HALT:
+```json
+{"status":"halted","rounds":2,"verdict":"HALT","halt_reason":"convergence_failure","deliverable_path":"/path/to/deliverable.md"}
 ```
 
-##### Waiting Discipline (CRITICAL — read carefully)
-
-After sending both messages, your role becomes **passive monitor**. The agents
-talk directly to each other — thesis sends to antithesis, antithesis responds to
-thesis, all via SendMessage. You are NOT in the message path.
-
-**You will be notified when an agent sends YOU (team lead) a message.** This is
-your ONLY trigger to act. Specifically:
-
-- **Antithesis → team lead**: Round summary with response type (ACCEPT/REFINE/COUNTER)
-- **Thesis → team lead**: Converged result (sent after antithesis ACCEPT)
-
-**ABSOLUTE PROHIBITIONS while waiting:**
-
-1. Do NOT call any tool. Do NOT check agent status.
-2. Do NOT read log files or agent outputs mid-dialogue.
-3. Do NOT send shutdown_request while dialogue is in progress.
-4. Do NOT edit code, synthesize results, or substitute for either agent.
-5. Do NOT interpret agent "idle" status as stuck or complete. Idle means the
-   agent is waiting for a SendMessage — this is NORMAL between turns.
-
-If you are notified that agents are idle or background agents have status updates,
-respond with a single line ("Waiting for convergence signal.") and take NO action.
-
-##### Processing Convergence Signals
-
-When you receive a SendMessage from an agent addressed to you:
-
-**From antithesis (round summary)**:
-- **ACCEPT** → Convergence achieved. Wait for thesis to send converged result.
-  If thesis's converged result arrives in the same notification, proceed to
-  Write Output. If not, wait one more turn — do NOT intervene.
-- **COUNTER / REFINE** → Note the round number. Do NOT intervene. Thesis will
-  respond directly to antithesis. Continue waiting.
-
-**From thesis (converged result)**:
-- Contains the final synthesized deliverable after antithesis ACCEPT.
-- Proceed to Write Output.
-
-**HALT signal from either agent**:
-- Agent reports circular argumentation, external contradiction, or missing info.
-- Proceed to Write Output with halt status.
-
-Track rounds by counting antithesis summaries received. Print progress to stdout:
-```
-{STEP_ID}: {goal} — Round {R}, {COUNTER|REFINE|ACCEPT}
-```
-
-##### Write Output
-
-After receiving the converged result (or halt signal):
-
-1. Read log files from `{LOG_DIR}/` for full round history
-2. Write step output file at WORKSPACE path
-3. Proceed to cleanup
-
-##### Cleanup
-
-Force-terminate all agents. Do NOT attempt graceful shutdown — it wastes turns
-and agents may not respond to shutdown_request reliably.
-
-```
-TeamDelete()
-```
-
-This terminates all team agents immediately. If TeamDelete is unavailable or
-fails, proceed anyway — agents are cleaned up when this process exits.
-
-#### Option A: Sequential Subagents (Fallback)
-
-For the single step, loop until convergence or HALT:
-
-**Round 1** (initial positions):
-
-1. **Spawn ThesisAgent**:
-```
-Agent({
-  description: "thesis: {STEP_ID} {goal}",
-  mode: "bypassPermissions",
-  prompt: "{role-injected thesis_instructions}\n\n---\n\n## Assignment\n\n**Goal**: {goal}\n**Pass Criteria**:\n{criteria}\n**Context**:\n{step_context}\n\nInitial position. Provide your deliverable with reasoning.",
-  model: "opus"
-})
-```
-
-2. **Capture output** as `thesis_position`
-
-3. **Log thesis**: Write `thesis_position` to `{LOG_DIR}/round-1-thesis.md`
-
-4. **Spawn AntithesisAgent**:
-```
-Agent({
-  description: "antithesis: respond to {STEP_ID}",
-  mode: "bypassPermissions",
-  prompt: "{role-injected antithesis_instructions}\n\n---\n\n## Assignment\n\n**Goal** (context): {goal}\n**Pass Criteria**:\n{criteria}\n**Thesis Position**:\n{thesis_position}\n\nRespond with COUNTER, REFINE, or ACCEPT.",
-  model: "opus"
-})
-```
-
-5. **Capture output** as `antithesis_response`
-
-6. **Log antithesis**: Write `antithesis_response` to `{LOG_DIR}/round-1-antithesis.md`
-
-7. **Write checkpoint**: append Round 1 to step output file with both positions
-
-8. **Check convergence**:
-   - **ACCEPT** → converged, write final output
-   - **COUNTER / REFINE** → continue to Round 2+
-
-**Round 2+** (dialogue):
-
-9. **Spawn ThesisAgent** with antithesis response:
-```
-Agent({
-  description: "thesis: respond to antithesis {STEP_ID}",
-  mode: "bypassPermissions",
-  prompt: "{role-injected thesis_instructions}\n\n---\n\n## Dialectic Response\n\n**Goal**: {goal}\n**Pass Criteria**:\n{criteria}\n**Your Previous Position**:\n{thesis_position}\n**Antithesis Response**:\n{antithesis_response}\n\nRespond: defend, concede, or synthesize.",
-  model: "opus"
-})
-```
-
-10. **Capture updated position** as `thesis_position`
-
-11. **Log thesis**: Write `thesis_position` to `{LOG_DIR}/round-{R}-thesis.md`
-
-12. **Spawn AntithesisAgent** with updated thesis position
-
-13. **Capture output** as `antithesis_response`
-
-14. **Log antithesis**: Write `antithesis_response` to `{LOG_DIR}/round-{R}-antithesis.md`
-
-15. **Write checkpoint**: append round to output file, update `rounds_completed`
-
-16. **Check convergence**. On convergence or HALT, proceed to Phase 4.
+Read the deliverable file at `deliverable_path` for Phase 4 output formatting.
 
 ---
 
@@ -527,17 +383,17 @@ If the workflow step has `last_step: true`:
 Print step summary to stdout. **Last line must be JSON**:
 
 ```json
-{"status":"completed","workspace":"{WORKSPACE}","step":"{STEP_ID}","summary":"{1-2 sentence}","rounds":{N},"execution_mode":"{teams|sequential}"}
+{"status":"completed","workspace":"{WORKSPACE}","step":"{STEP_ID}","summary":"{1-2 sentence}","rounds":{N},"execution_mode":"pingpong"}
 ```
 
 On HALT:
 ```json
-{"status":"halted","workspace":"{WORKSPACE}","step":"{STEP_ID}","summary":"{halt reason}","rounds":{N},"halt_reason":"{type}","execution_mode":"{teams|sequential}"}
+{"status":"halted","workspace":"{WORKSPACE}","step":"{STEP_ID}","summary":"{halt reason}","rounds":{N},"halt_reason":"{type}","execution_mode":"pingpong"}
 ```
 
 On inverted step (Review Story):
 ```json
-{"status":"completed","workspace":"{WORKSPACE}","step":"{STEP_ID}","verdict":"{PASS|FAIL}","blockers":["{blocker descriptions}"],"rounds":{N},"execution_mode":"{teams|sequential}"}
+{"status":"completed","workspace":"{WORKSPACE}","step":"{STEP_ID}","verdict":"{PASS|FAIL}","blockers":["{blocker descriptions}"],"rounds":{N},"execution_mode":"pingpong"}
 ```
 
 ---
@@ -569,7 +425,10 @@ Step N:
 ### Multi-Step Execution
 
 Execute all designed steps sequentially within this session (no per-step session split).
-Use the same dialectic loop mechanics (Option A or B) for each step.
+
+**CRITICAL: Do NOT use Agent() to spawn thesis/antithesis. Always use the Python
+dialectic engine via Bash.** Using Agent() defeats the stateful session architecture
+and will produce empty workspace output.
 
 For each step N:
 
@@ -578,10 +437,43 @@ For each step N:
    LOG_DIR = {WORKSPACE}/logs/step-{N}/
    mkdir -p LOG_DIR
    ```
-2. Inject `LOG_DIR` into agent role context (same as pipeline mode)
-3. Execute dialectic loop — write round logs to `LOG_DIR` after each agent output
-   capture (same protocol as pipeline mode)
-4. On convergence, capture step result for DELIVERABLE.md
+
+2. **Read agent definitions**:
+   - `{SKILL_DIR}/agents/thesis.md` → `thesis_instructions`
+   - `{SKILL_DIR}/agents/antithesis.md` → `antithesis_instructions`
+
+3. **Assemble system prompts** with role context injection (same as Pipeline Mode Phase 3):
+   - Write `{LOG_DIR}/thesis-system-prompt.md`
+   - Write `{LOG_DIR}/antithesis-system-prompt.md`
+
+4. **Write step-config.json** to `{LOG_DIR}/step-config.json`:
+   ```json
+   {
+     "thesis_prompt_path": "{LOG_DIR}/thesis-system-prompt.md",
+     "antithesis_prompt_path": "{LOG_DIR}/antithesis-system-prompt.md",
+     "step_assignment": "## Step Assignment\n\n**Goal**: {goal}\n\n**Pass Criteria**:\n{criteria}\n\n**Context**:\n{step_context}\n\nProduce your initial position with reasoning and self-assessment.",
+     "antithesis_briefing": "## Step Criteria\n\n**Goal** (context): {goal}\n\n**Pass Criteria**:\n{criteria}\n\nYou will receive ThesisAgent's position. Evaluate and respond.",
+     "log_dir": "{LOG_DIR}",
+     "step_id": "step-{N}",
+     "step_goal": "{goal}",
+     "project_root": "{PROJECT_ROOT or cwd}",
+     "model": "claude-opus-4-6",
+     "convergence_model": "standard",
+     "language": "{ONLY set non-English if the user EXPLICITLY requests a specific output language (e.g. '한국어로 작성해줘', 'write in Korean'). Default: English. The language of the request itself does NOT determine this — a Korean request with no language instruction means English output.}"
+   }
+   ```
+
+5. **Execute PingPong**:
+   ```
+   Bash({
+     command: "bash {SKILL_DIR}/runtime/run-dialectic.sh {LOG_DIR}/step-config.json",
+     timeout: 600000
+   })
+   ```
+
+6. **Parse result JSON** from the last line of stdout. Read `deliverable_path` for step output.
+
+7. On convergence, capture step result for DELIVERABLE.md
 
 ### Output
 
@@ -614,7 +506,7 @@ Write `{WORKSPACE}/DELIVERABLE.md` with:
 Last stdout line: JSON output contract.
 
 ```json
-{"status":"completed","workspace":"{WORKSPACE}","summary":"{1-2 sentence}","deliverables":["DELIVERABLE.md"],"execution_mode":"{teams|sequential}"}
+{"status":"completed","workspace":"{WORKSPACE}","summary":"{1-2 sentence}","deliverables":["DELIVERABLE.md"],"execution_mode":"pingpong"}
 ```
 
 ---
@@ -670,9 +562,9 @@ computation. A cap in the caller doesn't protect computation inside the callee.
 
 | Failure | Detection | Recovery |
 |---------|-----------|----------|
-| ThesisAgent crash/timeout | Agent error return | Retry once. If still fails, execute step directly and note degradation |
-| AntithesisAgent crash/timeout | Agent error return | Perform basic self-review. Accept with warning in output |
-| Both agents fail | Sequential failures | Abort, write partial output, set status "halted" |
+| Dialectic engine error | Python non-zero exit | Check stderr for details, report error to MainOrchestrator |
+| Agent session crash | CLI death during dialogue | Engine reconnects once automatically, fails on second death |
+| Both agents fail | Connection errors | Engine writes partial output, exits with halted status |
 | HALT (impasse) | Circular argumentation, external contradiction, or missing info | Record both positions, MetaAgent's assessment, set status "halted" |
 | Empty agent output | Zero-length response | Treat as crash, apply crash recovery |
 | Checkpoint file corrupted | Parse failure | Start fresh (ignore checkpoint) |

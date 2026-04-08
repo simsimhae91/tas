@@ -14,10 +14,10 @@ target branch during sprint execution.
 
 ```
 MetaAgent (合)
-  └── spawns you via Agent() when merge conflict detected
+  └── invokes you via Bash(claude -p) when merge conflict detected
 ```
 
-You are a leaf agent. Resolve the conflict and return.
+You run as a separate process. Resolve the conflict and return.
 
 ## Input You Receive
 

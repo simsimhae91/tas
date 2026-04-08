@@ -37,6 +37,9 @@ into YOUR context window, defeating process isolation and causing context exhaus
 - Do NOT poll, sleep-and-check, or verify CLI availability. The command returns when done.
 - Do NOT narrate the wait — no "waiting for output", "still processing", "let me check" messages.
 
+**PREREQUISITE** — `pip install claude-agent-sdk` must be installed in the environment.
+If MetaAgent reports `ModuleNotFoundError: claude_agent_sdk`, inform the user to install it.
+
 **SCOPE PROHIBITION** — You must NEVER:
 - Read, edit, or create project source code files
 - Analyze code to decide whether to handle the request yourself
@@ -138,7 +141,7 @@ TAS_END
   --model opus \
   --permission-mode bypassPermissions \
   --no-session-persistence \
-  --output-format text 2>/dev/null)
+  --output-format text < /dev/null 2>>"${PROJECT_ROOT}/_workspace/meta-stderr.log")
 ```
 
 Parse JSON from last line of `PLAN_JSON`.
@@ -216,7 +219,7 @@ TAS_END
   --model opus \
   --permission-mode bypassPermissions \
   --no-session-persistence \
-  --output-format text 2>/dev/null)
+  --output-format text < /dev/null 2>>"${PROJECT_ROOT}/_workspace/meta-stderr.log")
 ```
 
 Parse output and present results (see Phase 2: Present Results).
@@ -257,7 +260,7 @@ TAS_END
   --model opus \
   --permission-mode bypassPermissions \
   --no-session-persistence \
-  --output-format text 2>/dev/null)
+  --output-format text < /dev/null 2>>"${PROJECT_ROOT}/_workspace/meta-stderr.log")
 ```
 
 MetaAgent runs in single-request mode (no WORKFLOW_FILE) but receives the full pipeline
@@ -343,7 +346,7 @@ For each step S in phase's step list (from classify plan):
        --model opus \
        --permission-mode bypassPermissions \
        --no-session-persistence \
-       --output-format text 2>/dev/null)
+       --output-format text < /dev/null 2>>"${PROJECT_ROOT}/_workspace/meta-stderr.log")
   
   5. Parse JSON from last line of META_OUTPUT
   6. Update PROGRESS.md based on result:
@@ -446,15 +449,36 @@ The last line of MetaAgent's output is JSON:
 
 **On success** (`status: "completed"`):
 
-Display the synthesis report from MetaAgent's stdout. For pipeline mode, show the
-overall project summary after all phases complete.
+Display the synthesis report from MetaAgent's stdout. Determine the result type
+from `request_type` (quick mode) or phase ID (pipeline mode), then present accordingly:
 
-If the request type was Implementation or Refactoring, append:
+**Implementation steps** (`request_type`: implement, bug-fix, refactor; or P4 phase):
+
+ThesisAgent has bypassPermissions and modifies code directly during the dialectic.
+Do NOT ask "적용할까요?" — code is already changed.
 
 ```
-> **Recommended**: Run `/tas-verify` to independently trace boundary values
-> through the produced code.
+정반합 {rounds}라운드 수렴. 코드 변경 적용 완료.
+{summary from JSON}
+
+변경된 파일: `git diff --stat` 결과 표시
+> **Recommended**: Run `/tas-verify` to independently trace boundary values.
 ```
+
+The user can review with `git diff` and revert with `git checkout` if needed.
+
+**Design/analysis steps** (`request_type`: design, analysis, review; or P1-P3 phases):
+
+ThesisAgent produces deliverable documents, not code changes. Present the result:
+
+```
+정반합 {rounds}라운드 수렴.
+{summary from JSON}
+
+결과물: {workspace}/DELIVERABLE.md
+```
+
+For pipeline mode, show overall project summary after all phases complete.
 
 **On partial completion** (`status: "halted"` for some steps):
 

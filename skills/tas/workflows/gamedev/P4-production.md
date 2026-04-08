@@ -527,7 +527,7 @@ MetaAgent orchestrates Production phase using the following loop:
            - If FAIL → return to S04 with review findings
            - If PASS → story is ready for merge
    b. Merge all PASS stories in dependency order
-      - On conflict: spawn conflict-resolver agent
+      - On conflict: invoke conflict-resolver via Bash(claude -p ...)
    c. S07: E2E QA for the batch
       - If BATCH-BLOCKING failures: address before next batch
 4. After all batches: produce final DELIVERABLE.md

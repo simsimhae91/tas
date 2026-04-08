@@ -91,44 +91,33 @@ Sprint 3: [INTEG-001]                   (depends on Sprint 2)
 
 For each sprint batch:
 
-1. **Spawn thesis agents in parallel** with worktree isolation:
+1. **Execute stories via dialectic engine** — each story gets its own PingPong session:
 ```
-For each story in batch:
-  Agent({
-    name: "thesis-{story_id}",
-    description: "Implement {story_id}",
-    mode: "bypassPermissions",
-    isolation: "worktree",
-    run_in_background: true,
-    prompt: "{thesis_instructions}\n\n## Story Assignment\n{story spec content}\n\nWorktree mode. Implement this story."
-  })
-```
-
-2. **Wait for all thesis agents** in the batch to complete
-
-3. **Sequential antithesis review** per completed story:
-```
-For each completed story:
-  Agent({
-    description: "Review {story_id}",
-    mode: "bypassPermissions",
-    prompt: "{antithesis_instructions}\n\n## Review Assignment\n**Story Spec**:\n{spec}\n**Git Diff**:\n{diff from worktree}\n\nDiff-review mode. Review against story acceptance criteria."
-  })
+For each story in batch (sequentially):
+  1. Prepare thesis/antithesis system prompts with story spec as context
+  2. Write step-config.json with story assignment
+  3. Bash({
+       command: "bash {SKILL_DIR}/runtime/run-dialectic.sh {LOG_DIR}/step-config.json",
+       timeout: 600000
+     })
+  4. Parse result JSON
 ```
 
-4. **Judge each review**:
+**Do NOT use Agent() to spawn thesis/antithesis.** Always use the dialectic engine.
+
+2. **Judge each result**:
    - **ACCEPT** → Queue for merge
-   - **REFINE / COUNTER** → Thesis responds, dialogue continues until convergence
+   - **REFINE / COUNTER** → Already handled within the dialectic loop
    - **HALT** (circular argumentation, contradictory spec, missing dependency) → Mark as BLOCKED, continue with other stories
 
-5. **Merge passed stories** in dependency order:
+3. **Merge passed stories** in dependency order:
    - Cherry-pick or merge from worktree branch to develop branch
-   - If conflict: spawn conflict-resolver agent
+   - If conflict: invoke conflict-resolver via `Bash(claude -p --system-prompt-file conflict-resolver.md ...)`
    - After merge: run integration tests (if defined in architecture.md)
 
-6. **Post-batch validation**:
+4. **Post-batch validation**:
    - Run integration tests across all merged stories
-   - If test failure: `git blame` to identify responsible story, spawn thesis fix attempt (max 2)
+   - If test failure: `git blame` to identify responsible story, re-run dialectic for fix (max 2)
 
 ### Merge Strategy
 
@@ -137,7 +126,7 @@ For each passed story (in dependency order):
   1. Attempt merge from worktree branch to develop
   2. If clean: commit with message "feat({story-id}): {title}"
   3. If conflict:
-     a. Spawn conflict-resolver agent with:
+     a. Invoke conflict-resolver via Bash(claude -p ...) with:
         - Both diffs
         - Both story specs
         - Target (already-merged) branch state
@@ -152,7 +141,7 @@ For each passed story (in dependency order):
 
 | Failure | Detection | Recovery |
 |---------|-----------|----------|
-| Thesis crash in worktree | Agent error/timeout | Re-spawn with existing commits if any, else 1 retry |
+| Dialectic engine error | Non-zero exit / timeout | Check stderr, retry once with same config |
 | Unresolved merge conflict | Conflicts remain post-resolution | Mark MERGE_BLOCKED, continue others, report to user |
 | Integration test failure | Non-zero exit after merge | `git blame` to identify story, thesis addresses in continued dialogue |
 | HALT (impasse) | Circular argumentation or contradictory spec | Mark BLOCKED with HALT reason, continue others, report to user |
