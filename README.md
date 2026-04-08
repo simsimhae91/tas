@@ -8,30 +8,36 @@ A Claude Code plugin that runs user requests through **thesis-antithesis-synthes
 /tas {request}  →  MainOrchestrator
                      │
                      ├── Trivial? → respond directly
-                     └── Non-trivial → MetaAgent (separate process)
+                     └── Non-trivial → MetaAgent (Agent() subagent)
                                          │
+                                         python3 dialectic.py
                                          正 proposes → 反 responds
                                          Dialogue until convergence
                                          │
                                          Synthesized output
 ```
 
-Three layers, each with a strict boundary:
+Three layers, each with a strict context boundary:
 
 | Layer | Agent | Boundary |
 |-------|-------|----------|
 | 0 | MainOrchestrator | Thin scheduler — never sees internal dialectic |
-| 1 | MetaAgent (合) | Runs in its own `claude -p` process per step |
-| 2 | ThesisAgent (正) / AntithesisAgent (反) | Leaf agents, internal to MetaAgent |
+| 1 | MetaAgent (合) | Runs as an Agent() subagent per step |
+| 2 | ThesisAgent (正) / AntithesisAgent (反) | Claude SDK sessions managed by `dialectic.py` |
 
-**Process isolation** prevents context exhaustion. MainOrchestrator provides inputs, parses JSON output, manages PROGRESS.md. MetaAgent handles everything else.
+**Context isolation** prevents context exhaustion. MainOrchestrator provides inputs, parses JSON output, manages PROGRESS.md. MetaAgent handles everything else. The dialectic engine (`runtime/dialectic.py`) manages thesis/antithesis as stateful SDK sessions.
 
 ## Installation
 
 ```bash
-# Clone and register as a plugin
+# Clone the repo
 git clone <repo-url> /path/to/tas
-claude plugins add /path/to/tas
+
+# Install the dialectic engine dependency
+pip install claude-agent-sdk
+
+# Use as a plugin directory
+claude --plugin-dir /path/to/tas
 ```
 
 Registers two skills: `/tas` (dialectic orchestration) and `/tas-verify` (post-synthesis verification).
@@ -59,7 +65,7 @@ Single MetaAgent session. Classifies the request type (implementation, architect
 
 ### Pipeline Mode
 
-Multi-phase project execution. Each phase produces a `DELIVERABLE.md` that flows to the next. Each step runs in its own `claude -p` process. PROGRESS.md enables resume across sessions.
+Multi-phase project execution. Each phase produces a `DELIVERABLE.md` that flows to the next. Each step runs as its own Agent() subagent. PROGRESS.md enables resume across sessions.
 
 **SDLC** — 4 phases, 14 steps (+ optional):
 
@@ -135,6 +141,10 @@ tas/
 │   │   │   ├── thesis.md           # ThesisAgent (正)
 │   │   │   ├── antithesis.md       # AntithesisAgent (反)
 │   │   │   └── conflict-resolver.md
+│   │   ├── runtime/
+│   │   │   ├── dialectic.py        # PingPong dialectic engine (Python)
+│   │   │   ├── run-dialectic.sh    # Shell wrapper
+│   │   │   └── requirements.txt    # claude-agent-sdk dependency
 │   │   ├── workflows/
 │   │   │   ├── sdlc/
 │   │   │   │   ├── manifest.md     # Step metadata (MainOrchestrator reads this)
