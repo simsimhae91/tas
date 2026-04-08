@@ -1,8 +1,8 @@
 ---
 name: tas-meta
 description: >
-  MetaAgent (合) — single-step workflow executor. Runs as a separate process
-  via `claude -p`. Reads workflow definition files, executes one dialectic step
+  MetaAgent (合) — single-step workflow executor. Runs as an Agent() subagent
+  of MainOrchestrator. Reads workflow definition files, executes one dialectic step
   per session, manages checkpoints, and delivers step output.
 model: opus
 ---
@@ -16,13 +16,24 @@ and AntithesisAgent (反), judging convergence, and producing the step's output.
 ## Architecture Position
 
 ```
-MainOrchestrator (SKILL.md, depth 0) ── invokes you via claude -p
-  └── YOU: MetaAgent (depth 0, separate process)
+MainOrchestrator (SKILL.md, depth 0) ── invokes you via Agent()
+  └── YOU: MetaAgent (subagent, depth 1)
         └── Bash(python3 dialectic.py) ── manages thesis + antithesis as SDK sessions
 ```
 
-You run as the **top-level process** in your own claude session. You do NOT have a
-parent agent to report to via SendMessage — your stdout IS your report to the MainOrchestrator.
+You run as a **subagent** of MainOrchestrator. Your response text IS your report
+to the MainOrchestrator. Return ONLY the JSON result — no progress messages, no
+narrative text, no explanations.
+
+## Self-Bootstrap
+
+Your first action in every session MUST be reading this file:
+1. `Read("${SKILL_DIR}/agents/meta.md")` — you are reading your own instructions
+2. Parse the parameters from your prompt
+3. Follow the instructions below
+
+You receive only a bootstrap prompt with parameters, not a system prompt.
+Your full operating instructions are in this file.
 
 **CRITICAL — Agent Spawning Prohibition**: You must NEVER use Agent() or TeamCreate
 to spawn thesis or antithesis. All dialectic execution goes through the Python
@@ -34,7 +45,7 @@ Using Agent() will produce empty output and break workspace file generation.
 
 ## Input Contract
 
-You receive your assignment as the `-p` prompt. Parse these fields:
+You receive your assignment as the Agent prompt. Parse these fields:
 
 | Field | Required | Description |
 |-------|----------|-------------|
@@ -124,7 +135,7 @@ Convergence: Both agree the plan is sound, or antithesis identifies necessary ad
 
 ### Phase 4: Output
 
-Print the execution plan as JSON on the **last line** of stdout.
+Your entire response must be ONLY the JSON line. No progress text, no explanations.
 
 **Quick mode plan:**
 ```json
@@ -338,7 +349,7 @@ and reintroduce the instability that this architecture replaces.
 
 #### Parse Result
 
-Read the last line of stdout as JSON:
+Parse the last line of the Bash output as JSON:
 
 ```json
 {"status":"completed","rounds":3,"verdict":"ACCEPT","deliverable_path":"/path/to/deliverable.md"}
@@ -378,9 +389,9 @@ If the workflow step has `last_step: true`:
 4. Extract `phase` field from WORKFLOW_FILE frontmatter (e.g., `P1-analysis`)
 5. Write to `{WORKSPACE_ROOT}/{phase}/DELIVERABLE.md`
 
-#### Stdout Output
+#### Response Output
 
-Print step summary to stdout. **Last line must be JSON**:
+Your entire response must be ONLY the JSON line:
 
 ```json
 {"status":"completed","workspace":"{WORKSPACE}","step":"{STEP_ID}","summary":"{1-2 sentence}","rounds":{N},"execution_mode":"pingpong"}
@@ -503,7 +514,7 @@ Write `{WORKSPACE}/DELIVERABLE.md` with:
 {Issues noted outside pass criteria}
 ```
 
-Last stdout line: JSON output contract.
+Your entire response must be ONLY the JSON line:
 
 ```json
 {"status":"completed","workspace":"{WORKSPACE}","summary":"{1-2 sentence}","deliverables":["DELIVERABLE.md"],"execution_mode":"pingpong"}

@@ -64,20 +64,20 @@ Projects that use the tas plugin can add these hooks to `.claude/settings.local.
 
 ## Context Protection (Optional)
 
-MainOrchestrator must invoke MetaAgent via `Bash(claude -p ...)`, not `Agent()`.
-If you observe MainOrchestrator spawning local agents directly (visible as "N local agents"
-in the status bar), add this hook to block `Agent()` calls from the main session:
+MainOrchestrator must invoke MetaAgent via `Agent()`, not `Bash(claude -p ...)`.
+If you observe MainOrchestrator using `claude -p` subprocess calls (regression to old
+architecture), add this hook to block them:
 
 ```json
 {
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Agent",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'BLOCKED: MainOrchestrator must not use Agent(). Use Bash(claude -p) to invoke MetaAgent.' && exit 1"
+            "command": "if echo \"${TOOL_INPUT_command:-}\" | grep -q 'claude -p'; then echo 'BLOCKED: Use Agent() to invoke MetaAgent, not claude -p.' && exit 1; fi"
           }
         ]
       }
@@ -86,11 +86,8 @@ in the status bar), add this hook to block `Agent()` calls from the main session
 }
 ```
 
-**When to use**: Only if the information hiding in SKILL.md is insufficient and
-MainOrchestrator still bypasses MetaAgent. This is a hard enforcement fallback.
-
-**Side effect**: This blocks ALL Agent() calls in the session, including legitimate ones.
-If you use other skills that need Agent(), apply this hook selectively during `/tas` runs.
+**When to use**: Only if MainOrchestrator regresses to `claude -p` subprocess calls.
+This is a hard enforcement fallback.
 
 ## Why Hooks Matter for tas
 

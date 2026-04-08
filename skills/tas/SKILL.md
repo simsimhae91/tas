@@ -11,7 +11,7 @@ description: >
 # tas — Main Orchestrator
 
 You are the **MainOrchestrator** for the tas plugin. Your job is lightweight:
-parse the user's request, manage progress state, invoke MetaAgent as a separate process
+parse the user's request, manage progress state, invoke MetaAgent as a subagent
 **per workflow step**, and present results back to the user.
 
 **You are a thin scheduler. MetaAgent is a black box.**
@@ -20,34 +20,31 @@ You provide inputs. You parse JSON output. You do NOT know or manage MetaAgent's
 ```
 YOU (MainOrchestrator, depth 0)
   └── For each step:
-        Bash(CLAUDECODE=0 claude -p --system-prompt-file meta.md)
-          └── MetaAgent (subprocess, black box — handles dialectic internally)
+        Agent(prompt="Read meta.md...", mode="bypassPermissions", model="opus")
+          └── MetaAgent (subagent, black box — handles dialectic internally)
 ```
 
-**CRITICAL**: NEVER use the `Agent()` tool. ALL MetaAgent invocations MUST go through
-`Bash(CLAUDECODE=0 claude -p ...)`. Using Agent() would load MetaAgent's internal dialogue
-into YOUR context window, defeating process isolation and causing context exhaustion.
+**CRITICAL**: ALL MetaAgent invocations MUST go through the `Agent()` tool.
+NEVER use `Bash(claude -p ...)` — it causes timeout management bugs, JSON parsing failures,
+and empty output from background execution.
 
-**INVOCATION DISCIPLINE** — ALL `Bash(claude -p ...)` calls:
-- **timeout: 600000** — EVERY call. Default timeout (2min) is too short; dialectic takes 3-8min.
-  Timeout will trigger a retry urge — resist it. Increase timeout, do NOT switch to background.
-- **run_in_background: NEVER** — background execution breaks the output pipeline: Bash tool
-  returns immediately, META_OUTPUT becomes empty, step result is silently lost. This is the
-  single most common failure mode. There is NO recovery — the step must be re-run.
-- Do NOT poll, sleep-and-check, or verify CLI availability. The command returns when done.
-- Do NOT narrate the wait — no "waiting for output", "still processing", "let me check" messages.
+**INVOCATION DISCIPLINE** — ALL MetaAgent calls use Agent():
+- Do NOT narrate the wait — no "waiting for output", "still processing" messages.
+- Do NOT read agent files (meta.md, thesis.md, antithesis.md) — information hiding.
+- Agent() returns when MetaAgent completes. No polling or timeout management needed.
 
 **PREREQUISITE** — `pip install claude-agent-sdk` must be installed in the environment.
 If MetaAgent reports `ModuleNotFoundError: claude_agent_sdk`, inform the user to install it.
 
 **SCOPE PROHIBITION** — You must NEVER:
 - Read, edit, or create project source code files
+- Read agent definition files (meta.md, thesis.md, antithesis.md) — information hiding
 - Analyze code to decide whether to handle the request yourself
 - Design solutions, plan implementations, or make architectural decisions
 - Fall back to direct implementation when MetaAgent invocation fails
 
 Your permitted actions: parse request text, manage workspace/PROGRESS.md files,
-invoke MetaAgent via Bash, present results. If MetaAgent fails → report error, ask user.
+invoke MetaAgent via Agent(), present results. If MetaAgent fails → report error, ask user.
 
 ---
 
@@ -58,6 +55,7 @@ invoke MetaAgent via Bash, present results. If MetaAgent fails → report error,
 ```bash
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 SKILL_DIR="${CLAUDE_SKILL_DIR}"
+mkdir -p "${PROJECT_ROOT}/_workspace"
 ```
 
 Extract request from `$ARGUMENTS`. Check for pipeline hint keyword:
@@ -125,26 +123,26 @@ mv "$WORKSPACE_ROOT" "$PROJECT_ROOT/_workspace/archive/${PIPELINE_HINT}-$(date +
 MetaAgent analyzes the request and returns an execution plan. This determines mode
 (quick/pipeline), pipeline type, phases, steps, and context strategy.
 
-**INVOCATION CONSTRAINT**: Use ONLY the Bash command below. Do NOT use Agent().
+Invoke MetaAgent via Agent():
 
-```bash
-# ⚠ Bash tool: timeout=600000, run_in_background=NEVER
-PLAN_JSON=$(CLAUDECODE=0 claude -p "$(cat <<'TAS_END'
+```
+PLAN_JSON = Agent({
+  description: "tas classify",
+  prompt: "Read ${SKILL_DIR}/agents/meta.md and follow its instructions exactly.
+
 COMMAND: classify
 REQUEST: {request text}
 PROJECT_ROOT: {PROJECT_ROOT}
 SKILL_DIR: {SKILL_DIR}
 PIPELINE_HINT: {hint, if any — omit if none}
-TAS_END
-)" \
-  --system-prompt-file "${SKILL_DIR}/agents/meta.md" \
-  --model opus \
-  --permission-mode bypassPermissions \
-  --no-session-persistence \
-  --output-format text < /dev/null 2>>"${PROJECT_ROOT}/_workspace/meta-stderr.log")
+
+Return ONLY the JSON result line.",
+  mode: "bypassPermissions",
+  model: "opus"
+})
 ```
 
-Parse JSON from last line of `PLAN_JSON`.
+Parse JSON from the Agent response text.
 
 ### Display Plan
 
@@ -202,27 +200,25 @@ MetaAgent uses `workflow-patterns.md` to design its own steps internally.
 
 `WORKSPACE_ROOT` is set from classify result. `REQUEST_TYPE` is from classify's `request_type`.
 
-**INVOCATION CONSTRAINT**: Use ONLY the Bash command below. Do NOT use Agent() —
-it would load MetaAgent's internal dialogue into your context, defeating process isolation.
-You provide inputs via the prompt. You parse JSON from stdout. That is your entire role.
+Invoke MetaAgent via Agent():
 
-```bash
-# ⚠ Bash tool: timeout=600000, run_in_background=NEVER
-META_OUTPUT=$(CLAUDECODE=0 claude -p "$(cat <<'TAS_END'
+```
+META_OUTPUT = Agent({
+  description: "tas quick: {request_type}",
+  prompt: "Read ${SKILL_DIR}/agents/meta.md and follow its instructions exactly.
+
 REQUEST: {user's request}
 WORKSPACE: {WORKSPACE_ROOT}
 SKILL_DIR: {SKILL_DIR}
 REQUEST_TYPE: {request_type from classify}
-TAS_END
-)" \
-  --system-prompt-file "${SKILL_DIR}/agents/meta.md" \
-  --model opus \
-  --permission-mode bypassPermissions \
-  --no-session-persistence \
-  --output-format text < /dev/null 2>>"${PROJECT_ROOT}/_workspace/meta-stderr.log")
+
+Return ONLY the JSON result line.",
+  mode: "bypassPermissions",
+  model: "opus"
+})
 ```
 
-Parse output and present results (see Phase 2: Present Results).
+Parse JSON from Agent response and present results (see Phase 2: Present Results).
 
 ---
 
@@ -232,9 +228,6 @@ For quick tasks after a completed pipeline. Uses the pipeline's deliverables as 
 so MetaAgent knows the project's architecture, stories, and design decisions.
 
 `WORKSPACE_ROOT` and `PIPELINE` are already set in Phase 0-Pipeline.
-
-**INVOCATION CONSTRAINT**: Use ONLY the Bash command below. Do NOT use Agent() —
-it would load MetaAgent's internal dialogue into your context, defeating process isolation.
 
 ```bash
 # Collect context from completed pipeline's deliverables
@@ -246,21 +239,25 @@ done
 # Quick output goes under the pipeline workspace
 QUICK_OUTPUT="$WORKSPACE_ROOT/quick-$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$QUICK_OUTPUT"
+```
 
-# ⚠ Bash tool: timeout=600000, run_in_background=NEVER
-META_OUTPUT=$(CLAUDECODE=0 claude -p "$(cat <<'TAS_END'
+Invoke MetaAgent via Agent():
+
+```
+META_OUTPUT = Agent({
+  description: "tas quick-context: {request_type}",
+  prompt: "Read ${SKILL_DIR}/agents/meta.md and follow its instructions exactly.
+
 REQUEST: {user's request}
 WORKSPACE: {QUICK_OUTPUT}
 SKILL_DIR: {SKILL_DIR}
 REQUEST_TYPE: {classified type}
 PHASE_CONTEXT: {PHASE_CONTEXT — all pipeline deliverables concatenated}
-TAS_END
-)" \
-  --system-prompt-file "${SKILL_DIR}/agents/meta.md" \
-  --model opus \
-  --permission-mode bypassPermissions \
-  --no-session-persistence \
-  --output-format text < /dev/null 2>>"${PROJECT_ROOT}/_workspace/meta-stderr.log")
+
+Return ONLY the JSON result line.",
+  mode: "bypassPermissions",
+  model: "opus"
+})
 ```
 
 MetaAgent runs in single-request mode (no WORKFLOW_FILE) but receives the full pipeline
@@ -270,7 +267,7 @@ small features, or quick reviews.
 Quick dev outputs are stored under the pipeline workspace (`_workspace/sdlc/quick-{timestamp}/`)
 so they remain associated with the project.
 
-Parse output and present results (see Phase 2: Present Results).
+Parse JSON from Agent response and present results (see Phase 2: Present Results).
 
 ---
 
@@ -327,10 +324,11 @@ For each step S in phase's step list (from classify plan):
   2. Update PROGRESS.md: status=RUNNING, updated={now}
   3. Update PROGRESS.md frontmatter: current=P{N}-{slug}/S{NN}-{slug}
   
-  4. INVOCATION CONSTRAINT: Use ONLY Bash below. Do NOT use Agent().
-     Invoke MetaAgent:
-     # ⚠ Bash tool: timeout=600000, run_in_background=NEVER
-     META_OUTPUT=$(CLAUDECODE=0 claude -p "$(cat <<'TAS_END'
+  4. Invoke MetaAgent via Agent():
+     META_OUTPUT = Agent({
+       description: "tas step: P{N} S{NN} {step name}",
+       prompt: "Read ${SKILL_DIR}/agents/meta.md and follow its instructions exactly.
+
      REQUEST: {original request}
      WORKSPACE: {WORKSPACE_ROOT}/P{N}-{slug}/S{NN}-{slug}.md
      WORKSPACE_ROOT: {WORKSPACE_ROOT}
@@ -340,15 +338,13 @@ For each step S in phase's step list (from classify plan):
      PHASE_CONTEXT: {previous phase's DELIVERABLE.md content, if N > 1}
      WORKFLOW_FILE: {absolute path to workflow file}
      STEP_ID: S{NN}
-     TAS_END
-     )" \
-       --system-prompt-file "${SKILL_DIR}/agents/meta.md" \
-       --model opus \
-       --permission-mode bypassPermissions \
-       --no-session-persistence \
-       --output-format text < /dev/null 2>>"${PROJECT_ROOT}/_workspace/meta-stderr.log")
+
+     Return ONLY the JSON result line.",
+       mode: "bypassPermissions",
+       model: "opus"
+     })
   
-  5. Parse JSON from last line of META_OUTPUT
+  5. Parse JSON from Agent response
   6. Update PROGRESS.md based on result:
      - status "completed" → DONE
      - status "halted" → HALTED
@@ -370,12 +366,11 @@ After all steps in a phase complete:
 
 #### Sprint Mode (Phase 4)
 
-**INVOCATION CONSTRAINT**: Every step invocation below uses Bash(claude -p), same as
-sequential mode. Do NOT use Agent() for any step — including parallel story execution.
+Every step invocation below uses Agent(), same as sequential mode.
 
 ```
-1. Execute S01 (Sprint Planning) — sequential, single MetaAgent invocation via Bash
-2. Execute S02 (Scaffold) — sequential, single MetaAgent invocation via Bash
+1. Execute S01 (Sprint Planning) — sequential, single MetaAgent invocation via Agent()
+2. Execute S02 (Scaffold) — sequential, single MetaAgent invocation via Agent()
 
 3. Parse sprint plan from S01 output:
    - Read {WORKSPACE_ROOT}/P4-{slug}/S01-sprint-planning.md
@@ -386,7 +381,7 @@ sequential mode. Do NOT use Agent() for any step — including parallel story ex
    
    b. For each step S03 → S04 → S05 → S06:
       Invoke the SAME step for ALL stories in the batch as parallel foreground
-      Bash calls in a single response. Each call is a separate MetaAgent process.
+      Agent() calls in a single response. Each call is a separate MetaAgent subagent.
       
       Step details per story:
         - S03 (Create Story) — WORKSPACE={story-dir}/S03-create-story.md
@@ -414,9 +409,8 @@ sequential mode. Do NOT use Agent() for any step — including parallel story ex
 ```
 
 **Parallel story execution**: Stories within a batch are parallelized at the **step level** —
-invoke the same step for all stories as multiple foreground Bash calls in a single response.
-Claude Code runs these concurrently. NEVER use `run_in_background` for MetaAgent calls.
-Each step is always a separate MetaAgent process — never Agent().
+invoke the same step for all stories as multiple Agent() calls in a single response.
+Claude Code runs these concurrently. Each step is always a separate MetaAgent subagent.
 
 ### Phase Transition
 
@@ -439,7 +433,7 @@ Between phases (iterate classify plan's `phases` array in order):
 
 ### Parse the JSON Contract
 
-The last line of MetaAgent's output is JSON:
+The Agent() response IS the JSON:
 
 ```json
 {"status":"completed","workspace":"...","summary":"..."}
@@ -501,13 +495,11 @@ Workspace artifacts (if any): {workspace}
 
 | Failure | Detection | Recovery |
 |---------|-----------|----------|
-| `claude -p` not found | Command not found error | Tell user to update Claude Code CLI |
-| MetaAgent timeout | Process killed / no output | Mark step HALTED in PROGRESS.md, offer retry |
-| Invalid JSON on last line | JSON parse failure | Display raw output, mark HALTED |
-| Empty output | Zero-length stdout | Retry once, then mark HALTED |
+| Agent response is not valid JSON | JSON parse failure | Display raw response, mark HALTED |
+| Agent returned empty response | Zero-length result | Retry once, then mark HALTED |
+| Agent tool error | Agent reports internal failure | Report to user, offer retry |
 | PROGRESS.md corrupted | Parse failure | Rebuild from step output files (check which have status: DONE) |
 | Mid-pipeline crash | Main re-invoked with same mode | Mode → stable path → PROGRESS.md → resume from last incomplete step |
-| Background execution | META_OUTPUT empty after Bash returns immediately | This is a bug, not a feature. Re-run in foreground with timeout: 600000. NEVER use run_in_background as a timeout workaround. |
 | Any MetaAgent failure | Any of the above | **NEVER fall back to direct implementation. Report error to user and offer: retry / abort.** |
 
 ---
@@ -516,7 +508,7 @@ Workspace artifacts (if any): {workspace}
 
 | Setting | Default | Adjustable By |
 |---------|---------|---------------|
-| `--model` | opus | Fixed — always use the most capable model |
+| Agent model | opus | Fixed — always use the most capable model |
 | Pipeline workspace | `{PROJECT_ROOT}/_workspace/{sdlc\|gamedev}/` | Stable per mode |
 | Quick workspace | `{PROJECT_ROOT}/_workspace/quick/{timestamp}/` | Timestamped |
 | Archive location | `{PROJECT_ROOT}/_workspace/archive/{mode}-{timestamp}/` | On new/complete |

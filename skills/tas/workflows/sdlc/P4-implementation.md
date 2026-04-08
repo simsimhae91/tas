@@ -444,7 +444,7 @@ MainOrchestrator drives Phase 4 as follows:
 1. **S01: Sprint Planning** — produces the batch plan.
 2. **S02: Scaffold** — creates the project skeleton.
 
-Both steps run as standard MetaAgent `claude -p` sessions (thesis-antithesis-synthesis).
+Both steps run as standard MetaAgent Agent() invocations (thesis-antithesis-synthesis).
 
 ### Per-Story Pipeline (per batch)
 

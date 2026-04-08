@@ -16,9 +16,9 @@ You (Claude) are editing instructions for yourself (Claude). This creates unique
 
 SKILL.md (MainOrchestrator) intentionally does not know MetaAgent internals — thesis/antithesis roles, convergence model, review lenses. This is not an oversight.
 
-**Why**: If the MainOrchestrator Claude learns how 정반합 works internally, it develops a behavioral bias to skip the subprocess call and run the dialectic itself via `Agent()`. This has been observed and is the reason for the strict `claude -p` boundary.
+**Why**: If the MainOrchestrator Claude learns how 정반합 works internally, it develops a behavioral bias to skip the Agent() call and run the dialectic itself directly. Information hiding is preserved because the Agent() prompt says "Read meta.md and follow it" — MainOrchestrator never sees meta.md's content.
 
-**Implication**: When editing SKILL.md, never add references to agent internals. When editing agent files (meta.md, thesis.md, antithesis.md), don't worry about what SKILL.md knows — they run in separate processes.
+**Implication**: When editing SKILL.md, never add references to agent internals. Never read agent files (meta.md, thesis.md, antithesis.md) from SKILL.md. When editing agent files, don't worry about what SKILL.md knows — they run in separate contexts.
 
 ### Turn Order Is Enforced by Python, Not Prompts
 
@@ -32,22 +32,23 @@ the Python loop makes this structurally impossible.
 thesis-then-antithesis ordering in the main loop. Agent prompts no longer need
 turn-order instructions.
 
-### Process Isolation Is the Context Strategy
+### Context Isolation Is the Context Strategy
 
-Each workflow step runs in its own `claude -p` process. Within each step, the dialectic
+Each workflow step runs in its own Agent() subagent. Within each step, the dialectic
 runs via `python3 dialectic.py` which manages two `ClaudeSDKClient` sessions.
 
 ```
-MainOrchestrator → MetaAgent: claude -p subprocess (process boundary)
+MainOrchestrator → MetaAgent: Agent() subagent (context boundary)
 MetaAgent → Dialectic: python3 dialectic.py subprocess (process boundary)
 Dialectic → Thesis/Antithesis: ClaudeSDKClient stateful sessions (SDK boundary)
 ```
 
-Each boundary prevents context window contamination. Thesis and Antithesis maintain
-their own conversation history within a step (stateful sessions), but state dies
-between steps.
+Each boundary prevents context window contamination. MetaAgent returns ONLY a JSON
+summary to MainOrchestrator — no dialectic content flows back. Thesis and Antithesis
+maintain their own conversation history within a step (stateful sessions), but state
+dies between steps.
 
-**Implication**: Don't add mechanisms that share state between steps except through explicit files (DELIVERABLE.md, PROGRESS.md, step output files). In-memory state dies with each process.
+**Implication**: Don't add mechanisms that share state between steps except through explicit files (DELIVERABLE.md, PROGRESS.md, step output files). In-memory state dies with each subagent.
 
 ### Scope Prohibition Is a Behavioral Guardrail
 
@@ -97,8 +98,10 @@ If review misses these, improve the review lenses — don't add defensive guards
 ## Common Mistakes When Editing This Repo
 
 - **Adding implementation details to SKILL.md** — breaks information hiding
+- **Reading agent files from SKILL.md** — breaks information hiding; Agent() prompt references meta.md by path only
 - **Making convergence depend on round count** — produces shallow consensus
 - **Bypassing dialectic.py** — MetaAgent must never spawn thesis/antithesis via `Agent()` directly; always use `Bash(python3 dialectic.py ...)`
+- **Using Bash(claude -p) instead of Agent()** — causes timeout, JSON parsing, and empty output failures
 - **Editing workflow files without updating manifest.md** — MainOrchestrator sees only the manifest
 - **Adding codebase-reading logic to SKILL.md** — breaks scope prohibition
-- **Writing instructions that assume shared context between steps** — each step is a fresh process
+- **Writing instructions that assume shared context between steps** — each step is a fresh subagent
