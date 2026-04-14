@@ -223,6 +223,7 @@ MetaAgent does not edit them directly.
 | `step-config.json` | MetaAgent | Engine input: prompt paths, goals, model, convergence_model |
 | `round-{N}-thesis.md` | Engine | Thesis's response that round (full text) |
 | `round-{N}-antithesis.md` | Engine | Antithesis's response that round (full text) |
+| `dialogue.md` | Engine | Unified conversation transcript across all rounds |
 | `deliverable.md` | Engine | The converged output for this step |
 
 Retry runs create parallel directories (`step-{id}-{slug}-retry-{N}/`) — prior logs are preserved.

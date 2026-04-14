@@ -57,11 +57,13 @@ Both use the **inverted convergence model**: thesis attacks/executes, antithesis
 | Domain | 테스트 Requirements |
 |--------|---------------------|
 | `web-frontend` | Unit tests + Playwright navigation + screenshots + visual/behavioral evaluation |
-| `web-backend-with-ui` | Unit tests + integration tests + Playwright smoke test of any served pages |
 | `web-backend` / `api` | Unit tests + integration tests hitting actual endpoints |
 | `cli` | Unit tests + subprocess execution tests with real args |
 | `library` | Unit tests + usage-example verification |
 | `mobile` | Unit tests + (platform-specific) emulator smoke test if tooling available |
+| `monorepo` | Per-package unit tests + cross-package integration tests + build isolation check (each package builds independently) |
+| `data-pipeline` | Unit tests on transform functions + idempotency check (run twice, same result) + schema validation against sample data |
+| `iac-infra` | `terraform validate` / `terraform plan` (or equivalent) + lint (`tflint`, `checkov`) + dry-run showing expected resource changes |
 | `unknown` | Unit tests + whatever execution the project's build tooling provides |
 
 For web projects, Playwright MCP tools (`mcp__plugin_playwright_playwright__*`) are the
@@ -176,6 +178,9 @@ Priority order for selecting an angle:
    | `cli` | error messages → edge inputs → help clarity → shell compatibility |
    | `library` | API ergonomics → documentation → error types → composability |
    | `mobile` | responsiveness → offline states → deep-link coverage → performance |
+   | `monorepo` | cross-package consistency → dependency alignment → build isolation → shared-config drift |
+   | `data-pipeline` | idempotency → schema evolution → failure recovery → observability |
+   | `iac-infra` | drift detection → blast radius → secret management → rollback safety |
    | `unknown` | correctness depth → readability → simplification → naming |
 
 3. **Fallback**: "general code quality polish"

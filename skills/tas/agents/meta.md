@@ -62,6 +62,7 @@ You receive your assignment as the Agent prompt. Parse these fields:
 | `PLAN` | conditional | JSON array of approved steps (execute mode) |
 | `LOOP_COUNT` | conditional | Integer ≥1, max iterations user approved (execute mode) |
 | `LOOP_POLICY` | conditional | JSON: `reentry_point`, `early_exit_on_no_improvement`, `persistent_failure_halt_after` |
+| `FOCUS_ANGLE` | no | Externally specified focus angle for iteration 2+ (overrides self-selection in Phase 2b) |
 
 ### Mode Detection
 
@@ -81,7 +82,8 @@ If `PROJECT_ROOT` is provided, briefly scan for project indicators — do NOT de
 
 - Package files: `package.json`, `Cargo.toml`, `go.mod`, `pyproject.toml`, `Gemfile`
 - Framework signals: Next.js / React / Vue (from package.json), Django / Rails, Flutter (`pubspec.yaml`)
-- Domain heuristic: `web-frontend` / `web-backend` / `api` / `library` / `cli` / `mobile` / `unknown`
+- Workspace structure: multiple `package.json` / `go.mod` at different depths (monorepo), `dags/` or pipeline configs (data-pipeline), `*.tf` / `*.hcl` / CloudFormation / Pulumi (iac-infra)
+- Domain heuristic: `web-frontend` / `web-backend` / `api` / `library` / `cli` / `mobile` / `monorepo` / `data-pipeline` / `iac-infra` / `unknown`
 
 This scan informs the testing strategy (e.g., web projects may need Playwright UI testing).
 
@@ -227,7 +229,13 @@ If the user set reentry to `기획`, the full flow runs every iteration (full re
 #### Phase 2b: Select Focus Angle (Iteration 2+)
 
 For iteration 2+, select a **focus angle** — the perspective this iteration will apply
-to push beyond the previous iteration's PASS. Priority order:
+to push beyond the previous iteration's PASS.
+
+**External override**: If `FOCUS_ANGLE` was provided in the input and has not already been
+used (not in `focus_angles_used`), use it as this iteration's focus angle and skip the
+selection logic below. Record it in `focus_angles_used` as normal.
+
+Priority order (when no external override):
 
 1. **Carry-over from antithesis**: if prior iterations produced `Non-blocking Observations`,
    pick the most impactful one as this iteration's focus
@@ -237,6 +245,10 @@ to push beyond the previous iteration's PASS. Priority order:
    - `api` / `web-backend`: error handling → input validation → observability → performance
    - `cli`: error messages → edge inputs → help clarity → shell compatibility
    - `library`: API ergonomics → documentation → error types → composability
+   - `monorepo`: cross-package consistency → dependency alignment → build isolation → shared-config drift
+   - `data-pipeline`: idempotency → schema evolution → failure recovery → observability
+   - `iac-infra`: drift detection → blast radius → secret management → rollback safety
+   - `mobile`: responsiveness → offline states → deep-link coverage → performance
    - other/unknown: correctness depth → readability → simplification → naming
 3. **Fallback**: "general code quality polish"
 
@@ -355,7 +367,7 @@ For each step, build the config the Python engine consumes.
 
 5. **Testing-specific context injection** (테스트 step only):
 
-   If `project_domain` in `["web-frontend", "web-backend-with-ui"]`:
+   If `project_domain` in `["web-frontend"]`:
    ```
    ## Testing Strategy
    This is a web project. Testing must include BOTH:

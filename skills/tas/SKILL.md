@@ -172,14 +172,33 @@ Or for trivial requests that reached Classify:
 ### Handle User Response
 
 - **승인** → Initialize workspace, → Phase 2
-- **반복 횟수 조정 요청** (예: "3번 반복해줘", "한 번만"):
+- **반복 횟수 조정** (예: "3번 반복해줘", "한 번만"):
   - Parse the new `loop_count` integer from user text
   - Update the plan JSON in place (no re-classify needed)
   - Re-display plan with the adjusted loop_count
-- **재진입 지점 조정 요청** (예: "기획부터 다시", "구현만 반복"):
+- **재진입 지점 조정** (예: "기획부터 다시", "구현만 반복"):
   - Update `loop_policy.reentry_point` to `기획` or `구현` accordingly
   - Re-display plan
-- **단계 구성 수정 요청** → Re-invoke classify with the user's adjustment hint, → Display Plan again
+- **Pass criteria 수정** (예: "검증에서 성능 기준 추가해줘", "기획 pass criteria를 ~로 변경"):
+  - Identify the target step by name from user text
+  - Replace or append to that step's `pass_criteria` array
+  - Re-display plan (no re-classify needed)
+- **스텝 삭제** (예: "테스트 단계 빼줘", "기획 생략"):
+  - Remove the named step from `steps` array
+  - Re-number remaining step IDs sequentially
+  - Re-display plan
+- **스텝 추가** (예: "검증 후에 보안 점검 단계 추가해줘"):
+  - Insert new step after the named anchor step with user-specified goal
+  - Assign `pass_criteria: ["사용자 지정"]` (user will refine)
+  - Re-number step IDs sequentially
+  - Re-display plan
+- **Focus angle 사전 지정** (예: "성능 관점으로 리뷰해줘", "보안 중심으로"):
+  - Add `focus_angle` field to the plan JSON root: `"focus_angle": "{user-specified angle}"`
+  - This is passed to MetaAgent Execute and influences iteration focus
+  - Re-display plan
+- **복합 수정** (여러 조정 동시 요청):
+  - Apply all modifications sequentially, then re-display once
+- **단계 구성 대폭 변경** → Re-invoke classify with the user's adjustment hint, → Display Plan again
 - **거부** → Done
 
 ---
@@ -211,6 +230,7 @@ COMPLEXITY: {complexity from classify}
 PLAN: {steps array JSON from classify}
 LOOP_COUNT: {loop_count from classify, possibly adjusted by user}
 LOOP_POLICY: {loop_policy JSON from classify, possibly adjusted}
+FOCUS_ANGLE: {focus_angle from plan, if user specified; omit line otherwise}
 
 Return ONLY the JSON result line.",
   mode: "bypassPermissions",
@@ -291,12 +311,59 @@ Workspace artifacts (if any): {workspace}
 
 ## Error Handling
 
-| Failure | Detection | Recovery |
-|---------|-----------|----------|
-| Agent response is not valid JSON | JSON parse failure | Display raw response, report error |
-| Agent returned empty response | Zero-length result | Retry once, then report error |
-| Agent tool error | Agent reports internal failure | Report to user, offer retry |
-| Any MetaAgent failure | Any of the above | **NEVER fall back to direct implementation. Report error and offer: retry / abort.** |
+**NEVER fall back to direct implementation on any error. Report and offer: retry / abort.**
+
+### Error Classification
+
+When MetaAgent invocation fails, classify the error and present structured recovery:
+
+**Type A — JSON Parse Failure** (Agent returned text but not valid JSON):
+```
+⚠ MetaAgent 응답을 파싱할 수 없습니다.
+원인: JSON 형식이 아닌 응답 반환
+로그: {workspace}/ 디렉토리에서 상세 확인 가능
+
+→ 재시도 / 중단
+```
+
+**Type B — Agent Timeout or Empty Response** (zero-length result or Agent() hung):
+```
+⚠ MetaAgent 응답 없음 (타임아웃 또는 빈 응답).
+원인: 요청 복잡도 대비 처리 시간 초과 가능성
+
+→ 재시도 / 복잡도 하향 (스텝 축소) 후 재시도 / 중단
+```
+If user chooses complexity downgrade: re-invoke Classify with hint "simplify to fewer steps".
+
+**Type C — Dialectic Abnormal Exit** (Agent returned JSON with `status: "halted"` or error indicators):
+```
+⚠ Dialectic 비정상 종료.
+중단 지점: {halted_at}
+사유: {halt_reason}
+로그: {workspace}/ — 해당 스텝의 dialogue.md에서 중단 경위 확인 가능
+
+→ 재시도 (MetaAgent가 중단 지점부터 재개 시도) / 중단
+```
+
+**Type D — SDK Not Installed** (Agent response contains "ModuleNotFoundError" or "claude_agent_sdk"):
+```
+⚠ claude-agent-sdk가 설치되지 않았습니다.
+설치 명령:
+  pip install claude-agent-sdk
+  또는: pipx install claude-agent-sdk
+
+설치 후 다시 시도해주세요.
+```
+
+### Detection Priority
+
+| Priority | Check | Error Type |
+|----------|-------|------------|
+| 1 | Response contains "ModuleNotFoundError" or "claude_agent_sdk" | Type D |
+| 2 | Response is empty or zero-length | Type B |
+| 3 | Response is non-empty but JSON parse fails | Type A |
+| 4 | JSON parsed but `status` is "halted" | Type C |
+| 5 | Any other Agent() failure | Type B (default) |
 
 ---
 

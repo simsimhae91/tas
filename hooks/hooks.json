@@ -1,0 +1,27 @@
+{
+  "description": "tas plugin hooks — environment preflight and deliverable integrity guard",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "test -n \"${CLAUDE_PLUGIN_ROOT:-}\" && test -f \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh\" && bash \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh\" || true",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "test -n \"${CLAUDE_PLUGIN_ROOT:-}\" && test -f \"${CLAUDE_PLUGIN_ROOT}/hooks/stop-check.sh\" && bash \"${CLAUDE_PLUGIN_ROOT}/hooks/stop-check.sh\" || true",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

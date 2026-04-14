@@ -120,7 +120,7 @@ The 테스트 step adapts to project domain (detected during classify):
 
 | Domain | Strategy |
 |--------|----------|
-| `web-frontend` / `web-backend-with-ui` | Unit tests + Playwright navigation + screenshots + UI/UX evaluation |
+| `web-frontend` | Unit tests + Playwright navigation + screenshots + UI/UX evaluation |
 | `web-backend` / `api` | Unit tests + integration tests against real endpoints |
 | `cli` | Unit tests + subprocess execution with real args |
 | `library` | Unit tests + usage-example verification |

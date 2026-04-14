@@ -133,15 +133,36 @@ _VERDICT_PATTERNS = [
     ),
     re.compile(r"\*\*Response\*\*:\s*(ACCEPT|REFINE|COUNTER|HALT)", re.IGNORECASE),
     re.compile(r"Response:\s*(ACCEPT|REFINE|COUNTER|HALT)", re.IGNORECASE),
+    # Inverted-mode judgment (검증/테스트): antithesis.md outputs "## Judgment: PASS/FAIL"
+    re.compile(r"##\s*Judgment:\s*(PASS|FAIL)", re.IGNORECASE),
+    re.compile(r"\*\*Judgment\*\*:\s*(PASS|FAIL)", re.IGNORECASE),
+    # Korean verdict phrasing (e.g., "판정: ACCEPT", "## 판정: PASS")
+    re.compile(r"판정:\s*(ACCEPT|REFINE|COUNTER|HALT|PASS|FAIL)", re.IGNORECASE),
+    # Standalone bold verdict on its own line (e.g., "**ACCEPT**")
+    re.compile(
+        r"^\*\*(ACCEPT|REFINE|COUNTER|HALT)\*\*\s*$",
+        re.MULTILINE | re.IGNORECASE,
+    ),
 ]
+
+# Map inverted-mode verdicts to engine control-flow verdicts
+_VERDICT_ALIASES: dict[str, str] = {
+    "PASS": "ACCEPT",
+    "FAIL": "REFINE",
+}
 
 
 def parse_verdict(response: str) -> str:
-    """Extract verdict (ACCEPT/REFINE/COUNTER/HALT) from antithesis response."""
+    """Extract verdict (ACCEPT/REFINE/COUNTER/HALT) from antithesis response.
+
+    Also handles inverted-mode outputs where PASS→ACCEPT and FAIL→REFINE,
+    Korean phrasings (판정:), and standalone bold verdicts.
+    """
     for pattern in _VERDICT_PATTERNS:
         m = pattern.search(response)
         if m:
-            return m.group(1).upper()
+            raw = m.group(1).upper()
+            return _VERDICT_ALIASES.get(raw, raw)
     return "UNKNOWN"
 
 
@@ -391,5 +412,59 @@ def main() -> None:
     print(json.dumps(result), flush=True)
 
 
+def _self_test() -> None:
+    """Minimal parse_verdict regression tests. Run via: python3 dialectic.py --self-test"""
+    cases: list[tuple[str, str]] = [
+        # Standard verdicts
+        ("## Response: ACCEPT", "ACCEPT"),
+        ("## Response: REFINE", "REFINE"),
+        ("## Response: COUNTER", "COUNTER"),
+        ("## Response: HALT", "HALT"),
+        # Bold response
+        ("**Response**: ACCEPT", "ACCEPT"),
+        # Plain response
+        ("Response: REFINE", "REFINE"),
+        # Inverted-mode judgments (PASS→ACCEPT, FAIL→REFINE)
+        ("## Judgment: PASS", "ACCEPT"),
+        ("**Judgment**: FAIL", "REFINE"),
+        # Korean phrasing
+        ("판정: ACCEPT", "ACCEPT"),
+        ("판정: PASS", "ACCEPT"),
+        ("판정: FAIL", "REFINE"),
+        # Standalone bold
+        ("**ACCEPT**", "ACCEPT"),
+        ("**HALT**", "HALT"),
+        # Case insensitivity
+        ("## Response: accept", "ACCEPT"),
+        ("## Judgment: pass", "ACCEPT"),
+        # No verdict → UNKNOWN
+        ("This is just a regular message with no verdict.", "UNKNOWN"),
+        ("Some discussion about the code.", "UNKNOWN"),
+        # Verdict embedded in longer text
+        ("I think the code is good.\n\n## Response: ACCEPT\n\nGreat work.", "ACCEPT"),
+    ]
+
+    passed = 0
+    failed = 0
+    for text, expected in cases:
+        result = parse_verdict(text)
+        if result == expected:
+            passed += 1
+        else:
+            failed += 1
+            preview = text[:60].replace("\n", "\\n")
+            print(f"  FAIL: parse_verdict({preview!r}...) = {result!r}, expected {expected!r}")
+
+    total = passed + failed
+    if failed:
+        print(f"FAIL: {passed}/{total} passed, {failed} failed")
+        sys.exit(1)
+    else:
+        print(f"PASS: {total}/{total} tests passed")
+
+
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) == 2 and sys.argv[1] == "--self-test":
+        _self_test()
+    else:
+        main()
