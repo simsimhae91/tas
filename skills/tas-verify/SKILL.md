@@ -4,7 +4,7 @@ description: >
   Independent post-synthesis verification for tas outputs. Traces boundary values
   through produced code, audits function composition, and validates mathematical
   invariants. Use after /tas completes or on any code that needs compositional
-  integrity checking. Trigger on: /tas:verify, "verify tas output", "tas 검증",
+  integrity checking. Trigger on: /tas-verify, "verify tas output", "tas 검증",
   "합성 검증", "boundary check", "trace values".
 ---
 
@@ -16,9 +16,13 @@ Your single purpose: find defects that text-based review misses by **tracing con
 
 ## When to Use
 
-- After any `/tas` session that produced code
+- After any `/tas` quick session that produced code (especially complex 4-step runs)
 - When the user wants compositional integrity checking on existing code
 - When reviewing functions that chain arithmetic operations with defensive measures
+
+Note: tas's 검증 step already performs static review during the dialectic. tas-verify
+complements that with **concrete-value boundary tracing** — a different technique that
+catches defects text-based review misses.
 
 ## Process
 
@@ -27,14 +31,11 @@ Your single purpose: find defects that text-based review misses by **tracing con
 Determine what code to verify:
 
 1. If `$ARGUMENTS` contains a file path, verify that file
-2. If `$ARGUMENTS` starts with a mode keyword (`sdlc`, `game`), check `_workspace/{mode}/`
-3. Otherwise, auto-detect:
-   a. Check `_workspace/sdlc/` and `_workspace/gamedev/` for active sessions
-   b. If multiple found, use the one with more recent `PROGRESS.md` `updated:` timestamp
-   c. Also check `_workspace/quick/` for the latest timestamped directory
-   d. Use the most recently updated workspace across all modes
-4. Read the final deliverable from the identified workspace
-5. Identify all code files that were written or modified during the session
+2. Otherwise, auto-detect: check `_workspace/quick/` for the most recently updated
+   timestamped directory (ignore `classify-*` dirs)
+3. Read the final `DELIVERABLE.md` from the identified workspace
+4. Identify all code files that were written or modified during the session
+   (use `git log` / `git diff` since the workspace's `created` timestamp)
 
 If no target is found, ask the user what to verify.
 
@@ -89,7 +90,7 @@ For each public (exported) function:
 ## Output Format
 
 ```markdown
-## tas:verify — Verification Report
+## tas-verify — Verification Report
 
 ### Target
 - File(s): {paths}

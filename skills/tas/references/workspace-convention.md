@@ -1,462 +1,294 @@
 # Workspace Convention
 
-This document defines the directory structure, file formats, naming rules, and state management
-conventions used by tas's per-step session architecture. All workflow files, MetaAgent, and
-MainOrchestrator reference this document as the single source of truth for workspace layout.
+This document defines the directory structure, file formats, and naming rules used by tas.
+MainOrchestrator, MetaAgent, and the dialectic engine all reference this as the single
+source of truth for workspace layout.
 
 ---
 
 ## Directory Structure
 
-### Top-Level Layout
-
-Workspaces are organized by **mode** — the first argument to `/tas`:
-
 ```
 _workspace/
-  sdlc/                                         ← active SDLC pipeline (stable path)
-    REQUEST.md                                   ← original user request
-    PROGRESS.md                                  ← main-level progress log
-    P1-analysis/
-      S01-{step-slug}.md                         ← step output (rounds + final output)
-      S02-{step-slug}.md
-      ...
-      logs/                                      ← agent dialogue audit trail
-        S01/
-          round-1-thesis.md
-          round-1-antithesis.md
-          round-2-thesis.md
-          round-2-antithesis.md
-        S02/
-          ...
-      DELIVERABLE.md                             ← phase exit contract
-    P2-planning/
-    P3-solutioning/
-    P4-implementation/
-      S01-sprint-planning.md
-      S02-scaffold.md
-      batch-1/
-        {story-id}/
-          S03-create-story.md
-          S04-dev-story.md
-          S05-qa-story.md
-          S06-review-story.md
-        {story-id}/
-          ...
-      batch-2/
-        ...
-      S07-e2e-qa.md
-      DELIVERABLE.md
-  gamedev/                                       ← active GameDev pipeline (stable path)
-    REQUEST.md
-    PROGRESS.md
-    P1-preproduction/
-    P2-design/
-    P3-technical/
-    P4-production/
-      ...
-  quick/                                         ← quick mode runs (timestamped)
+  quick/                                      ← all runs (timestamped for isolation)
     {YYYYmmdd_HHMMSS}/
-      DELIVERABLE.md
-      ...
-  archive/                                       ← completed/abandoned pipelines
-    sdlc-{YYYYmmdd_HHMMSS}/
-    gamedev-{YYYYmmdd_HHMMSS}/
+      REQUEST.md                                ← original user request
+      DELIVERABLE.md                            ← final cross-iteration synthesis
+      lessons.md                                ← lessons learned, appended per iteration
+      iteration-1/
+        DELIVERABLE.md                          ← this iteration's synthesized output
+        logs/
+          step-1-plan/
+            thesis-system-prompt.md
+            antithesis-system-prompt.md
+            step-config.json
+            round-1-thesis.md
+            round-1-antithesis.md
+            round-2-thesis.md
+            ...
+            deliverable.md                      ← per-step converged output
+          step-1-plan-retry-1/                  ← within-iteration FAIL retry
+            ...
+          step-2-implement/
+          step-3-verify/
+          step-4-test/
+      iteration-2/                              ← only if loop_count > 1
+        DELIVERABLE.md
+        logs/
+          step-2-implement/                     ← reentry_point onwards; 기획 skipped by default
+          step-3-verify/
+          step-4-test/
+      iteration-3/
+        ...
+    classify-{YYYYmmdd_HHMMSS}/                 ← classify-mode validation logs (complex only)
+      logs/validation/
+        ...
 ```
 
-### Mode-Based Workspace Semantics
-
-| Mode | Invocation | Path | Timestamp | Resume |
-|------|-----------|------|-----------|--------|
-| SDLC pipeline | `/tas sdlc {request}` | `_workspace/sdlc/` | No (stable) | Yes |
-| GameDev pipeline | `/tas game {request}` | `_workspace/gamedev/` | No (stable) | Yes |
-| Quick (default) | `/tas {request}` | `_workspace/quick/{timestamp}/` | Yes (isolation) | No |
-
-Pipeline workspaces use **stable paths** — the mode parameter is the identity.
-Only one active session per mode per project. Resume is free (deterministic path lookup).
-Quick mode uses timestamps for isolation across multiple independent runs.
+Every run is timestamp-isolated. There is no "resume" mechanism — each `/tas` invocation
+produces a fresh workspace. For long-lived project context, use a separate tool outside tas.
 
 ### Naming Rules
 
 | Element | Pattern | Example |
 |---------|---------|---------|
-| Pipeline workspace | `{mode}/` | `sdlc/`, `gamedev/` |
-| Quick workspace | `quick/{timestamp}/` | `quick/20260408_140000/` |
-| Archive entry | `archive/{mode}-{timestamp}/` | `archive/sdlc-20260408_140000/` |
-| Phase directory | `P{N}-{slug}` | `P1-analysis`, `P3-solutioning` |
-| Step output file | `S{NN}-{slug}.md` | `S01-idea-enrichment.md` |
-| Phase deliverable | `DELIVERABLE.md` | (always this exact name) |
-| Progress log | `PROGRESS.md` | (always this exact name) |
-| Original request | `REQUEST.md` | (always this exact name) |
-| Batch directory | `batch-{N}` | `batch-1`, `batch-2` |
-| Story directory | `{story-id}` | `AUTH-001`, `DATA-002` |
+| Run workspace | `quick/{timestamp}/` | `quick/20260414_143000/` |
+| Classify workspace | `quick/classify-{timestamp}/` | `quick/classify-20260414_142958/` |
+| Iteration dir | `iteration-{N}/` | `iteration-1/`, `iteration-2/` |
+| Step log dir | `iteration-{N}/logs/step-{id}-{slug}/` | `iteration-1/logs/step-2-implement/` |
+| Within-iter retry dir | `step-{id}-{slug}-retry-{N}/` | `step-3-verify-retry-1/` |
+| Final cross-iter deliverable | `{workspace}/DELIVERABLE.md` | (always exact) |
+| Per-iteration deliverable | `iteration-{N}/DELIVERABLE.md` | (always exact) |
+| Lessons log | `lessons.md` | (always exact, at workspace root) |
+| Original request | `REQUEST.md` | (always exact) |
 
-- Phase `N`: 1-indexed, matches pipeline phase order
-- Step `NN`: 01-padded, unique within phase
-- Slugs: English kebab-case, 1:1 match with step names in workflow files
-- Story IDs: match story spec filenames (e.g., `AUTH-001` from `stories/AUTH-001-login-flow.md`)
-- Timestamp format: `YYYYmmdd_HHMMSS` (e.g., `20260408_140000`)
+- Iteration `N`: 1-indexed, incremented per full plan pass
+- Step `id`: as assigned in the classify plan (1-indexed)
+- `slug`: kebab-case English derived from step name (기획 → `plan`, 구현 → `implement`, 검증 → `verify`, 테스트 → `test`)
+- `timestamp`: `YYYYmmdd_HHMMSS` (e.g., `20260414_143000`)
 
 ---
 
-## Step Output File Format
+## Top-Level DELIVERABLE.md Format (cross-iteration synthesis)
 
-Each step produces exactly one output file at its designated path. This file serves dual purpose:
-checkpoint during execution (tracks rounds) and final deliverable after convergence.
-
-### During Execution (IN_PROGRESS)
+Written by MetaAgent after the iteration loop terminates (naturally, by early-exit,
+or on HALT). Summarizes all iterations and references the final artifact.
 
 ```markdown
 ---
-phase: P{N}-{slug}
-step: S{NN}-{slug}
-status: IN_PROGRESS
-rounds_completed: {N}
----
-
-# Round 1
-
-## Thesis
-{thesis full output — position, reasoning, self-assessment}
-
-## Antithesis
-{antithesis full response — evaluation, response type, contentions}
-
-## Round Result: {COUNTER | REFINE | ACCEPT}
-
----
-
-# Round 2
-
-## Thesis
-{revised thesis output}
-
-## Antithesis
-{antithesis re-evaluation}
-
-## Round Result: {COUNTER | REFINE | ACCEPT}
-
----
-```
-
-Round content is saved in full during execution to enable session resume.
-`rounds_completed` is incremented after each complete round (both thesis and antithesis).
-
-### After Convergence (DONE)
-
-```markdown
----
-phase: P{N}-{slug}
-step: S{NN}-{slug}
-status: DONE
-rounds_completed: {N}
-convergence_reason: "{one-line summary of why convergence was reached}"
----
-
-# Rounds
-
-## Round 1: {COUNTER | REFINE}
-Thesis: {1-2 sentence summary}
-Antithesis: {1-2 sentence summary of response}
-
-## Round 2: {ACCEPT}
-Thesis: {1-2 sentence summary}
-Antithesis: {1-2 sentence summary}
-
----
-
-# Output
-
-{final deliverable content — the primary artifact of this step}
-
----
-
-## Next Step Input
-
-{structured summary of what the next step must consume —
- extracted key information, not the full output}
-```
-
-After convergence, round content is **compressed to summaries**. The full content is no longer
-needed (it served its checkpoint purpose). The `# Output` section contains the complete deliverable.
-
-### On HALT
-
-```markdown
----
-phase: P{N}-{slug}
-step: S{NN}-{slug}
-status: HALTED
-rounds_completed: {N}
-halt_reason: "{circular_argumentation | external_contradiction | missing_information | scope_escalation}"
----
-
-# Rounds
-{round summaries as above}
-
----
-
-# Partial Output
-
-{best available output at time of halt}
-
----
-
-# Halt Report
-
-## Reason
-{detailed explanation of why convergence was not reached}
-
-## Final Positions
-- **Thesis**: {final thesis position summary}
-- **Antithesis**: {final antithesis position summary}
-
-## MetaAgent Assessment
-{which position is stronger and why, recommended resolution}
-```
-
----
-
-## PROGRESS.md Format
-
-The progress log tracks overall project state. MainOrchestrator reads this on startup to
-determine resume point. The `classify_plan` field stores the original execution plan from
-MetaAgent's classify mode, enabling resume without re-classification.
-
-```markdown
----
-pipeline: {sdlc | gamedev}
-request_file: REQUEST.md
-classify_plan: |
-  {"command":"classify","mode":"pipeline","pipeline":"...","phases":[...],"context_strategy":"..."}
-context_strategy: {deliverable | codebase}
-created: {ISO 8601 timestamp}
-updated: {ISO 8601 timestamp}
-current: {phase-id/S{NN}-{slug}}
----
-
-# {phase-id from classify plan}
-
-| Step | Status | Output | Updated |
-|------|--------|--------|---------|
-| S01-{slug} | DONE | {phase-id}/S01-{slug}.md | {timestamp} |
-| S02-{slug} | RUNNING | | {timestamp} |
-| S03-{slug} | PENDING | | |
-
-# {next phase-id from classify plan}
-
-| Step | Status | Output | Updated |
-|------|--------|--------|---------|
-| S01-{slug} | PENDING | | |
-| ... | | | |
-```
-
-**Partial pipeline**: Only phases and steps from the classify plan appear in PROGRESS.md.
-Phases not selected by classify are simply absent — not marked SKIPPED.
-
-### Context Strategy
-
-| Value | Meaning | When used |
-|-------|---------|-----------|
-| `deliverable` | Use previous phase's DELIVERABLE.md as context | Full pipeline, standard flow |
-| `codebase` | MetaAgent reads project source directly for context | Partial pipeline, existing project modification |
-
-For `codebase` strategy, the first phase receives `PHASE_CONTEXT: CODEBASE` instead of
-deliverable content. MetaAgent then reads relevant project files during step execution.
-
-### Phase 4 with Story Pipelines
-
-```markdown
-# P4-implementation
-
-| Step | Status | Output | Updated |
-|------|--------|--------|---------|
-| S01-sprint-planning | DONE | P4-.../S01-sprint-planning.md | ... |
-| S02-scaffold | DONE | P4-.../S02-scaffold.md | ... |
-| batch-1/AUTH-001/S03-create-story | DONE | ... | ... |
-| batch-1/AUTH-001/S04-dev-story | DONE | ... | ... |
-| batch-1/AUTH-001/S05-qa-story | SKIPPED | | |
-| batch-1/AUTH-001/S06-review-story | DONE | ... | ... |
-| batch-1/DATA-001/S03-create-story | RUNNING | | ... |
-| S07-e2e-qa | PENDING | | |
-```
-
-### Status Values
-
-| Status | Meaning | Transition |
-|--------|---------|------------|
-| `PENDING` | Not started | → RUNNING |
-| `RUNNING` | Session in progress | → DONE, HALTED |
-| `DONE` | Converged successfully | Terminal |
-| `HALTED` | Stopped, needs intervention | → RUNNING (retry) |
-| `SKIPPED` | Conditionally skipped | Terminal |
-
-### Resume Logic (MainOrchestrator)
-
-Resume is triggered by the **PIPELINE_HINT** or existing workspace detection.
-For pipeline mode, the hint determines the workspace path deterministically.
-For resumed sessions, `classify_plan` in PROGRESS.md provides the execution plan
-without re-invoking MetaAgent classify.
-
-```
-1. User invokes /tas [hint] {request}
-2. If hint present: check _workspace/{hint}/PROGRESS.md
-3. PROGRESS.md found:
-   a. Parse error → warn user, offer: Repair / New
-   b. Has incomplete steps → offer Resume / New
-      - Resume → load classify_plan from PROGRESS.md, find first non-terminal step
-      - New → archive old workspace, invoke classify for fresh plan
-   c. All terminal (DONE/SKIPPED) → offer View results / New / Quick dev
-4. PROGRESS.md not found → invoke classify for fresh plan
-```
-
-**Within a resumed session**, step-level resume is unchanged:
-
-```
-1. Find first non-terminal step (not DONE, not SKIPPED):
-   a. RUNNING → check step output file:
-      - output exists with status: DONE → mark DONE in PROGRESS, move to next
-      - output exists with status: IN_PROGRESS → re-invoke step (Meta resumes from checkpoint)
-      - output missing → reset to PENDING, start fresh
-   b. PENDING → start this step
-   c. HALTED → report to user, offer retry or skip
-2. Update PROGRESS.md before and after each step invocation
-```
-
-### Archive Convention
-
-When the user starts a new pipeline while an existing workspace exists,
-the old workspace is moved to `_workspace/archive/`:
-
-```
-mkdir -p _workspace/archive
-mv _workspace/{mode} _workspace/archive/{mode}-{timestamp}
-mkdir -p _workspace/{mode}
-```
-
-Archive entries are read-only references. They are not resumable.
-The archive directory is never auto-cleaned — users manage it manually.
-
-Quick mode workspaces (`_workspace/quick/`) accumulate and are not archived.
-
----
-
-## DELIVERABLE.md Format
-
-Written by MetaAgent at the last step of each phase. Contains the phase exit contract —
-the structured handoff for the next phase.
-
-```markdown
----
-phase: P{N}-{slug}
-pipeline: {sdlc | gamedev}
-next_phase: P{N+1}-{slug}
+request_type: {implement | design | review | refactor | analyze}
+complexity: {simple | medium | complex}
+status: {completed | halted}
+iterations_planned: {LOOP_COUNT}
+iterations_executed: {actual count}
+early_exit: {true | false}
+rounds_total: {sum across all iterations and steps}
 created: {ISO 8601 timestamp}
 ---
 
-# Phase {N} Deliverable: {Phase Name}
+# Dialectic Synthesis Report (정반합)
 
-## Summary
-{2-3 sentence summary of what this phase produced}
+## Request
+{REQUEST verbatim}
 
-## {Exit Contract Field 1}
-{content — as defined in sdlc-phases.md or gamedev-phases.md inter-phase contracts}
+## Iteration Summary
+| # | Focus | Outcome | Rounds | Key Improvement |
+|---|-------|---------|--------|-----------------|
+| 1 | baseline | completed | 9 | initial implementation |
+| 2 | UX polish | completed | 6 | keyboard nav + empty state |
+| 3 | edge cases | early-exit | 4 | (agents agreed no further) |
 
-## {Exit Contract Field 2}
-{content}
+## Final Deliverable
+{Content of the final iteration's DELIVERABLE.md — code summary + file list for
+ implement/refactor, or document for design/analyze}
 
-...
+## Lessons Learned
+See `lessons.md` — full iteration-by-iteration lesson log.
 
-## Key Decisions
-- {Decision 1}: {rationale}
-- {Decision 2}: {rationale}
+### Key Takeaways
+- {1-2 most important lessons from the whole run}
 
-## Deferred Items
-- {items explicitly deferred to later phases}
+## Unresolved Items
+{Blockers from HALT'd iterations, if any; otherwise "none"}
 ```
 
-The exact fields under the exit contract vary by phase and pipeline type. See:
-- `references/sdlc-phases.md` → Inter-Phase Deliverable Contracts
-- `references/gamedev-phases.md` → Inter-Phase Deliverable Contracts
+## Per-Iteration DELIVERABLE.md Format
 
-### Cross-Phase Reference Rule
+Written at the end of each iteration before lessons extraction.
 
-**Next phase's steps may ONLY read the previous phase's `DELIVERABLE.md`.**
-They must NOT directly reference individual step output files from the previous phase.
-This enforces clean phase boundaries and prevents context leakage.
+```markdown
+---
+iteration: {N}
+status: {completed | halted | blocked}
+focus_angle: {angle or "baseline (iteration 1)"}
+rounds_total: {sum across steps this iteration}
+within_iter_retries: {count of 구현 re-runs due to FAIL}
+created: {ISO 8601 timestamp}
+---
+
+# Iteration {N} Deliverable
+
+## Focus
+{focus_angle or "Baseline implementation"}
+
+## Steps Executed
+| # | 단계 | Outcome | Rounds |
+|---|------|---------|--------|
+| 2 | 구현 | CONVERGED | 3 |
+| 3 | 검증 | PASS | 2 |
+| 4 | 테스트 | PASS | 1 |
+
+## Deliverable
+{For implement/refactor: summary of code changes + file list}
+{For design/analyze/review: the synthesized document}
+
+## Non-blocking Observations (carry-over candidates)
+- {observation 1}
+- {observation 2}
+```
+
+## lessons.md Format
+
+Append-only log at `{workspace}/lessons.md`. Each iteration appends one section.
+
+```markdown
+## Iteration 1 (2026-04-14T14:30:00+09:00)
+
+### Focus Angle
+baseline
+
+### Concrete Improvements Made This Iteration
+- Initial implementation of {feature} with {approach}
+- {file list}
+
+### Blockers Resolved
+- (iteration 1: often none, unless within-iter retries occurred)
+
+### Patterns Observed
+- {design tension discovered}
+- {project convention adopted}
+
+### Open Observations (for future iterations)
+- Empty state rendering is minimal — could be improved
+- No keyboard shortcuts yet
+- API error states fall back to generic message
+
+### Rejected Alternatives
+- Redux for state — rejected: project already uses Zustand, preserving convention
+- Optimistic updates — rejected: would require undo infrastructure not in scope
 
 ---
 
-## Step Required/Optional Semantics
+## Iteration 2 (2026-04-14T14:45:00+09:00)
 
-Each workflow step is classified as **Required** or **Optional**:
+### Focus Angle
+UX polish
 
-- **Required**: Always executed. Cannot be skipped.
-- **Optional**: May be skipped based on project scope. Has a `Skip Condition`
-  describing when to skip.
+### Concrete Improvements Made This Iteration
+- Added Tab/Enter/Escape keyboard navigation
+- Polished empty state with illustration + CTA
+- Loading skeletons instead of spinner
 
-### Consistency Rules
+### Blockers Resolved
+- Focus trap missing in modal → added roving tabindex
 
-1. Required step's output → downstream may reference as `required:` or `optional:`
-2. Optional step's output → downstream must reference as **`optional:` only**
-3. Required steps must function correctly with only `required:` inputs
-4. DELIVERABLE.md exit contract fields sourced from optional steps may be marked
-   "Deferred" or "Not analyzed" when those steps were skipped
+### Patterns Observed
+- Tailwind's `focus-visible:` variant cleaner than custom focus rings
 
-### PROGRESS.md Handling
+### Open Observations (for future iterations)
+- Performance: large list re-renders on every keystroke
+- A11y: color contrast on disabled state not tested
 
-Optional steps excluded by the user are initialized as `SKIPPED` in PROGRESS.md:
+### Rejected Alternatives
+- Full rewrite to use Headless UI — rejected: too wide a blast radius for UX polish
 
+---
 ```
-| S02-tech-research | SKIPPED | | {timestamp} |
-```
 
-MainOrchestrator skips `SKIPPED` steps and proceeds to the next step.
-MetaAgent handles missing optional inputs by notifying agents that the
-corresponding research was not performed.
+Lessons are **cumulative** — never prune prior iterations' entries. The file grows as
+iterations proceed so later passes can see the full history. The next iteration's
+thesis/antithesis receive this file's contents in their step context.
 
 ---
 
-## Read Scope Rules
+## Per-Step Log Format
 
-Each workflow step defines its Read Scope — the explicit list of files MetaAgent may load
-and pass to thesis/antithesis agents.
+The Python dialectic engine writes these files under `iteration-{N}/logs/step-{id}-{slug}/`.
+MetaAgent does not edit them directly.
 
-### Rules
+| File | Producer | Content |
+|------|----------|---------|
+| `thesis-system-prompt.md` | MetaAgent | Thesis role + step assignment prompt |
+| `antithesis-system-prompt.md` | MetaAgent | Antithesis role + step briefing prompt |
+| `step-config.json` | MetaAgent | Engine input: prompt paths, goals, model, convergence_model |
+| `round-{N}-thesis.md` | Engine | Thesis's response that round (full text) |
+| `round-{N}-antithesis.md` | Engine | Antithesis's response that round (full text) |
+| `deliverable.md` | Engine | The converged output for this step |
 
-1. **Cross-phase**: Only `DELIVERABLE.md` from the immediately preceding phase
-2. **Within-phase**: Only step output files explicitly listed in the workflow's `Read Scope` section
-3. **Original request**: `REQUEST.md` is available to Phase 1 steps only
-4. **Phase 4 stories**: Each story pipeline step reads only files within its own story directory
-   (plus architecture/scaffold artifacts shared across all stories)
-
-### Enforcement
-
-MetaAgent enforces Read Scope by only loading listed files into thesis/antithesis context.
-This is a process-level enforcement (MetaAgent follows the rule), not filesystem-level.
+Retry runs create parallel directories (`step-{id}-{slug}-retry-{N}/`) — prior logs are preserved.
 
 ---
 
-## Workflow File Reference
+## Iteration & Retry Flow
 
-Step definitions live in workflow files under `skills/tas/workflows/`:
+### Within an iteration
 
-```
-workflows/
-  sdlc/
-    P1-analysis.md
-    P2-planning.md
-    P3-solutioning.md
-    P4-implementation.md
-  gamedev/
-    P1-preproduction.md
-    P2-design.md
-    P3-technical.md
-    P4-production.md
-```
+Steps execute sequentially. Each step's `deliverable.md` is appended to an in-memory
+`cumulative_context_this_iter` that is visible to downstream steps in the same iteration.
 
-Each workflow file defines all steps within a phase. MainOrchestrator reads the step list
-from the workflow file. MetaAgent reads the step details (goal, roles, criteria) from the
-workflow file at session start.
+On inverted step FAIL (검증/테스트):
 
-See individual workflow files for step-level definitions.
+1. Engine returns `{"verdict":"FAIL","blockers":[...]}`
+2. MetaAgent compares blockers to the previous FAIL of this step (within the iteration):
+   - Substantively identical → increment `consecutive_fail_count[step]`
+   - Different → reset counter to 1
+3. If `consecutive_fail_count[step] >= loop_policy.persistent_failure_halt_after`:
+   - HALT the iteration with `halt_reason: persistent_{verify|test}_failure`
+   - Break out of the step loop and proceed to iteration synthesis (Phase 2e)
+4. Otherwise:
+   - Build retry context: `## Required Fixes from {step name}\n{blockers}`
+   - Re-execute the **구현** step with retry context appended
+   - After successful re-구현, re-execute the failed check step
+   - Retries are logged as sibling dirs within the same iteration (`-retry-1`, `-retry-2`, ...)
+
+### Across iterations
+
+1. After iteration `i` completes, MetaAgent writes `iteration-{i}/DELIVERABLE.md`
+2. Lessons are extracted and appended to `{workspace}/lessons.md`
+3. Early-exit check: if agents signaled "no further improvement possible" and
+   `loop_policy.early_exit_on_no_improvement` is true → terminate loop
+4. Otherwise: iteration `i+1` begins
+   - Step subset = plan steps from `loop_policy.reentry_point` onwards (default: skip 기획)
+   - A **focus angle** is selected (see workflow-patterns.md)
+   - Improvement context includes: prior iteration's deliverable summary, full lessons.md
+     contents, and the chosen focus angle directive
+   - Thesis/antithesis receive this as part of their step_context
+
+Iteration-level HALT does NOT prevent the final DELIVERABLE.md from being written — the
+cross-iteration synthesis records partial progress and halt reason.
+
+---
+
+## Read Scope
+
+MetaAgent loads these into agent context per step:
+
+1. **Always**: `REQUEST.md`, accumulated prior step outputs (`cumulative_context`)
+2. **Project context**: `PROJECT_ROOT` path and domain hint from classify
+3. **Per step**: the step's goal and pass criteria
+4. **On retry**: the blockers from the failed check
+
+Agents have file access via their session — they may read project source directly when needed
+(ThesisAgent uses `bypassPermissions` mode for writes during 구현 step).
+
+---
+
+## Language Convention
+
+Output language defaults to **English**. Set to another language ONLY when the user explicitly
+requests a specific output language (e.g., "한국어로 작성해줘"). The language of the request
+itself does NOT determine output language — a Korean request with no explicit instruction
+means English output.
+
+Step names may use Korean (기획/구현/검증/테스트) internally for consistency with this
+document's terminology. The `slug` field converts them to English for file paths.

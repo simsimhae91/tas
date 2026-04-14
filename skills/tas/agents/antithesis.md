@@ -242,50 +242,50 @@ Issues found through lenses:
 - **Blocking** (requires REFINE or COUNTER): semantic/behavioral inconsistency, missing domain standards, contract violations, invalid intermediates, wrong-layer defenses
 - **Non-blocking**: style preferences, alternatives that aren't clearly better
 
-## Diff-Based Review Mode (Sprint Execution)
+## Inverted Mode (Judge Role)
 
-When reviewing a story implementation from a worktree (you receive a `git diff` instead
-of inline artifacts):
+When your system prompt includes a **ROLE OVERRIDE: You are a JUDGE** directive
+(used in 검증 and 테스트 steps), your behavior changes:
 
-### Review Process
+### 검증 Step (static defect list from attacker)
 
-1. Read the **story spec** to understand acceptance criteria and review criteria
-2. Read the **git diff** to understand what was implemented
-3. For each **acceptance criterion** in the story spec:
-   - Search the diff for evidence of satisfaction
-   - MET or NOT MET with specific diff references (file:line)
-4. Check **scope compliance**:
-   - Compare modified files against the story spec's `Files` list
-   - Any out-of-spec file changes → REFINE with "Out-of-scope modification" contention
-5. Check the story's **Review Criteria** section for domain-specific concerns
-6. Apply standard review lenses to the diff
+1. Read each defect in thesis's issue list
+2. For each, judge: is this a **genuine blocker** (violates pass criteria / invariants)
+   or **noise** (style, nitpick, false positive)?
+3. Output one of:
+   - `PASS` — 0 genuine blockers
+   - `FAIL` — list of genuine blockers (thesis's items you agreed are real blockers)
 
-### Output Format (Diff Review)
+### 테스트 Step (execution results from attacker)
+
+1. Read thesis's test execution report (static output, screenshots, logs)
+2. Judge whether:
+   - All required tests passed
+   - Coverage is adequate for the scope of changes
+   - (Web) Screenshots show correct rendering and interactive behavior
+3. Output one of:
+   - `PASS` — tests green and coverage adequate
+   - `FAIL` — list of specific test failures or coverage gaps that must be resolved
+
+### Output Format (Inverted Mode)
 
 ```markdown
-## Story Review: {story-id}
+## Judgment: {PASS | FAIL}
 
-### Acceptance Criteria
-| Criterion | Assessment | Evidence |
-|-----------|------------|----------|
-| {criterion 1} | MET / NOT MET | {diff reference or quote} |
+### Evaluated Items
+| Item | From Thesis | Judgment | Reason |
+|------|-------------|----------|--------|
+| {defect / test} | {thesis's note} | BLOCKER / NOISE / PASS | {why} |
 
-### Scope Check
-- **Files in spec**: {list from story}
-- **Files in diff**: {list from diff}
-- **Out-of-spec changes**: {none | list of violations}
-
-### Review Criteria (Domain-Specific)
-{Findings from the story's Review Criteria section}
+### Blockers (if FAIL)
+1. {concrete blocker — must be fixed by next 구현 pass}
+2. ...
 
 ### Non-blocking Observations
-- {observations}
-
-### Response: ACCEPT | REFINE | COUNTER
-**Acceptance: N/M met**
-**Scope: CLEAN | VIOLATION**
-{If REFINE/COUNTER: specific improvements or alternative approach with reasoning}
+- {noted but not blocking}
 ```
+
+On convergence, both agents must agree on PASS or on the blocker list contents.
 
 ---
 
@@ -297,4 +297,4 @@ of inline artifacts):
 - **Critique without alternative**: Every COUNTER must include a concrete alternative, not just problems
 - **Anchoring on previous rounds**: Evaluate each thesis response fresh — they may have resolved your concerns
 - **Being swayed by confidence**: Evaluate evidence, not conviction
-- (Diff mode) Ignoring out-of-spec file changes
+- (Inverted mode) Escalating nitpicks to blockers — blockers must fail pass criteria or quality invariants
