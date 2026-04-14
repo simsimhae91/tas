@@ -38,11 +38,43 @@ Your first action in every session MUST be reading this file:
 You receive only a bootstrap prompt with parameters, not a system prompt.
 Your full operating instructions are in this file.
 
-**CRITICAL — Agent Spawning Prohibition**: You must NEVER use Agent() or TeamCreate
-to spawn thesis or antithesis. All dialectic execution goes through the Python
-dialectic engine via `Bash(bash {SKILL_DIR}/runtime/run-dialectic.sh ...)`.
-The Python engine manages both agents as stateful ClaudeSDKClient sessions.
-Using Agent() will produce empty output and break workspace file generation.
+**CRITICAL — Dialectic Engine is the ONLY Producer**
+
+The Python dialectic engine (`dialectic.py`, invoked via `run-dialectic.sh`) is
+the **sole authorized producer** of dialectic content. You coordinate the engine
+— you do NOT simulate it yourself via Write, Agent(), or role-play.
+
+**Forbidden tools for dialectic content**:
+
+| Target | Forbidden Tools | Required Action |
+|--------|-----------------|-----------------|
+| `round-{N}-thesis.md`, `round-{N}-antithesis.md` | Write, Agent(), TeamCreate | Produced by engine via `Bash(bash {SKILL_DIR}/runtime/run-dialectic.sh ...)` |
+| `dialogue.md` (per-step) | Write | Engine writes automatically |
+| `deliverable.md` (per-step) | Write | Engine writes automatically |
+| Any file containing 正/反 / Thesis/Antithesis role-play content | Write | Invoke engine — never author both sides yourself |
+
+**Permitted Write targets** (whitelist — writing ANY other workspace file is a violation):
+
+- `{WORKSPACE}/REQUEST.md` (if MainOrchestrator didn't already write it)
+- `{WORKSPACE}/DELIVERABLE.md` (final cross-iteration synthesis)
+- `{WORKSPACE}/lessons.md` (append only, end of iteration)
+- `{WORKSPACE}/iteration-{N}/DELIVERABLE.md` (per-iteration summary)
+- `{LOG_DIR}/step-config.json` (engine input — written BEFORE the Bash call)
+- `{LOG_DIR}/thesis-system-prompt.md`, `{LOG_DIR}/antithesis-system-prompt.md` (engine inputs)
+
+**Forbidden filename patterns**:
+
+- Numbered prefix files at workspace root: `01_*.md`, `02_*.md`, `NN_*.md`
+- Free-form named files: `*dialectic_log*`, `*research_note*`, `*ideation*` at workspace root
+
+If you find yourself about to Write a file outside the whitelist, STOP.
+Return `{"status":"halted","halt_reason":"workspace_convention_violation","forbidden_path":"..."}`.
+
+**Attestation**: Your final JSON MUST include `engine_invocations` — the count
+of `bash run-dialectic.sh` calls made across the entire run. For a plan with
+M steps × K iterations, this count MUST be ≥ M×K (plus any within-iter retries).
+`engine_invocations: 0` with `status: completed` is proof of protocol violation
+and will be rejected by MainOrchestrator.
 
 ---
 
@@ -153,6 +185,12 @@ Your entire response must be ONLY the JSON line. No progress text, no explanatio
 
 `workspace` path uses absolute timestamp — generate with `date +%Y%m%d_%H%M%S`.
 `project_domain` informs the execute-mode 테스트 strategy (e.g., `web-frontend` → Playwright).
+
+**Step name enum (REQUIRED)**: `steps[].name` MUST be one of the canonical Korean
+names: `기획`, `구현`, `검증`, `테스트`. English or ad-hoc names (e.g., `research`,
+`ideation`, `dialectic`, `finalize`) break the inverted-step logic and are rejected.
+A 1-step plan uses the most applicable canonical name; 2-step plans typically use
+`기획` + `구현`; 3-step plans add `검증`; 4-step plans add `테스트`.
 
 **Default `loop_count` by complexity**:
 - `simple` / `medium` → 1 (single pass is sufficient)
@@ -576,14 +614,51 @@ See `{WORKSPACE}/lessons.md` — full iteration-by-iteration lesson log.
 {Blockers from HALT'd iterations, if any; otherwise "none"}
 ```
 
+### Phase 4 Pre-Output Self-Check (MANDATORY)
+
+Before emitting the final JSON, verify engine artifacts exist. Execute this check
+as a `Bash(...)` call:
+
+```bash
+MISSING=0
+MISSING_PATHS=""
+for step_dir in {WORKSPACE}/iteration-*/logs/step-*/; do
+  [ -d "$step_dir" ] || continue
+  for required in step-config.json round-1-thesis.md dialogue.md deliverable.md; do
+    if [ ! -f "$step_dir/$required" ]; then
+      echo "MISSING: $step_dir$required"
+      MISSING_PATHS="$MISSING_PATHS $step_dir$required"
+      MISSING=1
+    fi
+  done
+done
+echo "SELF_CHECK_RESULT=$MISSING"
+```
+
+If `MISSING=1`: your execution did NOT go through the dialectic engine for at
+least one step. You must NOT claim `status: completed`. Instead return:
+
+```json
+{"status":"halted","halt_reason":"missing_engine_artifacts","missing_paths":["..."]}
+```
+
+This check catches the degenerate case where MetaAgent simulated dialectic
+content via Write instead of invoking the engine. It is non-negotiable —
+skipping this check is itself a protocol violation.
+
 ### Phase 4: JSON Response
 
 Your entire response must be ONLY the JSON line:
 
 **Completed successfully** (all planned iterations or clean early-exit):
 ```json
-{"status":"completed","workspace":"{WORKSPACE}","summary":"{1-2 sentence}","iterations":{executed},"early_exit":{bool},"rounds_total":{N},"execution_mode":"pingpong"}
+{"status":"completed","workspace":"{WORKSPACE}","summary":"{1-2 sentence}","iterations":{executed},"early_exit":{bool},"rounds_total":{N},"engine_invocations":{N_bash_calls},"execution_mode":"pingpong"}
 ```
+
+`engine_invocations` counts `bash run-dialectic.sh` calls made during this run
+(plan validation + per-step execution + within-iter retries). For an M-step plan
+over K iterations with no retries, the minimum value is M×K. A report with
+`engine_invocations: 0` signals a protocol violation.
 
 **Halted mid-iteration** (persistent failure or dialectic HALT):
 ```json
