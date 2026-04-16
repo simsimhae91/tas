@@ -25,6 +25,33 @@ from typing import Any
 logger = logging.getLogger("tas.dialectic")
 
 # ---------------------------------------------------------------------------
+# Degeneration detection constants
+# ---------------------------------------------------------------------------
+
+# If both agents produce responses shorter than this (chars), the round is "degenerate"
+DEGENERATE_RESPONSE_MIN_CHARS = 50
+
+# HALT after this many consecutive rounds where BOTH agents are degenerate
+DEGENERATE_HALT_AFTER = 3
+
+# HALT after this many consecutive rounds with unparseable verdict (UNKNOWN)
+UNKNOWN_VERDICT_HALT_AFTER = 5
+
+
+# ---------------------------------------------------------------------------
+# YAML frontmatter stripping
+# ---------------------------------------------------------------------------
+
+def _strip_frontmatter(text: str) -> str:
+    """Strip YAML frontmatter (--- ... ---) from agent template files."""
+    if text.startswith("---"):
+        end = text.find("---", 3)
+        if end != -1:
+            return text[end + 3:].lstrip("\n")
+    return text
+
+
+# ---------------------------------------------------------------------------
 # SDK imports (deferred to avoid top-level crash if SDK not installed)
 # ---------------------------------------------------------------------------
 
@@ -262,11 +289,30 @@ async def run_dialectic(config: dict[str, Any]) -> dict[str, Any]:
     query_timeout = config.get("query_timeout", 600)
     language = config.get("language", "English")
 
-    # Load assembled system prompts (written by MetaAgent)
-    thesis_prompt = Path(config["thesis_prompt_path"]).read_text(encoding="utf-8")
-    antithesis_prompt = Path(config["antithesis_prompt_path"]).read_text(
+    # Load step-specific system prompts (written by MetaAgent — role/goal/criteria only)
+    thesis_step_prompt = Path(config["thesis_prompt_path"]).read_text(encoding="utf-8")
+    antithesis_step_prompt = Path(config["antithesis_prompt_path"]).read_text(
         encoding="utf-8"
     )
+
+    # Prepend full agent templates if paths provided (structural guarantee
+    # that verdict format, review lenses, etc. are always included — even if
+    # MetaAgent truncated or summarized the instructions)
+    if config.get("thesis_template_path"):
+        template = _strip_frontmatter(
+            Path(config["thesis_template_path"]).read_text(encoding="utf-8")
+        )
+        thesis_prompt = template + "\n\n" + thesis_step_prompt
+    else:
+        thesis_prompt = thesis_step_prompt
+
+    if config.get("antithesis_template_path"):
+        template = _strip_frontmatter(
+            Path(config["antithesis_template_path"]).read_text(encoding="utf-8")
+        )
+        antithesis_prompt = template + "\n\n" + antithesis_step_prompt
+    else:
+        antithesis_prompt = antithesis_step_prompt
 
     # Inject language instruction into system prompts
     lang_instruction = f"\n\n---\nIMPORTANT: Respond in {language}. All output — position, reasoning, evaluation, self-assessment — must be written in {language}.\n"
@@ -297,6 +343,8 @@ async def run_dialectic(config: dict[str, Any]) -> dict[str, Any]:
         round_num = 1
         verdict = "UNKNOWN"
         final_msg = ""
+        consecutive_unknown = 0
+        consecutive_degenerate = 0
 
         while True:
             # Antithesis evaluates
@@ -342,13 +390,66 @@ async def run_dialectic(config: dict[str, Any]) -> dict[str, Any]:
                 write_log(log_dir, round_num, "halt", final_msg)
                 break
 
+            # --- Degeneration detection ---
+
+            # Track consecutive unparseable verdicts
             if verdict == "UNKNOWN":
+                consecutive_unknown += 1
+                if consecutive_unknown >= UNKNOWN_VERDICT_HALT_AFTER:
+                    print(
+                        f"  HALT: {consecutive_unknown} consecutive UNKNOWN verdicts "
+                        f"— antithesis is not producing parseable verdicts",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    verdict = "HALT"
+                    final_msg = (
+                        f"# HALTED — Unparseable Verdicts\n\n"
+                        f"Antithesis produced {consecutive_unknown} consecutive "
+                        f"responses with no parseable verdict "
+                        f"(expected: ## Response: ACCEPT/REFINE/COUNTER).\n\n"
+                        f"## Last Thesis Position\n\n{thesis_msg}\n\n"
+                        f"## Last Antithesis Response\n\n{anti_msg}"
+                    )
+                    write_log(log_dir, round_num, "halt", final_msg)
+                    break
                 print(
-                    f"  Warning: could not parse verdict, treating as REFINE",
+                    f"  Warning: could not parse verdict ({consecutive_unknown}/"
+                    f"{UNKNOWN_VERDICT_HALT_AFTER}), treating as REFINE",
                     file=sys.stderr,
                     flush=True,
                 )
                 verdict = "REFINE"
+            else:
+                consecutive_unknown = 0
+
+            # Track degenerate (near-empty) responses from both agents
+            thesis_short = len(thesis_msg.strip()) < DEGENERATE_RESPONSE_MIN_CHARS
+            anti_short = len(anti_msg.strip()) < DEGENERATE_RESPONSE_MIN_CHARS
+            if thesis_short and anti_short:
+                consecutive_degenerate += 1
+                if consecutive_degenerate >= DEGENERATE_HALT_AFTER:
+                    print(
+                        f"  HALT: {consecutive_degenerate} consecutive degenerate "
+                        f"rounds (both responses <{DEGENERATE_RESPONSE_MIN_CHARS} chars)",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    verdict = "HALT"
+                    final_msg = (
+                        f"# HALTED — Dialogue Degeneration\n\n"
+                        f"Both agents produced degenerate responses "
+                        f"(<{DEGENERATE_RESPONSE_MIN_CHARS} chars) for "
+                        f"{consecutive_degenerate} consecutive rounds.\n\n"
+                        f"## Last Thesis Position\n\n{thesis_msg}\n\n"
+                        f"## Last Antithesis Response\n\n{anti_msg}"
+                    )
+                    write_log(log_dir, round_num, "halt", final_msg)
+                    break
+            else:
+                consecutive_degenerate = 0
+
+            # --- End degeneration detection ---
 
             # Thesis responds to counter/refine
             thesis_input = (
@@ -372,7 +473,12 @@ async def run_dialectic(config: dict[str, Any]) -> dict[str, Any]:
             "deliverable_path": str(deliverable_path),
         }
         if verdict == "HALT":
-            result["halt_reason"] = "convergence_failure"
+            if consecutive_degenerate >= DEGENERATE_HALT_AFTER:
+                result["halt_reason"] = "dialogue_degeneration"
+            elif consecutive_unknown >= UNKNOWN_VERDICT_HALT_AFTER:
+                result["halt_reason"] = "unparseable_verdicts"
+            else:
+                result["halt_reason"] = "convergence_failure"
 
         return result
 
@@ -413,7 +519,27 @@ def main() -> None:
 
 
 def _self_test() -> None:
-    """Minimal parse_verdict regression tests. Run via: python3 dialectic.py --self-test"""
+    """Regression tests for parse_verdict and _strip_frontmatter. Run via: python3 dialectic.py --self-test"""
+
+    # --- _strip_frontmatter tests ---
+    fm_cases: list[tuple[str, str]] = [
+        ("---\nname: foo\n---\n# Hello", "# Hello"),
+        ("---\nname: foo\nmodel: opus\n---\n\n# Hello", "# Hello"),
+        ("# No frontmatter here", "# No frontmatter here"),
+        ("", ""),
+    ]
+    fm_passed = 0
+    fm_failed = 0
+    for text, expected in fm_cases:
+        result = _strip_frontmatter(text)
+        if result == expected:
+            fm_passed += 1
+        else:
+            fm_failed += 1
+            preview = text[:40].replace("\n", "\\n")
+            print(f"  FAIL: _strip_frontmatter({preview!r}) = {result!r}, expected {expected!r}")
+
+    # --- parse_verdict tests ---
     cases: list[tuple[str, str]] = [
         # Standard verdicts
         ("## Response: ACCEPT", "ACCEPT"),
@@ -455,9 +581,10 @@ def _self_test() -> None:
             preview = text[:60].replace("\n", "\\n")
             print(f"  FAIL: parse_verdict({preview!r}...) = {result!r}, expected {expected!r}")
 
-    total = passed + failed
-    if failed:
-        print(f"FAIL: {passed}/{total} passed, {failed} failed")
+    total = passed + failed + fm_passed + fm_failed
+    all_failed = failed + fm_failed
+    if all_failed:
+        print(f"FAIL: {total - all_failed}/{total} passed, {all_failed} failed")
         sys.exit(1)
     else:
         print(f"PASS: {total}/{total} tests passed")

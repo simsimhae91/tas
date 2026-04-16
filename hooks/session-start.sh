@@ -21,15 +21,24 @@ check_python_sdk() {
   return 1
 }
 
-# Only emit message if SDK is missing
+# Write SDK status marker for SKILL.md fail-fast check
+TAS_MARKER_DIR="${TMPDIR:-/tmp}/tas-sdk-status"
+mkdir -p "$TAS_MARKER_DIR"
+
 if ! check_python_sdk; then
+  echo "missing" > "$TAS_MARKER_DIR/sdk-status"
   cat <<'ADVICE'
-[tas] claude-agent-sdk not detected. /tas will fail without it.
+⚠ claude-agent-sdk is not installed. /tas requires it to run.
+
 Install with one of:
   pip install claude-agent-sdk
   pipx install claude-agent-sdk
   uv tool install claude-agent-sdk
+
+Then start a new session and try again.
 ADVICE
+else
+  echo "ok" > "$TAS_MARKER_DIR/sdk-status"
 fi
 
 exit 0

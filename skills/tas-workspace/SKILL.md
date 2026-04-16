@@ -27,7 +27,7 @@ WS_BASE="${PROJECT_ROOT}/_workspace/quick"
 
 If `_workspace/quick/` does not exist:
 ```
-tas 워크스페이스가 없습니다. /tas를 먼저 실행해주세요.
+No tas workspace found. Run /tas first to create one.
 ```
 
 ---
@@ -57,20 +57,25 @@ ls -1d "${WS_BASE}/"*/ 2>/dev/null | sort -r
 For each workspace directory, check for `DELIVERABLE.md` and `REQUEST.md`:
 
 ```
-## tas 워크스페이스 목록
+## tas Workspaces
 
-| # | 타임스탬프 | 상태 | 요청 요약 |
-|---|-----------|------|----------|
-| 1 | 20260414_102353 | completed | {first line of REQUEST.md, truncated to 60 chars} |
-| 2 | 20260413_154200 | in-progress | {first line of REQUEST.md} |
+| # | Timestamp | Status | Request |
+|---|-----------|--------|---------|
+| 1 | 20260414_102353 | ✓ completed | {first line of REQUEST.md, truncated to 60 chars} |
+| 2 | 20260414_091500 | ⚠ halted | {first line of REQUEST.md} |
+| 3 | 20260413_154200 | ⏳ in-progress | {first line of REQUEST.md} |
 | ... | | | |
 
-총 {N}개 워크스페이스, {completed}개 완료, {in-progress}개 진행 중
+{N} workspaces — {completed} completed, {halted} halted, {in-progress} in progress
 ```
 
 **Status detection**:
-- `DELIVERABLE.md` exists and non-empty → `completed`
-- `REQUEST.md` exists but no `DELIVERABLE.md` → `in-progress`
+- `DELIVERABLE.md` exists and non-empty:
+  - Read YAML frontmatter (between `---` markers) for `status` field
+  - `status: completed` → `completed` (display: ✓)
+  - `status: halted` or `status: blocked` → `halted` (display: ⚠)
+  - No frontmatter or no `status` field → `completed` (display: ✓, legacy)
+- `REQUEST.md` exists but no `DELIVERABLE.md` → `in-progress` (display: ⏳)
 - Neither exists → `empty`
 
 ---
@@ -87,7 +92,7 @@ If no workspaces exist, say so. Otherwise read and display `${LATEST}/DELIVERABL
 
 If DELIVERABLE.md is missing:
 ```
-최근 워크스페이스 ({timestamp})에 DELIVERABLE.md가 없습니다. 진행 중이거나 실패했을 수 있습니다.
+Latest workspace ({timestamp}) has no DELIVERABLE.md. It may still be in progress or may have failed.
 ```
 
 ---
@@ -100,7 +105,7 @@ TARGET="${WS_BASE}/${timestamp}"
 
 If directory doesn't exist:
 ```
-워크스페이스 '{timestamp}'을 찾을 수 없습니다. /tas-workspace list로 확인해주세요.
+Workspace '{timestamp}' not found. Run /tas-workspace list to see available workspaces.
 ```
 
 Otherwise read and display `${TARGET}/DELIVERABLE.md`. If missing, show REQUEST.md
@@ -114,24 +119,28 @@ and available logs structure instead.
 (in-progress run).
 
 1. Scan all workspace directories
-2. Identify candidates for deletion:
-   - Has both REQUEST.md and DELIVERABLE.md (completed) — deletable
-   - Has neither REQUEST.md nor DELIVERABLE.md (empty) — deletable
-   - Has REQUEST.md but no DELIVERABLE.md (in-progress) — **SKIP**
+2. Identify candidates for deletion using the same status detection as `list`:
+   - Has DELIVERABLE.md with `status: completed` (or no frontmatter) → `completed` — deletable
+   - Has DELIVERABLE.md with `status: halted` or `status: blocked` → `halted` — deletable (with warning)
+   - Has neither REQUEST.md nor DELIVERABLE.md → `empty` — deletable
+   - Has REQUEST.md but no DELIVERABLE.md → `in-progress` — **SKIP**
 3. Present the list to the user:
 
 ```
-## 정리 대상 워크스페이스
+## Workspaces to Clean
 
-삭제 가능:
-- 20260412_091500 (completed)
-- 20260411_143000 (completed)
+Deletable:
+- 20260412_091500 (✓ completed)
+- 20260411_143000 (✓ completed)
 - 20260410_080000 (empty)
 
-보호됨 (진행 중):
+Deletable (halted — may contain diagnostic logs):
+- 20260413_170000 (⚠ halted)
+
+Protected (in progress):
 - 20260414_102353
 
-{N}개 삭제, {M}개 보호. 진행할까요?
+{N} to delete, {M} protected. Proceed?
 ```
 
 4. On user confirmation, delete the listed directories:
@@ -141,7 +150,7 @@ rm -rf "${WS_BASE}/{timestamp}"
 
 5. Report result:
 ```
-{N}개 워크스페이스 정리 완료. 남은 워크스페이스: {remaining}개
+{N} workspaces cleaned. {remaining} remaining.
 ```
 
 ---
@@ -155,18 +164,19 @@ Aggregate statistics across all workspaces:
 TOTAL=$(ls -1d "${WS_BASE}/"*/ 2>/dev/null | wc -l)
 ```
 
-For each completed workspace, read DELIVERABLE.md frontmatter for metadata
-(iterations, rounds_total, status, request_type, complexity).
+For each workspace with DELIVERABLE.md, read YAML frontmatter for metadata
+(iterations, rounds_total, status, request_type, complexity). Use the `status`
+field to distinguish completed vs halted (see Status detection above).
 
 ```
-## tas 워크스페이스 통계
+## tas Workspace Stats
 
-총 실행: {total}회
-완료: {completed}회
-중단(halted): {halted}회
-진행 중: {in_progress}회
+Total runs: {total}
+  ✓ Completed: {completed}
+  ⚠ Halted: {halted}
+  ⏳ In progress: {in_progress}
 
-복잡도 분포: simple {N} / medium {N} / complex {N}
-평균 라운드: {avg_rounds}
-총 디스크 사용: {du -sh result}
+Complexity: simple {N} / medium {N} / complex {N}
+Avg rounds: {avg_rounds}
+Disk usage: {du -sh result}
 ```

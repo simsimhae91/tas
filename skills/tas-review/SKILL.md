@@ -31,7 +31,7 @@ Parse `$ARGUMENTS` for review target:
 | Input | Detection | Diff Command |
 |-------|-----------|-------------|
 | No arguments | Default | `git diff HEAD` (unstaged + staged) |
-| Branch name (e.g., `main`, `feature/x`) | No `/`, no SHA pattern | `git diff $BRANCH...HEAD` |
+| Branch name (e.g., `main`, `feature/x`) | Not a SHA pattern, not a flag | `git diff $BRANCH...HEAD` |
 | Commit SHA (7-40 hex chars) | `/^[0-9a-f]{7,40}$/` | `git diff $SHA HEAD` |
 | `--staged` | Literal flag | `git diff --cached` |
 | PR number (e.g., `#123`) | `/^#\d+$/` | `gh pr diff $NUMBER` |
@@ -43,16 +43,32 @@ DIFF="$(${diff_command} 2>&1)"
 DIFF_STAT="$(${diff_command} --stat 2>&1)"
 ```
 
-**Size guard**: If diff exceeds 800 lines, truncate and warn:
+**Size guard**: If diff exceeds 800 lines, truncate and warn. Show which files are included vs excluded:
+
+```bash
+# Get per-file line counts from the diff
+INCLUDED_FILES="$(echo "$DIFF" | head -800 | grep '^diff --git' | sed 's|diff --git a/||;s| b/.*||')"
+EXCLUDED_FILES="$(echo "$DIFF" | tail -n +801 | grep '^diff --git' | sed 's|diff --git a/||;s| b/.*||')"
 ```
-⚠ Diff가 800줄을 초과합니다 ({actual_lines}줄). 처음 800줄만 리뷰합니다.
-전체 리뷰가 필요하면 범위를 좁혀주세요 (예: /tas-review --staged)
+
+```
+⚠ Diff exceeds 800 lines ({actual_lines} total). Reviewing first 800 lines only.
+
+Included in review:
+{INCLUDED_FILES, one per line with -)
+
+Excluded (truncated):
+{EXCLUDED_FILES, one per line with -)
+
+To review specific files, narrow the scope: /tas-review --staged, or stage only the files you want reviewed.
 ```
 
 If diff is empty:
 ```
-변경사항이 없습니다. 리뷰할 diff를 지정해주세요.
-예: /tas-review main, /tas-review --staged, /tas-review #42
+No changes found. Specify a diff target:
+  /tas-review main        — diff against main branch
+  /tas-review --staged    — staged changes only
+  /tas-review #42         — PR diff
 ```
 
 ---
@@ -77,7 +93,7 @@ META_OUTPUT = Agent({
   prompt: "Read ${SKILL_DIR}/agents/meta.md and follow its instructions exactly.
 
 COMMAND: classify
-REQUEST: 다음 diff를 리뷰해주세요. 변경 요약:\n${DIFF_STAT}\n\n전체 diff:\n${DIFF}
+REQUEST: Review the following diff. Change summary:\n${DIFF_STAT}\n\nFull diff:\n${DIFF}
 PROJECT_ROOT: ${PROJECT_ROOT}
 SKILL_DIR: ${SKILL_DIR}
 
@@ -94,7 +110,7 @@ RESULT = Agent({
   description: "tas review: execute review",
   prompt: "Read ${SKILL_DIR}/agents/meta.md and follow its instructions exactly.
 
-REQUEST: 다음 diff를 리뷰해주세요. 변경 요약:\n${DIFF_STAT}\n\n전체 diff:\n${DIFF}
+REQUEST: Review the following diff. Change summary:\n${DIFF_STAT}\n\nFull diff:\n${DIFF}
 WORKSPACE: ${WORKSPACE}
 PROJECT_ROOT: ${PROJECT_ROOT}
 SKILL_DIR: ${SKILL_DIR}
@@ -114,17 +130,61 @@ Return ONLY the JSON result line.",
 
 ## Step 3: Present Results
 
-On success:
+Parse MetaAgent JSON. Check `status` field first.
+
+**On HALT** (`status: "halted"`):
 ```
-정반합 리뷰 완료 — {rounds_total}라운드.
+⚠ Review halted — {halt_reason}.
 {summary}
 
-결과물: {workspace}/DELIVERABLE.md
+Workspace: {workspace}
+Dialogue: `/tas-explain {timestamp}`
+```
+
+**On success** (`status: "completed"`) — read and display the deliverable inline with size guard:
+
+```bash
+DELIVERABLE_LINES="$(wc -l < ${WORKSPACE}/DELIVERABLE.md 2>/dev/null || echo 0)"
+DELIVERABLE_CONTENT="$(head -200 ${WORKSPACE}/DELIVERABLE.md 2>/dev/null)"
+```
+
+If 200 lines or fewer, display in full:
+```
+Review complete — {rounds_total} rounds.
+{summary}
+
+---
+{DELIVERABLE_CONTENT}
+---
+
+Full review: {workspace}/DELIVERABLE.md
+```
+
+If over 200 lines, show preview:
+```
+Review complete — {rounds_total} rounds.
+{summary}
+
+---
+{DELIVERABLE_CONTENT (first 200 lines)}
+
+... ({DELIVERABLE_LINES - 200} more lines)
+---
+
+Full review: {workspace}/DELIVERABLE.md
+```
+
+If the deliverable file is missing or empty, fall back to showing just the path.
+
+If the diff was truncated earlier (exceeded 800 lines), append to the result:
+
+```
+> **Note**: This review covers the first 800 of {actual_lines} diff lines. Files excluded from review are listed in the truncation warning above.
 ```
 
 On error (MetaAgent JSON parse failure or non-zero exit):
 ```
-⚠ 리뷰 중 오류가 발생했습니다.
-워크스페이스: {workspace}
-수동 확인: {workspace}/DELIVERABLE.md 또는 logs/ 참조
+⚠ Review encountered an error.
+Workspace: {workspace}
+Check: {workspace}/DELIVERABLE.md or logs/ for details.
 ```

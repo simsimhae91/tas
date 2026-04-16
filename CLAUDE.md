@@ -84,6 +84,15 @@ Before finalizing any edit to an agent file:
 
 No fixed iteration caps. Dialogue continues until ACCEPT or HALT. This is intentional — artificial caps produce premature consensus. If you're tempted to add a round limit, the real problem is probably unclear pass criteria or role ambiguity.
 
+The dialectic engine enforces two degeneration HALTs (these are NOT round caps — they detect dialogue death):
+
+- **Unparseable verdicts**: 5 consecutive rounds where antithesis response contains no parseable verdict → HALT with `unparseable_verdicts`. Root cause is usually missing verdict format instructions in the system prompt.
+- **Degenerate responses**: 3 consecutive rounds where BOTH agents produce <50 chars → HALT with `dialogue_degeneration`. Agents have nothing left to say.
+
+### System Prompt Assembly
+
+Agent template files (thesis.md, antithesis.md) are prepended by `dialectic.py` directly — NOT by MetaAgent. MetaAgent writes only step-specific context (role/goal/criteria) to the system prompt files. The engine reads template paths from `thesis_template_path` / `antithesis_template_path` in step-config.json. This is a structural guarantee that verdict formats and review lenses are always included, regardless of MetaAgent behavior.
+
 ## Quality Standard
 
 tas must catch what a human expert reviewer would catch. Four invariants:
@@ -143,6 +152,7 @@ suffice. See `references/workflow-patterns.md` → "Dynamic Testing by Domain".
 - **Adding codebase-reading logic to SKILL.md** — breaks scope prohibition
 - **Adding resume/pipeline mechanisms** — this repo is quick-only. Long-lived project context belongs elsewhere
 - **Adding a fixed within-iteration retry cap** — within-iter retries are unbounded; HALT is governed by `persistent_failure_halt_after` (same-blocker recurrence), not a fixed count
+- **Copying agent instructions into system prompt files** — MetaAgent writes ONLY step-specific context (role/goal/criteria) to system prompt files. Agent templates (thesis.md, antithesis.md) are prepended by `dialectic.py` via `thesis_template_path`/`antithesis_template_path` in step-config.json. MetaAgent must NOT copy or summarize agent instructions — the engine handles this structurally
 - **Pruning lessons.md between iterations** — it must stay append-only; later iterations need the full history
 - **Forgetting to preserve retry log directories** — never overwrite `step-{id}-{slug}-retry-{N}`; each retry gets a new sibling dir within the current iteration
 - **Hardcoding loop_count** — it is user-specified; MetaAgent only proposes a default (usually 1)

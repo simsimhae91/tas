@@ -365,18 +365,24 @@ For each step, build the config the Python engine consumes.
    On within-iteration retry (FAIL → 구현 → re-check), append `-retry-{N}`:
    `step-{S.id}-{slug}-retry-1`, etc. Retries live inside the current iteration's directory.
 
-2. **Assemble system prompts** with role injection:
+2. **Assemble system prompts** — write ONLY the step-specific injection.
+   The dialectic engine automatically prepends the full agent template files
+   (thesis.md / antithesis.md) using the `thesis_template_path` and
+   `antithesis_template_path` fields in step-config.json. Do NOT copy or
+   summarize agent instructions into the system prompt files — the engine
+   handles this to guarantee verdict format, review lenses, and role
+   definitions are always included.
 
    **Standard (기획/구현/일반)**:
    ```
-   Thesis system prompt = thesis_instructions + "\n---\nSTEP ROLE: {thesis_role}\nSTEP GOAL: {S.goal}\nPASS CRITERIA:\n{S.pass_criteria as bullets}"
-   Antithesis system prompt = antithesis_instructions + "\n---\nSTEP ROLE: {antithesis_role}\nSTEP GOAL: {S.goal}\nPASS CRITERIA:\n{S.pass_criteria as bullets}"
+   Thesis system prompt = "---\nSTEP ROLE: {thesis_role}\nSTEP GOAL: {S.goal}\nPASS CRITERIA:\n{S.pass_criteria as bullets}"
+   Antithesis system prompt = "---\nSTEP ROLE: {antithesis_role}\nSTEP GOAL: {S.goal}\nPASS CRITERIA:\n{S.pass_criteria as bullets}"
    ```
 
    **Inverted (검증/테스트)**:
    ```
-   Thesis system prompt = thesis_instructions + "\n---\nROLE OVERRIDE: You are an ATTACKER. Aggressively find defects/test failures. Do NOT produce a deliverable — produce an issue list.\nSTEP GOAL: {S.goal}\nPASS CRITERIA:\n{S.pass_criteria}"
-   Antithesis system prompt = antithesis_instructions + "\n---\nROLE OVERRIDE: You are a JUDGE. For each issue thesis raises, judge: genuine blocker or noise? Output PASS (0 blockers) or FAIL (with blocker list).\nSTEP GOAL: {S.goal}"
+   Thesis system prompt = "---\nROLE OVERRIDE: You are an ATTACKER. Aggressively find defects/test failures. Do NOT produce a deliverable — produce an issue list.\nSTEP GOAL: {S.goal}\nPASS CRITERIA:\n{S.pass_criteria}"
+   Antithesis system prompt = "---\nROLE OVERRIDE: You are a JUDGE. For each issue thesis raises, judge: genuine blocker or noise? Output PASS (0 blockers) or FAIL (with blocker list).\nSTEP GOAL: {S.goal}"
    ```
 
 3. **Write prompts to files**:
@@ -425,6 +431,8 @@ For each step, build the config the Python engine consumes.
    {
      "thesis_prompt_path": "{LOG_DIR}/thesis-system-prompt.md",
      "antithesis_prompt_path": "{LOG_DIR}/antithesis-system-prompt.md",
+     "thesis_template_path": "{SKILL_DIR}/agents/thesis.md",
+     "antithesis_template_path": "{SKILL_DIR}/agents/antithesis.md",
      "step_assignment": "## Step Assignment\n\n**Goal**: {S.goal}\n\n**Pass Criteria**:\n{criteria}\n\n**Context**:\n{step_context}\n\nProduce your initial position with reasoning and self-assessment.",
      "antithesis_briefing": "## Step Criteria\n\n**Goal** (context): {S.goal}\n\n**Pass Criteria**:\n{criteria}\n\nYou will receive ThesisAgent's position. Evaluate and respond.",
      "log_dir": "{LOG_DIR}",
@@ -436,6 +444,11 @@ For each step, build the config the Python engine consumes.
      "language": "{ONLY set non-English if user explicitly requested a specific output language (e.g. '한국어로 작성'). Default: English. A Korean request with no language instruction means English output.}"
    }
    ```
+
+   The `thesis_template_path` and `antithesis_template_path` fields tell the
+   dialectic engine where to find the full agent instruction files. The engine
+   prepends these templates to the system prompts, so the prompt files you write
+   only need the step-specific role/goal/criteria injection.
 
 7. **Execute PingPong**:
    ```
@@ -714,7 +727,8 @@ computation. A cap in the caller doesn't protect computation inside the callee.
 | Agent session crash | CLI death during dialogue | Engine reconnects once automatically, fails on second death |
 | Both agents fail | Connection errors | Engine writes partial output, exits with halted status |
 | HALT (impasse) | Circular argumentation, external contradiction, or missing info | Record both positions, set status "halted" |
-| Empty agent output | Zero-length response | Treat as crash, apply crash recovery |
+| Empty agent output | Zero-length response | Engine detects degenerate responses (<50 chars) for 3+ consecutive rounds → auto-HALT with `dialogue_degeneration` |
+| Unparseable verdicts | No ACCEPT/REFINE/COUNTER/HALT found | Engine detects 5+ consecutive UNKNOWN verdicts → auto-HALT with `unparseable_verdicts` |
 | Within-iter retry would overwrite | Existing step output | Append `-retry-{N}` suffix within the same iteration dir |
 | Persistent FAIL on same blockers | consecutive_fail_count ≥ `persistent_failure_halt_after` | HALT iteration, record in lessons.md, break loop |
 | Playwright MCP unavailable (web 테스트) | Tool call fails | Fall back to static tests only; record limitation in DELIVERABLE.md |

@@ -47,7 +47,7 @@ TARGET="$(ls -1d "${WS_BASE}/"*/ 2>/dev/null | sort -r | head -1)"
 
 If no workspace found:
 ```
-tas 워크스페이스가 없습니다. /tas를 먼저 실행해주세요.
+No tas workspace found. Run /tas first to create one.
 ```
 
 ---
@@ -71,44 +71,44 @@ find "${TARGET}" -name "dialogue.md" -type f | sort
 
 ## Output Format
 
-Produce a structured summary in Korean:
+Produce a structured summary. Use the **same language as the user's request** found in REQUEST.md. Default to English if unclear.
 
 ```
-## 정반합 대화 요약
+## Dialectic Dialogue Summary
 
-### 기본 정보
-- 워크스페이스: {timestamp}
-- 요청: {first line of REQUEST.md}
-- 반복 횟수: {iterations executed}
-- 총 라운드: {rounds_total from DELIVERABLE.md frontmatter}
-- 상태: {completed / halted}
+### Overview
+- Workspace: {timestamp}
+- Request: {first line of REQUEST.md}
+- Iterations: {iterations executed}
+- Total rounds: {rounds_total from DELIVERABLE.md frontmatter}
+- Status: {completed / halted}
 
-### 주요 논쟁점 (Key Contentions)
-대화에서 Thesis와 Antithesis가 의견이 갈린 핵심 지점들:
+### Key Contentions
+Points where Thesis and Antithesis diverged:
 
 1. **{contention topic}**
-   - 정(Thesis): {thesis position, 1-2 sentences}
-   - 반(Antithesis): {antithesis position, 1-2 sentences}
-   - 결과: {how resolved — accepted / refined / conceded}
+   - Thesis: {thesis position, 1-2 sentences}
+   - Antithesis: {antithesis position, 1-2 sentences}
+   - Resolution: {how resolved — accepted / refined / conceded}
 
 2. **{contention topic}**
    ...
 
-### 합의 사항 (Agreements)
-양측이 동의한 핵심 결정들:
+### Agreements
+Key decisions both sides agreed on:
 - {agreement 1}
 - {agreement 2}
 - ...
 
-### 기각된 대안 (Rejected Alternatives)
-검토되었으나 채택되지 않은 접근법들:
-- **{alternative}** — 기각 사유: {reason}
+### Rejected Alternatives
+Approaches considered but not adopted:
+- **{alternative}** — Reason: {reason}
 - ...
 
-### 최종 결정 (Final Decision)
+### Final Decision
 {Summary of the final deliverable — what was built/designed/reviewed and key conclusions}
 
-### 교훈 (Lessons Learned)
+### Lessons Learned
 {Key takeaways from lessons.md, if present}
 ```
 
@@ -137,10 +137,10 @@ are unavailable.
 If the workspace has multiple iterations, summarize each iteration's focus:
 
 ```
-### 반복별 요약
+### Iteration Summary
 
-| # | 포커스 | 주요 개선 | 상태 |
-|---|--------|----------|------|
+| # | Focus | Key Improvements | Status |
+|---|-------|-----------------|--------|
 | 1 | baseline | {summary} | completed |
 | 2 | {focus_angle} | {summary} | completed |
 ```

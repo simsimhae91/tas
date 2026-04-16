@@ -2,6 +2,9 @@
 # tas Deliverable Integrity Guard — Stop hook
 # Blocks session exit if /tas was invoked but DELIVERABLE.md is missing/empty.
 # Uses REQUEST.md existence as the /tas session marker.
+# Skips blocking while MetaAgent is still active (dialectic engine running
+# or workspace recently modified) — prevents false-positive block during
+# background Agent() execution before the final JSON result returns.
 # Protocol: stdin JSON input, stdout JSON output, always exit 0.
 
 # jq is required for JSON parsing; exit cleanly if unavailable
@@ -41,10 +44,43 @@ fi
 # REQUEST.md exists — check for DELIVERABLE.md
 DELIVERABLE="${LATEST_WS}DELIVERABLE.md"
 
-if [ ! -f "$DELIVERABLE" ] || [ ! -s "$DELIVERABLE" ]; then
-  REASON="[tas] DELIVERABLE.md가 없거나 비어 있습니다. 워크스페이스: ${LATEST_WS} — /tas 실행이 완료되지 않았을 수 있습니다. 무시하려면 다시 종료를 시도하세요."
-  jq -n --arg reason "$REASON" '{"decision": "block", "reason": $reason}'
+if [ -f "$DELIVERABLE" ] && [ -s "$DELIVERABLE" ]; then
+  # DELIVERABLE present and non-empty — /tas completed, approve.
   exit 0
 fi
 
+# DELIVERABLE missing/empty. Before blocking, verify MetaAgent is truly idle —
+# otherwise we'd block a session whose background Agent() is still producing
+# the deliverable.
+
+# Signal 1: dialectic engine process alive for THIS workspace. MetaAgent invokes
+# `bash run-dialectic.sh {step-config.json}` which execs `python3 .../dialectic.py {config}`.
+# The step-config.json path embeds the workspace path in argv. Match by workspace
+# basename (timestamp dir) — unique enough and robust against macOS /var vs /private/var
+# symlink resolution differences between `git rev-parse` and the process's actual argv.
+WS_KEY="$(basename "${LATEST_WS%/}")"
+if [ -n "$WS_KEY" ] \
+  && ps -eo args 2>/dev/null | grep -v ' grep ' | grep -F "dialectic.py" | grep -qF "/$WS_KEY/"; then
+  exit 0
+fi
+
+# Signal 2: workspace files recently modified (within 3 minutes).
+# MetaAgent writes step-config.json, system prompts, and per-round logs
+# throughout execution — so stale mtime means execution is truly stopped.
+# Covers the gap between dialectic engine invocations (MetaAgent synthesis).
+if find "$LATEST_WS" -type f -mmin -3 2>/dev/null | grep -q .; then
+  exit 0
+fi
+
+# No active signals — DELIVERABLE is genuinely missing. Block.
+REASON="[tas] DELIVERABLE.md is missing or empty.
+Workspace: ${LATEST_WS}
+A /tas run may not have completed.
+
+To resolve:
+  • Exit again to force close (override)
+  • Re-run /tas to complete the task
+  • Check workspace: cat ${LATEST_WS}REQUEST.md
+  • Clean up workspace: /tas-workspace clean"
+jq -n --arg reason "$REASON" '{"decision": "block", "reason": $reason}'
 exit 0
