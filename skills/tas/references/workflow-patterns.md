@@ -41,14 +41,14 @@ The default flow for complex implementation/refactoring work:
 | **1. 기획 (Plan)** | Determine approach, identify affected files, define interfaces, surface constraints | - Approach addresses all stated requirements<br>- Existing patterns and conventions in the project identified<br>- Affected files enumerated<br>- No unnecessary complexity or speculative abstractions<br>- Dependencies and risks surfaced |
 | **2. 구현 (Implement)** | Write the code per the 기획 output | - Code compiles/parses without errors<br>- All requirements from 기획 addressed<br>- Follows project conventions (read neighboring files)<br>- No scope creep or dead code<br>- Standard/idiomatic patterns used<br>- Self-assessment against 기획's pass criteria |
 | **3. 검증 (Verify)** — *inverted* | Find every real defect before tests run | - Semantic consistency (same concept, same meaning)<br>- Behavioral consistency across all code paths<br>- Compositional integrity (A → B sound for all inputs)<br>- Value flow soundness (no NaN/Infinity/type mismatch intermediates)<br>- Defensive measures applied before value consumption<br>- 0 blockers = PASS, ≥1 blockers = FAIL (→ retry 구현) |
-| **4. 테스트 (Test)** — *inverted* | Prove correctness through execution — static + dynamic where applicable | - Static: unit tests written and passing<br>- Static: type checks pass, lint clean<br>- Dynamic (web): Playwright navigation + screenshots + UI/UX evaluation<br>- Dynamic (backend/CLI): integration tests run, output verified<br>- Coverage adequate for the scope of changes<br>- PASS (all green + coverage adequate) or FAIL (→ retry 구현) |
+| **4. 테스트 (Test)** — *inverted* | Prove correctness through execution — static + dynamic where applicable | - Static: unit tests written and passing<br>- Static: type checks pass, lint clean<br>- Dynamic (web): Playwright CLI via Bash (`npx playwright test`) + screenshots + UI/UX evaluation<br>- Dynamic (backend/CLI): integration tests run, output verified<br>- Coverage adequate for the scope of changes<br>- PASS (all green + coverage adequate) or FAIL (→ retry 구현) |
 
 ### 검증 vs 테스트 Boundary
 
 - **검증** is **static code analysis** — reading the diff and reasoning about correctness.
   No execution required. Catches design flaws, logic errors, composition issues.
 - **테스트** is **execution-based** — running the code (unit, integration, dynamic).
-  For web projects, MUST include browser-based UI/UX evaluation via Playwright MCP.
+  For web projects, MUST include browser-based UI/UX evaluation via Playwright CLI (Bash).
 
 Both use the **inverted convergence model**: thesis attacks/executes, antithesis judges.
 
@@ -66,9 +66,10 @@ Both use the **inverted convergence model**: thesis attacks/executes, antithesis
 | `iac-infra` | `terraform validate` / `terraform plan` (or equivalent) + lint (`tflint`, `checkov`) + dry-run showing expected resource changes |
 | `unknown` | Unit tests + whatever execution the project's build tooling provides |
 
-For web projects, Playwright MCP tools (`mcp__plugin_playwright_playwright__*`) are the
-preferred dynamic verification channel. ThesisAgent spins up the dev server, navigates,
-captures snapshots/screenshots; AntithesisAgent evaluates them.
+For web projects, Playwright CLI via Bash (`npx playwright test`, `npx playwright screenshot`)
+is the dynamic verification channel — Playwright MCP tools are not available in dialectic
+agent sessions. ThesisAgent spins up the dev server and runs tests/captures screenshots
+via Bash; AntithesisAgent evaluates the results.
 
 ---
 

@@ -89,11 +89,12 @@ You receive your assignment as the Agent prompt. Parse these fields:
 | `PROJECT_ROOT` | no | Project root directory (for codebase awareness) |
 | `WORKSPACE` | conditional | Absolute path for this run's output directory (execute mode) |
 | `SKILL_DIR` | yes | Path to skill directory (for reading agent definitions) |
-| `REQUEST_TYPE` | conditional | `implement|design|review|refactor|analyze` (execute mode) |
+| `REQUEST_TYPE` | conditional | `implement|design|review|refactor|analyze|general` (execute mode) |
 | `COMPLEXITY` | conditional | `simple|medium|complex` (execute mode) |
 | `PLAN` | conditional | JSON array of approved steps (execute mode) |
 | `LOOP_COUNT` | conditional | Integer ≥1, max iterations user approved (execute mode) |
 | `LOOP_POLICY` | conditional | JSON: `reentry_point`, `early_exit_on_no_improvement`, `persistent_failure_halt_after` |
+| `PROJECT_DOMAIN` | no | Domain hint from classify (e.g., `web-frontend`, `api`, `unknown`). Informs 테스트 strategy |
 | `FOCUS_ANGLE` | no | Externally specified focus angle for iteration 2+ (overrides self-selection in Phase 2b) |
 
 ### Mode Detection
@@ -123,7 +124,7 @@ This scan informs the testing strategy (e.g., web projects may need Playwright U
 
 Determine three things from the request:
 
-1. **request_type**: `implement | design | review | refactor | analyze`
+1. **request_type**: `implement | design | review | refactor | analyze | general`
 2. **complexity**: `simple | medium | complex`
 3. **steps**: 1-4 adaptive steps matching the complexity
 
@@ -416,11 +417,13 @@ For each step, build the config the Python engine consumes.
    ## Testing Strategy
    This is a web project. Testing must include BOTH:
    - Static: unit tests, type checks, lint
-   - Dynamic: spin up local dev server (e.g., `npm run dev`), navigate via Playwright MCP
-     (`mcp__plugin_playwright_playwright__browser_navigate`), take screenshots
-     (`mcp__plugin_playwright_playwright__browser_take_screenshot`), evaluate UI/UX
-     (layout, rendering, interactive behavior, accessibility visible in snapshot).
-   Thesis must execute the dynamic run and include screenshots as evidence.
+   - Dynamic: spin up local dev server (e.g., `npm run dev`), run Playwright tests
+     via Bash (`npx playwright test`), capture screenshots via Playwright CLI
+     (`npx playwright screenshot`), evaluate UI/UX (layout, rendering, interactive
+     behavior, accessibility visible in snapshot).
+     NOTE: Playwright MCP tools are NOT available in dialectic agent sessions.
+     Always use Bash-based Playwright CLI execution.
+   Thesis must execute the dynamic run and include screenshots/test output as evidence.
    Antithesis must evaluate the screenshots and test output.
    ```
 
@@ -454,7 +457,7 @@ For each step, build the config the Python engine consumes.
    ```
    Bash({
      command: "bash {SKILL_DIR}/runtime/run-dialectic.sh {LOG_DIR}/step-config.json",
-     timeout: 600000
+     timeout: 900000
    })
    ```
 
@@ -501,7 +504,7 @@ After all steps in the iteration complete (or HALT'd), write
 ```markdown
 ---
 iteration: {i}
-status: {completed | halted | blocked}
+status: {completed | halted}
 focus_angle: {focus_angle or "baseline (iteration 1)"}
 rounds_total: {sum across steps this iteration}
 within_iter_retries: {count of 구현 re-runs due to FAIL}
@@ -593,7 +596,7 @@ After the iteration loop completes (naturally or via early-exit/HALT), write
 ---
 request_type: {request_type}
 complexity: {complexity}
-status: {completed | blocked | halted}
+status: {completed | halted}
 iterations_planned: {LOOP_COUNT}
 iterations_executed: {actual count}
 early_exit: {true | false}
@@ -627,7 +630,7 @@ See `{WORKSPACE}/lessons.md` — full iteration-by-iteration lesson log.
 {Blockers from HALT'd iterations, if any; otherwise "none"}
 ```
 
-### Phase 4 Pre-Output Self-Check (MANDATORY)
+### Phase 4: Pre-Output Self-Check (MANDATORY)
 
 Before emitting the final JSON, verify engine artifacts exist. Execute this check
 as a `Bash(...)` call:
@@ -659,7 +662,7 @@ This check catches the degenerate case where MetaAgent simulated dialectic
 content via Write instead of invoking the engine. It is non-negotiable —
 skipping this check is itself a protocol violation.
 
-### Phase 4: JSON Response
+### Phase 5: JSON Response
 
 Your entire response must be ONLY the JSON line:
 
@@ -703,9 +706,10 @@ genuine convergence or a HALT condition.
 
 ## Quality Invariants
 
-These are design defects when violated — MetaAgent must judge verdicts against them.
-If AntithesisAgent ACCEPTs a deliverable that violates any of these, MetaAgent must
-override — send the violation back to the dialogue as a new contention.
+These are design defects when violated. AntithesisAgent must verify these before
+issuing ACCEPT — see antithesis.md's Pre-ACCEPT Quality Invariant Check. MetaAgent
+cannot reopen a completed dialogue, so quality enforcement is the antithesis agent's
+responsibility during the dialogue.
 
 1. **Semantic consistency** — the same concept means the same thing in every appearance
 2. **Behavioral consistency** — all code paths for the same operation behave identically
@@ -731,7 +735,7 @@ computation. A cap in the caller doesn't protect computation inside the callee.
 | Unparseable verdicts | No ACCEPT/REFINE/COUNTER/HALT found | Engine detects 5+ consecutive UNKNOWN verdicts → auto-HALT with `unparseable_verdicts` |
 | Within-iter retry would overwrite | Existing step output | Append `-retry-{N}` suffix within the same iteration dir |
 | Persistent FAIL on same blockers | consecutive_fail_count ≥ `persistent_failure_halt_after` | HALT iteration, record in lessons.md, break loop |
-| Playwright MCP unavailable (web 테스트) | Tool call fails | Fall back to static tests only; record limitation in DELIVERABLE.md |
+| Playwright CLI unavailable (web 테스트) | `npx playwright test` fails or playwright not installed | Fall back to static tests only; record limitation in DELIVERABLE.md |
 
 When operating in degraded mode:
 1. Save whatever artifacts were produced

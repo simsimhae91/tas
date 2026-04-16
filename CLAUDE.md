@@ -82,7 +82,7 @@ Before finalizing any edit to an agent file:
 
 ## Convergence Model
 
-No fixed iteration caps. Dialogue continues until ACCEPT or HALT. This is intentional — artificial caps produce premature consensus. If you're tempted to add a round limit, the real problem is probably unclear pass criteria or role ambiguity.
+No fixed iteration caps. Dialogue continues until ACCEPT (or PASS/FAIL in inverted mode) or HALT. This is intentional — artificial caps produce premature consensus. If you're tempted to add a round limit, the real problem is probably unclear pass criteria or role ambiguity.
 
 The dialectic engine enforces two degeneration HALTs (these are NOT round caps — they detect dialogue death):
 
@@ -135,8 +135,9 @@ grows monotonically across iterations.
 ## Testing Strategy by Domain
 
 The 테스트 step behavior changes based on `project_domain` detected in Classify Mode.
-For web projects, dynamic testing via Playwright MCP (navigation + screenshots + UI/UX
-evaluation) is **required**, not optional. For non-web domains, static + execution tests
+For web projects, dynamic testing via Playwright CLI (Bash-based `npx playwright test` +
+screenshots + UI/UX evaluation) is **required**, not optional. Playwright MCP tools are
+not available in dialectic agent sessions. For non-web domains, static + execution tests
 suffice. See `references/workflow-patterns.md` → "Dynamic Testing by Domain".
 
 **Implication**: When changing domain detection, update the testing strategy table in

@@ -99,6 +99,12 @@ message routing.
 
 ## Output Format
 
+**Machine-parsed header**: The `## Response: {VERDICT}` line (or `## Judgment: {VERDICT}`
+in inverted mode) is parsed by the dialectic engine (`dialectic.py`) to determine
+dialogue flow. Always include this exact format on its own line — the engine matches
+these headers via regex. Omitting or reformatting this header causes UNKNOWN verdict
+detection, which triggers degeneration HALT after 5 consecutive failures.
+
 ### Any Response Type
 
 ```markdown
@@ -286,6 +292,26 @@ When your system prompt includes a **ROLE OVERRIDE: You are a JUDGE** directive
 ```
 
 On convergence, both agents must agree on PASS or on the blocker list contents.
+
+---
+
+## Pre-ACCEPT Quality Invariant Check (MANDATORY)
+
+Before issuing ACCEPT, you MUST verify the deliverable against all four quality
+invariants. These checks cannot be deferred — once you ACCEPT, the dialogue is
+complete and cannot be reopened by MetaAgent.
+
+1. **Semantic consistency** — trace the same concept across every appearance. Inconsistent
+   meaning is a REFINE, not a non-blocking observation.
+2. **Behavioral consistency** — walk every code path for the same operation. Inconsistent
+   paths are contract violations → REFINE.
+3. **Compositional integrity** — verify function A's output into function B is sound for
+   ALL valid inputs, not just the happy path.
+4. **Value flow soundness** — for computations, trace at least one boundary value through
+   the full chain. NaN or Infinity at any intermediate point → REFINE.
+
+If any invariant is violated, respond with REFINE (or COUNTER), not ACCEPT. Include
+the specific invariant violation as a refinement item.
 
 ---
 

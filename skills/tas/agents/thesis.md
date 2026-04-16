@@ -162,7 +162,9 @@ When your system prompt includes a **ROLE OVERRIDE: You are an ATTACKER** direct
 When your system prompt directs you to **run tests** (테스트 step ATTACKER role):
 
 - Execute static tests (unit/lint/type-check) and capture output
-- For web projects: use Playwright MCP to navigate, screenshot, and observe UI/UX
+- For web projects: use Bash to run Playwright tests (`npx playwright test`) or
+  spin up a dev server and capture screenshots via Playwright CLI. Playwright MCP
+  tools are NOT available in dialectic sessions — always use Bash-based execution.
 - Report execution results, screenshots, and any failures found
 - Do not fix failures — report them. Antithesis judges whether the results are adequate.
 

@@ -141,7 +141,7 @@ Parse JSON from the Agent response text. Expected shape:
 {
   "command":"classify",
   "mode":"quick",
-  "request_type":"implement|design|review|refactor|analyze",
+  "request_type":"implement|design|review|refactor|analyze|general",
   "complexity":"simple|medium|complex",
   "steps":[
     {"id":"1","name":"기획","goal":"...","pass_criteria":["..."]},
@@ -156,7 +156,8 @@ Parse JSON from the Agent response text. Expected shape:
     "persistent_failure_halt_after":3
   },
   "workspace":"_workspace/quick/{timestamp}/",
-  "reasoning":"..."
+  "reasoning":"...",
+  "project_domain":"{domain or null}"
 }
 ```
 
@@ -303,6 +304,7 @@ COMPLEXITY: {complexity from classify}
 PLAN: {steps array JSON from classify}
 LOOP_COUNT: {loop_count from classify, possibly adjusted by user}
 LOOP_POLICY: {loop_policy JSON from classify, possibly adjusted}
+PROJECT_DOMAIN: {project_domain from classify JSON, if present; omit line otherwise}
 FOCUS_ANGLE: {focus_angle from plan, if user specified; omit line otherwise}
 
 Return ONLY the JSON result line.",
@@ -322,7 +324,18 @@ Parse JSON from Agent response and present results.
 The Agent() response IS the JSON:
 
 ```json
-{"status":"completed","workspace":"...","summary":"...","iterations":N,"early_exit":bool,"rounds_total":N}
+{"status":"completed","workspace":"...","summary":"...","iterations":N,"early_exit":bool,"rounds_total":N,"engine_invocations":N}
+```
+
+### Validate Attestation
+
+If `status` is `"completed"` and `engine_invocations` is `0` or missing, the result
+is suspect — MetaAgent may have simulated the dialectic instead of running the engine.
+Warn the user:
+
+```
+⚠ MetaAgent reported completion but engine_invocations is 0.
+This may indicate the dialectic engine was not invoked. Check workspace logs.
 ```
 
 ### Display to User
@@ -352,7 +365,7 @@ The user can review and revert if needed:
   · Selective revert: `git checkout -- <file>` to undo specific files
   · Full revert: `git stash` to shelve all changes (recoverable via `git stash pop`)
 
-**Design/analysis steps** (`request_type`: design, analysis, review):
+**Design/analysis steps** (`request_type`: design, analyze, review, general):
 
 ThesisAgent produces deliverable documents, not code changes. Read the deliverable and display it inline:
 

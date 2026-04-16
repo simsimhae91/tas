@@ -172,25 +172,71 @@ _VERDICT_PATTERNS = [
     ),
 ]
 
-# Map inverted-mode verdicts to engine control-flow verdicts
+# Standard-mode aliases (inverted mode bypasses these for PASS/FAIL)
 _VERDICT_ALIASES: dict[str, str] = {
     "PASS": "ACCEPT",
     "FAIL": "REFINE",
 }
 
 
-def parse_verdict(response: str) -> str:
-    """Extract verdict (ACCEPT/REFINE/COUNTER/HALT) from antithesis response.
+def parse_verdict(response: str, convergence_model: str = "standard") -> str:
+    """Extract verdict from antithesis response.
 
-    Also handles inverted-mode outputs where PASS→ACCEPT and FAIL→REFINE,
-    Korean phrasings (판정:), and standalone bold verdicts.
+    Standard mode: PASS→ACCEPT, FAIL→REFINE (backward compat)
+    Inverted mode: PASS and FAIL returned as-is (both terminal verdicts)
+    Also handles Korean phrasings (판정:) and standalone bold verdicts.
     """
     for pattern in _VERDICT_PATTERNS:
         m = pattern.search(response)
         if m:
             raw = m.group(1).upper()
+            # ISSUE-01: In inverted mode, PASS/FAIL are terminal — don't alias
+            if convergence_model == "inverted" and raw in ("PASS", "FAIL"):
+                return raw
             return _VERDICT_ALIASES.get(raw, raw)
     return "UNKNOWN"
+
+
+# ---------------------------------------------------------------------------
+# Inverted-mode helpers (ISSUE-01, ISSUE-07)
+# ---------------------------------------------------------------------------
+
+
+def _extract_blockers(response: str) -> list[str]:
+    """Extract blocker items from an inverted-mode FAIL response."""
+    blockers: list[str] = []
+    in_blockers = False
+    for line in response.splitlines():
+        if re.match(r"###?\s*Blockers", line, re.IGNORECASE):
+            in_blockers = True
+            continue
+        if in_blockers:
+            if line.startswith("#"):
+                break
+            m = re.match(r"\s*\d+[.)]\s*(.+)", line)
+            if m:
+                blockers.append(m.group(1).strip())
+            elif line.startswith("- "):
+                blockers.append(line[2:].strip())
+    return blockers
+
+
+_HALT_REASON_KEYWORDS: dict[str, str] = {
+    "circular": "circular_argumentation",
+    "contradiction": "external_contradiction",
+    "missing information": "missing_information",
+    "scope escalation": "scope_escalation",
+    "scope": "scope_escalation",
+}
+
+
+def _parse_halt_reason(response: str) -> str:
+    """Extract structured halt reason from an antithesis HALT response."""
+    lower = response.lower()
+    for keyword, reason in _HALT_REASON_KEYWORDS.items():
+        if keyword in lower:
+            return reason
+    return "convergence_failure"
 
 
 # ---------------------------------------------------------------------------
@@ -253,6 +299,9 @@ def _make_client(
         allowed = ["Read", "Grep", "Glob"]
         disallowed = ["Write", "Edit", "NotebookEdit"]
 
+    # ISSUE-20: bypassPermissions for both agents — thesis needs it for 구현 Write/Edit;
+    # antithesis is restricted to read-only via allowed_tools above. Uniform permission
+    # mode avoids per-step session reconfiguration complexity.
     options = ClaudeAgentOptions(
         model=model,
         system_prompt=SystemPromptPreset(
@@ -279,6 +328,22 @@ async def run_dialectic(config: dict[str, Any]) -> dict[str, Any]:
 
     Returns a result dict with status, rounds, verdict, and deliverable_path.
     """
+    # ISSUE-12: Validate required config fields
+    required_fields = [
+        "log_dir", "step_id", "step_goal", "project_root",
+        "thesis_prompt_path", "antithesis_prompt_path",
+        "step_assignment", "antithesis_briefing",
+    ]
+    missing = [f for f in required_fields if f not in config]
+    if missing:
+        return {
+            "status": "halted",
+            "rounds": 0,
+            "verdict": "HALT",
+            "halt_reason": "invalid_config",
+            "missing_fields": missing,
+        }
+
     log_dir = Path(config["log_dir"])
     log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -288,6 +353,8 @@ async def run_dialectic(config: dict[str, Any]) -> dict[str, Any]:
     project_root = config["project_root"]
     query_timeout = config.get("query_timeout", 600)
     language = config.get("language", "English")
+    # ISSUE-01: Read convergence model to handle inverted-mode terminal verdicts
+    convergence_model = config.get("convergence_model", "standard")
 
     # Load step-specific system prompts (written by MetaAgent — role/goal/criteria only)
     thesis_step_prompt = Path(config["thesis_prompt_path"]).read_text(encoding="utf-8")
@@ -361,7 +428,7 @@ async def run_dialectic(config: dict[str, Any]) -> dict[str, Any]:
             )
             write_log(log_dir, round_num, "antithesis", anti_msg)
 
-            verdict = parse_verdict(anti_msg)
+            verdict = parse_verdict(anti_msg, convergence_model)
             append_dialogue(log_dir, round_num, "antithesis", verdict, anti_msg)
             print(f"{step_id}: Round {round_num}, {verdict}", flush=True)
 
@@ -379,6 +446,21 @@ async def run_dialectic(config: dict[str, Any]) -> dict[str, Any]:
                 )
                 write_log(log_dir, round_num, "final", final_msg)
                 append_dialogue(log_dir, round_num, "final", "CONVERGED", final_msg)
+                break
+
+            # ISSUE-01: In inverted mode, PASS and FAIL are terminal verdicts
+            if verdict == "PASS":
+                # Inverted mode: antithesis confirmed 0 blockers — judgment is the deliverable
+                final_msg = anti_msg
+                write_log(log_dir, round_num, "final", final_msg)
+                append_dialogue(log_dir, round_num, "final", "PASS", final_msg)
+                break
+
+            if verdict == "FAIL":
+                # Inverted mode: blockers confirmed by judge — judgment is the deliverable
+                final_msg = anti_msg
+                write_log(log_dir, round_num, "final", final_msg)
+                append_dialogue(log_dir, round_num, "final", "FAIL", final_msg)
                 break
 
             if verdict == "HALT":
@@ -466,19 +548,24 @@ async def run_dialectic(config: dict[str, Any]) -> dict[str, Any]:
         deliverable_path = log_dir / "deliverable.md"
         deliverable_path.write_text(final_msg, encoding="utf-8")
 
+        # ISSUE-01: PASS and FAIL are terminal "completed" verdicts in inverted mode
         result: dict[str, Any] = {
-            "status": "completed" if verdict == "ACCEPT" else "halted",
+            "status": "completed" if verdict in ("ACCEPT", "PASS", "FAIL") else "halted",
             "rounds": round_num,
             "verdict": verdict,
             "deliverable_path": str(deliverable_path),
         }
+        # ISSUE-01: Extract blockers from inverted-mode FAIL for MetaAgent retry logic
+        if verdict == "FAIL":
+            result["blockers"] = _extract_blockers(final_msg)
+        # ISSUE-07: Parse structured HALT reason from antithesis response
         if verdict == "HALT":
             if consecutive_degenerate >= DEGENERATE_HALT_AFTER:
                 result["halt_reason"] = "dialogue_degeneration"
             elif consecutive_unknown >= UNKNOWN_VERDICT_HALT_AFTER:
                 result["halt_reason"] = "unparseable_verdicts"
             else:
-                result["halt_reason"] = "convergence_failure"
+                result["halt_reason"] = _parse_halt_reason(anti_msg)
 
         return result
 
@@ -503,8 +590,13 @@ def main() -> None:
     _check_sdk()
 
     config_path = sys.argv[1]
-    with open(config_path, encoding="utf-8") as f:
-        config = json.load(f)
+    # ISSUE-11: Structured JSON error output on config load failure
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            config = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(json.dumps({"status": "error", "error": f"Config load failed: {exc}"}), flush=True)
+        sys.exit(1)
 
     logging.basicConfig(
         level=logging.WARNING,
@@ -512,7 +604,13 @@ def main() -> None:
         stream=sys.stderr,
     )
 
-    result = asyncio.run(run_dialectic(config))
+    # ISSUE-11: Structured JSON error output on engine crash
+    try:
+        result = asyncio.run(run_dialectic(config))
+    except Exception as exc:
+        logger.error("Dialectic engine crashed: %s", exc, exc_info=True)
+        print(json.dumps({"status": "error", "error": str(exc)}), flush=True)
+        sys.exit(1)
 
     # Last line of stdout MUST be JSON (MetaAgent output contract)
     print(json.dumps(result), flush=True)
@@ -550,7 +648,7 @@ def _self_test() -> None:
         ("**Response**: ACCEPT", "ACCEPT"),
         # Plain response
         ("Response: REFINE", "REFINE"),
-        # Inverted-mode judgments (PASS→ACCEPT, FAIL→REFINE)
+        # Standard-mode aliasing of inverted patterns (PASS→ACCEPT, FAIL→REFINE)
         ("## Judgment: PASS", "ACCEPT"),
         ("**Judgment**: FAIL", "REFINE"),
         # Korean phrasing
@@ -581,8 +679,32 @@ def _self_test() -> None:
             preview = text[:60].replace("\n", "\\n")
             print(f"  FAIL: parse_verdict({preview!r}...) = {result!r}, expected {expected!r}")
 
-    total = passed + failed + fm_passed + fm_failed
-    all_failed = failed + fm_failed
+    # --- parse_verdict inverted-mode tests (ISSUE-01) ---
+    inv_cases: list[tuple[str, str]] = [
+        ("## Judgment: PASS", "PASS"),
+        ("## Judgment: FAIL", "FAIL"),
+        ("**Judgment**: PASS", "PASS"),
+        ("**Judgment**: FAIL", "FAIL"),
+        ("판정: PASS", "PASS"),
+        ("판정: FAIL", "FAIL"),
+        # Standard verdicts unchanged in inverted mode
+        ("## Response: ACCEPT", "ACCEPT"),
+        ("## Response: REFINE", "REFINE"),
+        ("## Response: COUNTER", "COUNTER"),
+    ]
+    inv_passed = 0
+    inv_failed = 0
+    for text, expected in inv_cases:
+        result = parse_verdict(text, "inverted")
+        if result == expected:
+            inv_passed += 1
+        else:
+            inv_failed += 1
+            preview = text[:60].replace("\n", "\\n")
+            print(f"  FAIL: parse_verdict({preview!r}, 'inverted') = {result!r}, expected {expected!r}")
+
+    total = passed + failed + fm_passed + fm_failed + inv_passed + inv_failed
+    all_failed = failed + fm_failed + inv_failed
     if all_failed:
         print(f"FAIL: {total - all_failed}/{total} passed, {all_failed} failed")
         sys.exit(1)
