@@ -193,14 +193,19 @@ Type (분류): Quick ({request_type}) — {complexity}
 ...
 
 Iterations (반복): {loop_count}
-  · Reentry point (재진입): {loop_policy.reentry_point} (from iteration 2)
-  · Early exit (조기 종료): {"allowed" if early_exit_on_no_improvement else "not allowed"}
-  · Persistent failure HALT: after {loop_policy.persistent_failure_halt_after} consecutive same-blocker failures
-  · Lessons accumulate across iterations in lessons.md
+{if loop_count > 1:
+  · Each pass refines output from a different review angle (매 반복마다 다른 관점으로 개선)
+  · Reentry (재진입): iteration 2+ starts from {loop_policy.reentry_point}, skipping earlier steps
+  · Lessons from each pass carry forward to the next (lessons.md)
+}  · Auto-stop (자동 중단): halts if the same issue recurs {loop_policy.persistent_failure_halt_after} consecutive times
 
 {reasoning}
 
-Approve or modify. Examples: "approve", "3 iterations", "reenter from 기획", "skip 테스트"
+Approve or modify (승인 또는 수정). Examples:
+  "approve" / "3 iterations" / "skip 테스트" / "reenter from 기획"
+  "focus on performance" / "add security check after 검증" / "modify 검증 criteria"
+
+> Tip: `/tas-review` (standalone review), `/tas-explain` (inspect past runs), `/tas-workspace` (manage workspaces)
 ```
 
 ### Handle User Response
@@ -288,6 +293,12 @@ Display a brief scope message before invoking MetaAgent:
 Running {len(steps)} step(s) × {loop_count} iteration(s)...
 ```
 
+For `request_type` in `[implement, refactor]` and the working tree passed the dirty-tree check (clean or user confirmed), append:
+
+```
+⚠ Code will be modified directly (코드가 직접 수정됩니다). Review after: `git diff` | Undo: `git stash`
+```
+
 Invoke MetaAgent via Agent():
 
 ```
@@ -350,14 +361,17 @@ ThesisAgent has bypassPermissions and modifies code directly during the dialecti
 Do NOT ask "적용할까요?" — code is already changed.
 
 ```
-Converged (정반합) — {iterations} iteration(s), {rounds_total} rounds.{" (early exit)" if early_exit}
+Converged (정반합) — {iterations} iteration(s), {rounds_total} rounds.
+{if early_exit: "ℹ Early exit (조기 종료): completed {iterations} of {loop_count} planned — further refinement deemed unproductive."}
 {summary from JSON}
 
 Changed files: `git diff --stat` output
 Deliverable: {workspace}/DELIVERABLE.md
 Lessons: {workspace}/lessons.md
 
-> **Recommended**: Run `/tas-verify` to independently trace boundary values.
+> `/tas-verify` — independently verify boundary values and correctness
+> `/tas-explain {timestamp}` — inspect the dialectic debate
+> `/tas-workspace` — manage workspace artifacts
 ```
 
 The user can review and revert if needed:
@@ -378,7 +392,8 @@ DELIVERABLE_CONTENT="$(head -200 ${WORKSPACE}/DELIVERABLE.md 2>/dev/null)"
 If the deliverable is 200 lines or fewer, display it in full:
 
 ```
-Converged (정반합) — {iterations} iteration(s), {rounds_total} rounds.{" (early exit)" if early_exit}
+Converged (정반합) — {iterations} iteration(s), {rounds_total} rounds.
+{if early_exit: "ℹ Early exit (조기 종료): completed {iterations} of {loop_count} planned — further refinement deemed unproductive."}
 {summary from JSON}
 
 ---
@@ -387,12 +402,16 @@ Converged (정반합) — {iterations} iteration(s), {rounds_total} rounds.{" (e
 
 Full deliverable: {workspace}/DELIVERABLE.md
 Lessons: {workspace}/lessons.md
+
+> `/tas-explain {timestamp}` — inspect the dialectic debate
+> `/tas-workspace` — manage workspace artifacts
 ```
 
 If the deliverable exceeds 200 lines, show a preview:
 
 ```
-Converged (정반합) — {iterations} iteration(s), {rounds_total} rounds.{" (early exit)" if early_exit}
+Converged (정반합) — {iterations} iteration(s), {rounds_total} rounds.
+{if early_exit: "ℹ Early exit (조기 종료): completed {iterations} of {loop_count} planned — further refinement deemed unproductive."}
 {summary from JSON}
 
 ---
@@ -401,8 +420,14 @@ Converged (정반합) — {iterations} iteration(s), {rounds_total} rounds.{" (e
 ... ({DELIVERABLE_LINES - 200} more lines)
 ---
 
-Full deliverable: {workspace}/DELIVERABLE.md
+Full deliverable ({DELIVERABLE_LINES} lines): {workspace}/DELIVERABLE.md
+  View all: `cat {workspace}/DELIVERABLE.md`
+  View section: `sed -n '200,300p' {workspace}/DELIVERABLE.md`
+  Or: "show me the rest of the deliverable"
 Lessons: {workspace}/lessons.md
+
+> `/tas-explain {timestamp}` — inspect the dialectic debate
+> `/tas-workspace` — manage workspace artifacts
 ```
 
 If the deliverable file is missing or empty, fall back to showing just the path.
@@ -410,48 +435,97 @@ If the deliverable file is missing or empty, fall back to showing just the path.
 **On HALT** (`status: "halted"`):
 
 Read `{workspace}/lessons.md` to extract the specific blockers that caused the halt.
+Count retry attempts:
+
+```bash
+LAST_ITER="$(ls -d ${WORKSPACE}/iteration-* 2>/dev/null | sort -V | tail -1)"
+RETRY_COUNT="$(find ${LAST_ITER}/logs/ -type d -name '*-retry-*' 2>/dev/null | wc -l | tr -d ' ')"
+```
+
+Extract `{timestamp}` from the workspace path (the `YYYYmmdd_HHMMSS` directory name).
 
 Map `halt_reason` to a human-readable label:
 
-| halt_reason (raw) | Display label |
-|-------------------|---------------|
-| `persistent_verify_failure` | Persistent verification failure |
-| `persistent_test_failure` | Persistent test failure |
-| `circular_argumentation` | Circular argumentation — agents could not converge |
-| `convergence_failure` | Convergence failure |
-| `dialogue_degeneration` | Dialogue degeneration — agents produced empty responses |
-| `unparseable_verdicts` | Unparseable verdicts — agent output format error |
-| `missing_engine_artifacts` | Missing engine artifacts (internal error) |
-| `workspace_convention_violation` | Workspace convention violation (internal error) |
+| halt_reason (raw) | Display label (표시 라벨) |
+|-------------------|--------------------------|
+| `persistent_verify_failure` | Persistent verification failure (검증 반복 실패) |
+| `persistent_test_failure` | Persistent test failure (테스트 반복 실패) |
+| `circular_argumentation` | Circular argumentation (순환 논증) — agents could not converge |
+| `convergence_failure` | Convergence failure (수렴 실패) — agents did not reach agreement within session |
+| `dialogue_degeneration` | Dialogue degeneration (대화 퇴화) — agents produced empty responses |
+| `unparseable_verdicts` | Unparseable verdicts (판정 파싱 오류) — internal format error |
+| `missing_engine_artifacts` | Missing engine artifacts (엔진 산출물 누락) — internal error |
+| `workspace_convention_violation` | Workspace convention violation (작업공간 규칙 위반) — internal error |
 | (other) | Use `halt_reason` as-is |
 
+Display the HALT message with retry count:
+
 ```
-⚠ Halted early.
+⚠ Halted (중단됨)
 
 Reason: {display label from table above}
 Halted at: {halted_at}
+{if RETRY_COUNT > 0: "Auto-retried: {RETRY_COUNT} time(s) before halting (자동 재시도 {RETRY_COUNT}회 후 중단)"}
 
-Blockers identified (from lessons.md):
+Blockers (from lessons.md):
 {List the specific blocker descriptions from the last retry entries in lessons.md}
-
-Suggested next steps:
 ```
 
-Provide actionable recovery guidance based on `halt_reason`:
+Then provide recovery guidance specific to `halt_reason`:
 
-| halt_reason | Guidance |
-|-------------|----------|
-| `persistent_verify_failure` | "The same verification issue recurred {N} times. Check the blocker above and fix it manually, then re-run: `/tas {original request}`" |
-| `persistent_test_failure` | "Tests failed repeatedly on the same issue. Run the failing test manually to diagnose: `{test command from lessons.md if available}`. Fix and re-run `/tas`." |
-| `circular_argumentation` | "Thesis and Antithesis could not converge. Run `/tas-explain {timestamp}` to see the debate, then rephrase your request with more specific constraints." |
-| (other) | "Check `{workspace}/lessons.md` for details. You can retry with `/tas {request}` or inspect workspace logs." |
+**`persistent_verify_failure`**:
+```
+The same verification issue recurred{if RETRY_COUNT > 0: " despite {RETRY_COUNT} retries"}.
+Review the blockers above and check the relevant code.
+  → Fix manually, then re-run: /tas {original request}
+  → Inspect the debate: /tas-explain {timestamp}
+```
 
-Extract `{timestamp}` from the workspace path (the `YYYYmmdd_HHMMSS` directory name).
+**`persistent_test_failure`**:
+```
+Tests failed repeatedly on the same issue.
+{if test command identifiable from lessons.md: "Run manually: {test command}"}
+  → Fix the failing test, then re-run: /tas {original request}
+  → Inspect the debate: /tas-explain {timestamp}
+```
+
+**`circular_argumentation`**:
+```
+Review agents could not reach agreement — the request scope may be ambiguous
+or contain conflicting constraints.
+  → Inspect the debate: /tas-explain {timestamp}
+  → Retry with narrower scope or more specific constraints
+```
+
+**`dialogue_degeneration`**:
+```
+Review agents produced insufficient responses — the request may be unclear
+or too narrowly scoped for dialectic analysis.
+  → Rephrase with more specific requirements: /tas {revised request}
+```
+
+**`unparseable_verdicts`**:
+```
+Internal format error in agent communication. This is typically transient.
+  → Retry: /tas {original request}
+  → If persistent, check workspace logs for details
+```
+
+**(other)** (including `convergence_failure`, `missing_engine_artifacts`, `workspace_convention_violation`):
+```
+  → Check {workspace}/lessons.md for details
+  → Inspect the debate: /tas-explain {timestamp}
+  → Retry: /tas {original request}
+```
+
+Always end HALT display with:
 
 ```
 Workspace: {workspace}
 Lessons: {workspace}/lessons.md
-Dialogue: `/tas-explain {timestamp}` — see what was debated
+
+> `/tas-explain {timestamp}` — inspect the dialectic debate
+> `/tas-workspace` — manage workspace artifacts
 ```
 
 **On error** (non-zero exit):
@@ -473,29 +547,31 @@ When MetaAgent invocation fails, classify the error and present structured recov
 
 **Type A — JSON Parse Failure** (Agent returned text but not valid JSON):
 ```
-⚠ Could not parse MetaAgent response.
+⚠ Could not parse MetaAgent response (응답 파싱 실패).
 Cause: Response was not valid JSON.
-Logs: check {workspace}/ for details.
+Response preview (응답 미리보기): {first 200 characters of the Agent response, truncated with "..."}
+Logs: {workspace}/
 
 → Retry / Abort
 ```
 
 **Type B — Agent Timeout or Empty Response** (zero-length result or Agent() hung):
 ```
-⚠ No response from MetaAgent (timeout or empty output).
-Cause: Request complexity may have exceeded processing capacity.
+⚠ No response from MetaAgent (응답 없음).
+Cause: Request may have exceeded processing capacity, or connection was interrupted.
 
-→ Retry / Reduce complexity (fewer steps) and retry / Abort
+→ Retry / Simplify request (fewer steps, lower complexity) / Abort
 ```
-If user chooses complexity downgrade: re-invoke Classify with hint "simplify to fewer steps".
+If user chooses simplification: re-invoke Classify with hint "simplify to fewer steps".
 
 **Type C — Agent invocation failure with partial output** (Agent() errored but produced partial JSON or non-JSON):
 
 Note: If the Agent returned valid JSON with `status: "halted"`, that is a normal HALT — handled by Phase 3 "On HALT" above, NOT by this error handler. Type C applies only when the Agent() call itself failed (non-zero exit, partial output, etc.).
 
 ```
-⚠ MetaAgent exited abnormally (invocation failure).
-Logs: {workspace}/ — check for partial output in logs/ directories.
+⚠ MetaAgent exited abnormally (비정상 종료).
+{if partial output exists: "Partial output (부분 출력): {first 200 characters of partial output, truncated with '...'}"}
+Logs: {workspace}/ — check iteration-*/logs/ for partial results.
 
 → Retry / Abort
 ```
