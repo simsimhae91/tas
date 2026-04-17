@@ -170,36 +170,16 @@ Or for trivial requests that reached Classify:
 
 **If `mode: "direct"`**: Display MetaAgent's response. Done.
 
-**If `mode: "quick"` with `complexity: "simple"` (1 step)**:
+**If `mode: "quick"`**: Display plan with format adapted to step count:
+
 ```
-Request (요청): {request}
-Type (분류): Quick ({request_type}) — {complexity}
-Step (단계): {steps[0].name} — {steps[0].goal}
-
-Approve or modify? (승인 또는 수정)
-```
-
-**If `mode: "quick"` with `complexity: "medium"` or `"complex"` (2-4 steps)**:
-```
-## Execution Plan (정반합)
-
-Request (요청): {request}
-Type (분류): Quick ({request_type}) — {complexity}
-
-| # | Step (단계) | Goal (목표) |
-|---|------------|------------|
-| 1 | {steps[0].name} | {steps[0].goal} |
-| 2 | {steps[1].name} | {steps[1].goal} |
-...
-
-Iterations (반복): {loop_count}
-{if loop_count > 1:
-  · Each pass refines output from a different review angle (매 반복마다 다른 관점으로 개선)
-  · Reentry (재진입): iteration 2+ starts from {loop_policy.reentry_point}, skipping earlier steps
-  · Lessons from each pass carry forward to the next (lessons.md)
-}  · Auto-stop (자동 중단): halts if the same issue recurs {loop_policy.persistent_failure_halt_after} consecutive times
-
-{reasoning}
+{if 1 step: "Request (요청): {request}\nType (분류): Quick ({request_type}) — {complexity}\nStep (단계): {steps[0].name} — {steps[0].goal}"}
+{if 2-4 steps:
+  "## Execution Plan (정반합)\n\nRequest (요청): {request}\nType (분류): Quick ({request_type}) — {complexity}\n\n| # | Step (단계) | Goal (목표) |\n|---|------------|------------|\n{steps table rows}\n\nIterations (반복): {loop_count}"
+  if loop_count > 1:
+    "· Each pass refines from a different angle · Reentry: from {reentry_point} · Lessons carry forward"
+  "· Auto-stop: halts if same issue recurs {persistent_failure_halt_after} consecutive times\n\n{reasoning}"
+}
 
 Approve or modify (승인 또는 수정). Examples:
   "approve" / "3 iterations" / "skip 테스트" / "reenter from 기획"
@@ -210,45 +190,20 @@ Approve or modify (승인 또는 수정). Examples:
 
 ### Handle User Response
 
-After applying any modification below, show a brief changelog before re-displaying the plan:
+For any modification, show changelog (`{field}: {old} → {new}`) then re-display plan.
 
-```
-Changes:
-- {field}: {old value} → {new value}
-```
-
-Then re-display the updated plan.
-
-- **Approve** ("approve", "ok", "yes", "go", "lgtm", "승인", "ㅇㅇ") → Initialize workspace, → Phase 2
-- **Adjust iteration count** (e.g., "3 iterations", "3번 반복해줘", "한 번만"):
-  - Parse the new `loop_count` integer from user text
-  - Update the plan JSON in place (no re-classify needed)
-  - Show changelog and re-display plan
-- **Adjust reentry point** (e.g., "reenter from 기획", "기획부터 다시", "구현만 반복"):
-  - Update `loop_policy.reentry_point` to `기획` or `구현` accordingly
-  - Show changelog and re-display plan
-- **Modify pass criteria** (e.g., "add performance criterion to 검증", "기획 pass criteria를 ~로 변경"):
-  - Identify the target step by name from user text
-  - Replace or append to that step's `pass_criteria` array
-  - Re-display plan (no re-classify needed)
-- **Remove step** (e.g., "skip 테스트", "테스트 단계 빼줘", "기획 생략"):
-  - Remove the named step from `steps` array
-  - Re-number remaining step IDs sequentially
-  - Re-display plan
-- **Add step** (e.g., "add security check after 검증", "검증 후에 보안 점검 단계 추가해줘"):
-  - Insert new step after the named anchor step with user-specified goal
-  - Ask the user for concrete pass criteria: "What should pass criteria be for this step? (e.g., 'No SQL injection in user inputs', 'All endpoints return < 200ms')"
-  - If user provides criteria, use them. If user says "skip" or equivalent, assign `pass_criteria: ["Goal achieved"]`
-  - Re-number step IDs sequentially
-  - Show changelog and re-display plan
-- **Set focus angle** (e.g., "focus on performance", "성능 관점으로 리뷰해줘", "보안 중심으로"):
-  - Add `focus_angle` field to the plan JSON root: `"focus_angle": "{user-specified angle}"`
-  - This is passed to MetaAgent Execute and influences iteration focus
-  - Re-display plan
-- **Multiple modifications** (several adjustments at once):
-  - Apply all modifications sequentially, then re-display once
-- **Major plan restructure** → Re-invoke classify with the user's adjustment hint, → Display Plan again
-- **Reject** ("no", "cancel", "abort", "거부") → Done
+| User intent | Examples | Action |
+|-------------|----------|--------|
+| **Approve** | "approve", "ok", "go", "승인", "ㅇㅇ" | → Phase 2 |
+| **Adjust iterations** | "3 iterations", "한 번만" | Update `loop_count` in-place |
+| **Adjust reentry** | "reenter from 기획", "구현만 반복" | Update `loop_policy.reentry_point` |
+| **Modify criteria** | "add performance criterion to 검증" | Replace/append `pass_criteria` for target step |
+| **Remove step** | "skip 테스트", "기획 생략" | Remove step, re-number IDs |
+| **Add step** | "add security check after 검증" | Insert after anchor step; ask for pass criteria (default: `["Goal achieved"]`) |
+| **Set focus** | "focus on performance", "보안 중심으로" | Add `focus_angle` to plan root |
+| **Multiple mods** | (several at once) | Apply all, re-display once |
+| **Major restructure** | (fundamental plan change) | Re-invoke Classify with hint |
+| **Reject** | "no", "cancel", "거부" | Done |
 
 ---
 
@@ -265,25 +220,13 @@ Write `$WORKSPACE/REQUEST.md` with original request text.
 
 ### Dirty-Tree Check (implement/refactor only)
 
-For `request_type` in `[implement, refactor]`, check for uncommitted changes before execution:
-
 ```bash
 DIRTY="$(git status --porcelain 2>/dev/null | head -5)"
 DIRTY_COUNT="$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
 ```
 
-If `DIRTY` is non-empty, warn the user:
-
-```
-⚠ You have uncommitted changes ({DIRTY_COUNT} file(s)):
-{DIRTY}
-{if DIRTY_COUNT > 5: "  ... and {DIRTY_COUNT - 5} more"}
-
-tas will modify files directly. To preserve your current state, run `git stash` first.
-Continue anyway?
-```
-
-If user declines, abort. If user confirms (or request_type is not implement/refactor), proceed.
+If non-empty, warn: "⚠ You have uncommitted changes ({DIRTY_COUNT} file(s))... tas will
+modify files directly. `git stash` first?" If user declines → abort.
 
 ### Pre-Execution Message
 
@@ -434,93 +377,58 @@ If the deliverable file is missing or empty, fall back to showing just the path.
 
 **On HALT** (`status: "halted"`):
 
-Read `{workspace}/lessons.md` to extract the specific blockers that caused the halt.
-Count retry attempts:
+Read `{workspace}/lessons.md` for blockers. Count retry attempts:
 
 ```bash
 LAST_ITER="$(ls -d ${WORKSPACE}/iteration-* 2>/dev/null | sort -V | tail -1)"
 RETRY_COUNT="$(find ${LAST_ITER}/logs/ -type d -name '*-retry-*' 2>/dev/null | wc -l | tr -d ' ')"
 ```
 
-Extract `{timestamp}` from the workspace path (the `YYYYmmdd_HHMMSS` directory name).
+Extract `{timestamp}` from the workspace path (`YYYYmmdd_HHMMSS`).
 
-Map `halt_reason` to a human-readable label:
+#### HALT Reason Labels
 
-| halt_reason (raw) | Display label (표시 라벨) |
-|-------------------|--------------------------|
+| halt_reason | Display label |
+|-------------|---------------|
 | `persistent_verify_failure` | Persistent verification failure (검증 반복 실패) |
 | `persistent_test_failure` | Persistent test failure (테스트 반복 실패) |
-| `circular_argumentation` | Circular argumentation (순환 논증) — agents could not converge |
-| `convergence_failure` | Convergence failure (수렴 실패) — agents did not reach agreement within session |
-| `dialogue_degeneration` | Dialogue degeneration (대화 퇴화) — agents produced empty responses |
-| `unparseable_verdicts` | Unparseable verdicts (판정 파싱 오류) — internal format error |
-| `missing_engine_artifacts` | Missing engine artifacts (엔진 산출물 누락) — internal error |
-| `workspace_convention_violation` | Workspace convention violation (작업공간 규칙 위반) — internal error |
+| `circular_argumentation` | Circular argumentation (순환 논증) |
+| `convergence_failure` | Convergence failure (수렴 실패) |
+| `dialogue_degeneration` | Dialogue degeneration (대화 퇴화) |
+| `unparseable_verdicts` | Unparseable verdicts (판정 파싱 오류) |
+| `missing_engine_artifacts` | Missing engine artifacts (엔진 산출물 누락) |
+| `workspace_convention_violation` | Workspace convention violation (작업공간 규칙 위반) |
 | (other) | Use `halt_reason` as-is |
 
-Display the HALT message with retry count:
+#### HALT Display
 
 ```
 ⚠ Halted (중단됨)
 
-Reason: {display label from table above}
+Reason: {display label}
 Halted at: {halted_at}
-{if RETRY_COUNT > 0: "Auto-retried: {RETRY_COUNT} time(s) before halting (자동 재시도 {RETRY_COUNT}회 후 중단)"}
+{if RETRY_COUNT > 0: "Auto-retried: {RETRY_COUNT} time(s) before halting"}
 
 Blockers (from lessons.md):
-{List the specific blocker descriptions from the last retry entries in lessons.md}
+{blocker descriptions from last retry entries}
 ```
 
-Then provide recovery guidance specific to `halt_reason`:
+#### Recovery Guidance
 
-**`persistent_verify_failure`**:
+| halt_reason | Recovery message |
+|-------------|-----------------|
+| `persistent_verify_failure` | "The same verification issue recurred. Review blockers and check relevant code." |
+| `persistent_test_failure` | "Tests failed repeatedly on the same issue. {test command if identifiable}" |
+| `circular_argumentation` | "Agents could not converge — request scope may be ambiguous or conflicting." |
+| `dialogue_degeneration` | "Agents produced insufficient responses — rephrase with more specific requirements." |
+| `unparseable_verdicts` | "Internal format error, typically transient." |
+| (other) | "Check lessons.md for details." |
+
+All HALT messages end with:
 ```
-The same verification issue recurred{if RETRY_COUNT > 0: " despite {RETRY_COUNT} retries"}.
-Review the blockers above and check the relevant code.
-  → Fix manually, then re-run: /tas {original request}
+  → Fix/rephrase, then re-run: /tas {original request}
   → Inspect the debate: /tas-explain {timestamp}
-```
 
-**`persistent_test_failure`**:
-```
-Tests failed repeatedly on the same issue.
-{if test command identifiable from lessons.md: "Run manually: {test command}"}
-  → Fix the failing test, then re-run: /tas {original request}
-  → Inspect the debate: /tas-explain {timestamp}
-```
-
-**`circular_argumentation`**:
-```
-Review agents could not reach agreement — the request scope may be ambiguous
-or contain conflicting constraints.
-  → Inspect the debate: /tas-explain {timestamp}
-  → Retry with narrower scope or more specific constraints
-```
-
-**`dialogue_degeneration`**:
-```
-Review agents produced insufficient responses — the request may be unclear
-or too narrowly scoped for dialectic analysis.
-  → Rephrase with more specific requirements: /tas {revised request}
-```
-
-**`unparseable_verdicts`**:
-```
-Internal format error in agent communication. This is typically transient.
-  → Retry: /tas {original request}
-  → If persistent, check workspace logs for details
-```
-
-**(other)** (including `convergence_failure`, `missing_engine_artifacts`, `workspace_convention_violation`):
-```
-  → Check {workspace}/lessons.md for details
-  → Inspect the debate: /tas-explain {timestamp}
-  → Retry: /tas {original request}
-```
-
-Always end HALT display with:
-
-```
 Workspace: {workspace}
 Lessons: {workspace}/lessons.md
 
@@ -541,63 +449,21 @@ Workspace artifacts (if any): {workspace}
 
 **NEVER fall back to direct implementation on any error. Report and offer: retry / abort.**
 
-### Error Classification
+### Error Detection & Recovery
 
-When MetaAgent invocation fails, classify the error and present structured recovery:
+Classify errors by priority order. If the Agent returned valid JSON with `status: "halted"`,
+that is a normal HALT (Phase 3), NOT an error.
 
-**Type A — JSON Parse Failure** (Agent returned text but not valid JSON):
-```
-⚠ Could not parse MetaAgent response (응답 파싱 실패).
-Cause: Response was not valid JSON.
-Response preview (응답 미리보기): {first 200 characters of the Agent response, truncated with "..."}
-Logs: {workspace}/
+| Priority | Condition | Display | Recovery |
+|----------|-----------|---------|----------|
+| 1 | Response contains "ModuleNotFoundError" or "claude_agent_sdk" | ⚠ SDK not installed | Show install commands (pip/pipx/uv), ask to restart session |
+| 2 | Response is empty or zero-length | ⚠ No response (응답 없음) | Retry / Simplify (re-classify with "simplify") / Abort |
+| 3 | Non-empty but JSON parse fails | ⚠ Parse failure (파싱 실패) | Show first 200 chars of response. Retry / Abort |
+| 4 | `status: "halted"` in valid JSON | (not an error) | → Phase 3 "On HALT" |
+| 5 | Agent() failed with partial output | ⚠ Abnormal exit (비정상 종료) | Show partial output (200 chars). Retry / Abort |
+| 6 | Any other failure | ⚠ No response (응답 없음) | Retry / Abort |
 
-→ Retry / Abort
-```
-
-**Type B — Agent Timeout or Empty Response** (zero-length result or Agent() hung):
-```
-⚠ No response from MetaAgent (응답 없음).
-Cause: Request may have exceeded processing capacity, or connection was interrupted.
-
-→ Retry / Simplify request (fewer steps, lower complexity) / Abort
-```
-If user chooses simplification: re-invoke Classify with hint "simplify to fewer steps".
-
-**Type C — Agent invocation failure with partial output** (Agent() errored but produced partial JSON or non-JSON):
-
-Note: If the Agent returned valid JSON with `status: "halted"`, that is a normal HALT — handled by Phase 3 "On HALT" above, NOT by this error handler. Type C applies only when the Agent() call itself failed (non-zero exit, partial output, etc.).
-
-```
-⚠ MetaAgent exited abnormally (비정상 종료).
-{if partial output exists: "Partial output (부분 출력): {first 200 characters of partial output, truncated with '...'}"}
-Logs: {workspace}/ — check iteration-*/logs/ for partial results.
-
-→ Retry / Abort
-```
-
-**Type D — SDK Not Installed** (Agent response contains "ModuleNotFoundError" or "claude_agent_sdk"):
-```
-⚠ claude-agent-sdk is not installed. /tas requires it to run.
-
-Install with one of:
-  pip install claude-agent-sdk
-  pipx install claude-agent-sdk
-  uv tool install claude-agent-sdk
-
-Then start a new session and try again.
-```
-
-### Detection Priority
-
-| Priority | Check | Error Type |
-|----------|-------|------------|
-| 1 | Response contains "ModuleNotFoundError" or "claude_agent_sdk" | Type D |
-| 2 | Response is empty or zero-length | Type B |
-| 3 | Response is non-empty but JSON parse fails | Type A |
-| 4 | JSON parsed successfully with `status: "halted"` | Phase 3 "On HALT" (not an error) |
-| 5 | Agent() invocation failed (non-zero exit, partial output) | Type C |
-| 6 | Any other Agent() failure | Type B (default) |
+For all errors, include `Logs: {workspace}/` when workspace exists.
 
 ---
 

@@ -44,31 +44,17 @@ The Python dialectic engine (`dialectic.py`, invoked via `run-dialectic.sh`) is
 the **sole authorized producer** of dialectic content. You coordinate the engine
 — you do NOT simulate it yourself via Write, Agent(), or role-play.
 
-**Forbidden tools for dialectic content**:
+**Forbidden**: Never Write dialectic content (round logs, dialogue.md, per-step deliverable.md,
+正/反 role-play). These are produced ONLY by the engine via `Bash(bash run-dialectic.sh ...)`.
+Never use Write, Agent(), or TeamCreate for these.
 
-| Target | Forbidden Tools | Required Action |
-|--------|-----------------|-----------------|
-| `round-{N}-thesis.md`, `round-{N}-antithesis.md` | Write, Agent(), TeamCreate | Produced by engine via `Bash(bash {SKILL_DIR}/runtime/run-dialectic.sh ...)` |
-| `dialogue.md` (per-step) | Write | Engine writes automatically |
-| `deliverable.md` (per-step) | Write | Engine writes automatically |
-| Any file containing 正/反 / Thesis/Antithesis role-play content | Write | Invoke engine — never author both sides yourself |
+**Permitted Write targets** (whitelist — anything else is a violation → HALT):
 
-**Permitted Write targets** (whitelist — writing ANY other workspace file is a violation):
+- `{WORKSPACE}/REQUEST.md`, `DELIVERABLE.md`, `lessons.md` (append only)
+- `{WORKSPACE}/iteration-{N}/DELIVERABLE.md`
+- `{LOG_DIR}/step-config.json`, `thesis-system-prompt.md`, `antithesis-system-prompt.md`
 
-- `{WORKSPACE}/REQUEST.md` (if MainOrchestrator didn't already write it)
-- `{WORKSPACE}/DELIVERABLE.md` (final cross-iteration synthesis)
-- `{WORKSPACE}/lessons.md` (append only, end of iteration)
-- `{WORKSPACE}/iteration-{N}/DELIVERABLE.md` (per-iteration summary)
-- `{LOG_DIR}/step-config.json` (engine input — written BEFORE the Bash call)
-- `{LOG_DIR}/thesis-system-prompt.md`, `{LOG_DIR}/antithesis-system-prompt.md` (engine inputs)
-
-**Forbidden filename patterns**:
-
-- Numbered prefix files at workspace root: `01_*.md`, `02_*.md`, `NN_*.md`
-- Free-form named files: `*dialectic_log*`, `*research_note*`, `*ideation*` at workspace root
-
-If you find yourself about to Write a file outside the whitelist, STOP.
-Return `{"status":"halted","halt_reason":"workspace_convention_violation","forbidden_path":"..."}`.
+Forbidden patterns at workspace root: `01_*.md`..`NN_*.md`, `*dialectic_log*`, `*research_note*`, `*ideation*`.
 
 **Attestation**: Your final JSON MUST include `engine_invocations` — the count
 of `bash run-dialectic.sh` calls made across the entire run. For a plan with
@@ -122,56 +108,39 @@ This scan informs the testing strategy (e.g., web projects may need Playwright U
 
 ### Phase 2: Classification
 
-Determine three things from the request:
-
-1. **request_type**: `implement | design | review | refactor | analyze | general`
-2. **complexity**: `simple | medium | complex`
-3. **steps**: 1-4 adaptive steps matching the complexity
+Determine: **request_type** (`implement|design|review|refactor|analyze|general`),
+**complexity** (`simple|medium|complex`), **steps** (1-4 adaptive).
 
 #### Complexity Heuristic
 
-| Level | Indicators | Step count |
-|-------|-----------|-----------|
-| `simple` | Single function, small modification, narrow scope question, pure analysis/review | 1 |
-| `medium` | Multi-file change, new feature in existing module, architectural decision | 2-3 |
-| `complex` | New subsystem, substantial feature, anything with user-facing behavior, wide blast radius | 4 |
+| Level | Indicators | Steps |
+|-------|-----------|-------|
+| `simple` | Single function, narrow scope, pure analysis/review | 1 |
+| `medium` | Multi-file change, new feature in existing module | 2-3 |
+| `complex` | New subsystem, user-facing behavior, wide blast radius | 4 |
 
-The user's request wording alone is insufficient — consider the implied blast radius.
-"add a button that posts to /api/x" may look simple but touches UI, API wiring, and state.
+Consider implied blast radius, not just wording — "add a button that posts to /api/x"
+touches UI, API wiring, and state.
 
 #### Step Template Selection
 
 Read `{SKILL_DIR}/references/workflow-patterns.md` for canonical templates.
-
-For `request_type: implement | refactor` at `complex`: use the **4-step canonical flow** —
-기획(Plan) → 구현(Implement) → 검증(Verify) → 테스트(Test).
-
-For `medium`: typically 기획 → 구현 → 검증 (skip 테스트), or 구현 → 검증 depending on request.
-
-For `simple`: collapse to single combined step.
-
-For `request_type: design | review | analyze`: use the corresponding template from workflow-patterns.md
-(no 구현/테스트 steps — these produce documents, not code).
+- `implement|refactor` complex → 기획→구현→검증→테스트
+- `medium` → typically 기획→구현→검증 or 구현→검증
+- `simple` → single combined step
+- `design|review|analyze` → document-producing templates (no 구현/테스트)
 
 ### Phase 3: Plan Validation (Adaptive)
 
-Determine whether validation is worth the cost:
-
 | Complexity | Validation |
 |-----------|------------|
-| `simple` | None — return directly |
-| `medium` | None — return directly |
+| `simple` / `medium` | None — return directly |
 | `complex` | Light — 1 round via dialectic engine |
 
-**When validating** (complex only), use the Python dialectic engine with lightweight prompts:
-
-1. Create log directory: `{PROJECT_ROOT}/_workspace/quick/classify-{timestamp}/logs/validation/`
-2. Write lightweight system prompts:
-   - thesis: "You are a plan proposer. Present the proposed plan with reasoning."
-   - antithesis: "You are a plan challenger. Evaluate the plan for scope coverage, step completeness, and proportionality to request complexity."
-3. Write `step-config.json` with the proposed plan as `step_assignment`
-4. Execute: `Bash({ command: "bash {SKILL_DIR}/runtime/run-dialectic.sh {LOG_DIR}/step-config.json", timeout: 300000 })`
-5. Parse result — if REFINE/COUNTER, adjust the plan accordingly
+**Complex only**: Create `classify-{timestamp}/logs/validation/`, write lightweight
+thesis ("plan proposer") and antithesis ("plan challenger") prompts + step-config.json,
+execute via `Bash(bash {SKILL_DIR}/runtime/run-dialectic.sh ..., timeout: 300000)`.
+Parse result — if REFINE/COUNTER, adjust the plan.
 
 **Do NOT use Agent() for plan validation.** Always use the dialectic engine.
 
@@ -210,18 +179,9 @@ without concrete justification in `reasoning` — each iteration costs tokens.
 
 ## Execute Mode (COMMAND absent, PLAN provided)
 
-Run the approved plan across 1..`LOOP_COUNT` **iterations**. Each iteration is one full
-pass through the plan (or a subset — see reentry rules). Each iteration produces its
-own DELIVERABLE.md; lessons learned accumulate across iterations to inform subsequent
-passes.
-
-```
-Iteration 1: full plan (기획→구현→검증→테스트) → DELIVERABLE + lessons
-Iteration 2: reentry subset (구현→검증→테스트, skip 기획) with lessons context → DELIVERABLE + lessons
-Iteration 3: same, with all prior lessons
-...
-Final: cross-iteration synthesis → {WORKSPACE}/DELIVERABLE.md
-```
+Run the approved plan across 1..`LOOP_COUNT` iterations. Each iteration is a full or
+partial pass (see reentry rules), producing a DELIVERABLE.md. Lessons accumulate across
+iterations. After the loop, write the cross-iteration synthesis to `{WORKSPACE}/DELIVERABLE.md`.
 
 ### Phase 1: Initialize
 
@@ -230,22 +190,13 @@ mkdir -p {WORKSPACE}
 touch {WORKSPACE}/lessons.md  # if not exists
 ```
 
-Read agent definitions once (used for every step):
-- `{SKILL_DIR}/agents/thesis.md` → `thesis_instructions`
-- `{SKILL_DIR}/agents/antithesis.md` → `antithesis_instructions`
-- `{SKILL_DIR}/references/failure-patterns.md` → `failure_patterns` (기획 antithesis 주입용)
+Read once: `{SKILL_DIR}/agents/thesis.md`, `{SKILL_DIR}/agents/antithesis.md`,
+`{SKILL_DIR}/references/failure-patterns.md` (기획 antithesis 주입용).
 
-Parse inputs:
-- `PLAN` → ordered list of steps (each has id, name, goal, pass_criteria)
-- `LOOP_COUNT` → integer ≥1
-- `LOOP_POLICY.reentry_point` → name of the step to start iteration 2+ from (default "구현")
-- `LOOP_POLICY.early_exit_on_no_improvement` → bool (default true)
-- `LOOP_POLICY.persistent_failure_halt_after` → integer (default 3)
+Parse: `PLAN` (steps array), `LOOP_COUNT` (≥1), `LOOP_POLICY` (reentry_point,
+early_exit_on_no_improvement, persistent_failure_halt_after).
 
-Initialize state:
-- `iteration_results`: array (one entry per completed iteration)
-- `lessons`: empty string (append-only log of lessons learned across iterations)
-- `focus_angles_used`: empty set (track which review angles have been applied)
+Initialize: `iteration_results[]`, `lessons=""` (append-only), `focus_angles_used{}`.
 
 ### Phase 2: Iteration Loop
 
@@ -296,34 +247,18 @@ Record selected angle in `focus_angles_used` so later iterations don't repeat.
 
 #### Phase 2c: Assemble Improvement Context (Iteration 2+)
 
-Read:
-- Previous iteration's deliverable: `{WORKSPACE}/iteration-{i-1}/DELIVERABLE.md`
-- All prior lessons: `{WORKSPACE}/lessons.md`
+Read `{WORKSPACE}/iteration-{i-1}/DELIVERABLE.md` and `{WORKSPACE}/lessons.md`.
 
-Build `improvement_context`:
+Build `improvement_context` containing:
+1. **Previous Iteration Summary** — abbreviated summary of what was delivered
+2. **Accumulated Lessons Learned** — full contents of lessons.md
+3. **This Iteration's Focus: {focus_angle}** — with directives:
+   - 구현: treat current state as baseline, make targeted improvements for {focus_angle}, do not regress
+   - 검증/테스트: higher bar — apply {focus_angle} as primary lens alongside standard invariants
 
-```
-## Iteration Context (iteration {i} of {LOOP_COUNT})
+State clearly: "Acceptance Criteria were ALREADY SATISFIED. Do NOT re-implement from scratch."
 
-### Previous Iteration Summary
-{Abbreviated summary of iteration-{i-1}/DELIVERABLE.md — what was delivered, key decisions}
-
-### Accumulated Lessons Learned
-{Full contents of lessons.md}
-
-### This Iteration's Focus: {focus_angle}
-The Acceptance Criteria were ALREADY SATISFIED in the previous iteration. Do NOT
-re-implement from scratch. Build on top of the existing output and improve from
-the perspective of **{focus_angle}**.
-
-Directive for 구현: treat the current state as baseline. Make targeted improvements
-aligned with {focus_angle}. Do not regress prior wins.
-
-Directive for 검증/테스트: the bar is higher now. Apply {focus_angle} as a primary
-lens in addition to standard invariants.
-```
-
-For iteration 1, `improvement_context` is empty (no prior context to carry).
+For iteration 1, `improvement_context` is empty.
 
 #### Phase 2d: Step Execution Loop (within iteration)
 
@@ -368,12 +303,8 @@ For each step, build the config the Python engine consumes.
    `step-{S.id}-{slug}-retry-1`, etc. Retries live inside the current iteration's directory.
 
 2. **Assemble system prompts** — write ONLY the step-specific injection.
-   The dialectic engine automatically prepends the full agent template files
-   (thesis.md / antithesis.md) using the `thesis_template_path` and
-   `antithesis_template_path` fields in step-config.json. Do NOT copy or
-   summarize agent instructions into the system prompt files — the engine
-   handles this to guarantee verdict format, review lenses, and role
-   definitions are always included.
+   The engine prepends full agent templates via `thesis_template_path`/`antithesis_template_path`
+   in step-config.json. Do NOT copy agent instructions into prompt files.
 
    **Standard (기획/구현/일반)**:
    ```
@@ -486,10 +417,7 @@ For each step, build the config the Python engine consumes.
    }
    ```
 
-   The `thesis_template_path` and `antithesis_template_path` fields tell the
-   dialectic engine where to find the full agent instruction files. The engine
-   prepends these templates to the system prompts, so the prompt files you write
-   only need the step-specific role/goal/criteria injection.
+   Template paths tell the engine where to find agent instruction files for prepending.
 
 7. **Execute PingPong**:
    ```
@@ -510,195 +438,69 @@ For each step, build the config the Python engine consumes.
 
 #### Within-Iteration FAIL Handling
 
-After parsing the step result, handle FAIL verdicts by jumping back to 구현.
-No fixed retry cap — iteration continues until PASS, HALT, or persistent failure.
+No fixed retry cap — iterate until PASS, HALT, or persistent failure.
 
-**If step is 검증 and verdict is FAIL**:
-- Capture `blockers` from result
-- Compare to previous 검증 FAIL blockers in this iteration (if any):
-  - If blocker set is substantively identical to the previous FAIL → increment
-    `consecutive_fail_count[검증]`; else reset to 1
-  - If `consecutive_fail_count[검증] >= LOOP_POLICY.persistent_failure_halt_after`
-    → HALT iteration with `halt_reason: persistent_verify_failure`
-- Otherwise: set retry context = `## Required Fixes from Verify\n{blockers}`, jump back
-  to the **구현** step with retry context, then re-execute 검증
+For **검증 FAIL** or **테스트 FAIL**:
+1. Capture blockers/failures from result
+2. Compare to previous FAIL of the same step in this iteration:
+   - Substantively identical → increment `consecutive_fail_count[step]`; else reset to 1
+   - If `consecutive_fail_count >= persistent_failure_halt_after` → HALT with
+     `persistent_verify_failure` or `persistent_test_failure`
+3. Otherwise: build retry context (`## Required Fixes from {step}\n{blockers}`),
+   jump back to **구현** with retry context. For 테스트 FAIL, re-run 검증 first (if in plan).
 
-**If step is 테스트 and verdict is FAIL**:
-- Capture `failures` from result
-- Compare to previous 테스트 FAIL failures:
-  - If substantively identical → increment `consecutive_fail_count[테스트]`
-  - If `>= persistent_failure_halt_after` → HALT iteration with `halt_reason: persistent_test_failure`
-- Otherwise: set retry context = `## Required Fixes from Test\n{failures}`, jump back
-  to **구현**, re-run 검증 (if in plan), then re-execute 테스트
-
-**If HALT from dialectic engine** (circular argumentation etc.):
-- Stop this iteration, proceed to Phase 2e with partial results
+**Engine HALT** (circular argumentation etc.): stop iteration, proceed to Phase 2e.
 
 #### Phase 2e: Iteration Synthesis
 
-After all steps in the iteration complete (or HALT'd), write
-`{ITER_DIR}/DELIVERABLE.md`:
-
-```markdown
----
-iteration: {i}
-status: {completed | halted}
-focus_angle: {focus_angle or "baseline (iteration 1)"}
-rounds_total: {sum across steps this iteration}
-within_iter_retries: {count of 구현 re-runs due to FAIL}
-created: {ISO 8601 timestamp}
----
-
-# Iteration {i} Deliverable
-
-## Focus
-{focus_angle or "Baseline implementation"}
-
-## Steps Executed
-| # | 단계 | Outcome | Rounds |
-|---|------|---------|--------|
-| 1 | {name} | CONVERGED / PASS / FAIL / HALT | {rounds} |
-| ... | | | |
-
-## Deliverable
-{For implement/refactor: summary of code changes + file list}
-{For design/analyze/review: the synthesized document}
-
-## Non-blocking Observations (carry-over candidates)
-- {observation 1 — candidate focus for future iterations}
-- {observation 2}
-```
+After all steps in the iteration complete (or HALT'd), write `{ITER_DIR}/DELIVERABLE.md`
+using the per-iteration format defined in `workspace-convention.md` §Per-Iteration DELIVERABLE.md.
+Include: iteration number, status, focus angle, steps executed with outcomes, deliverable
+content, and non-blocking observations (carry-over candidates for future iterations).
 
 #### Phase 2f: Lessons Learned Extraction
 
-Append this iteration's lessons to `{WORKSPACE}/lessons.md`:
+Append this iteration's lessons to `{WORKSPACE}/lessons.md` using the format in
+`workspace-convention.md` §lessons.md Format. Include: focus angle, concrete improvements,
+blockers resolved, patterns observed, open observations, rejected alternatives.
 
-```markdown
-## Iteration {i} ({ISO timestamp})
-
-### Focus Angle
-{focus_angle or "baseline"}
-
-### Concrete Improvements Made This Iteration
-{For iteration 1: summary of what was built from scratch}
-{For iteration 2+: targeted improvements vs prior iteration — diff-level granularity}
-
-### Blockers Resolved
-- {blocker surfaced in 검증/테스트} → {how addressed}
-- ...
-
-### Patterns Observed
-- {recurring design tension, convention discovery, library quirk, etc.}
-- ...
-
-### Open Observations (for future iterations)
-- {antithesis non-blocking finding 1}
-- {potential improvement dimension not yet explored}
-- ...
-
-### Rejected Alternatives
-- {alternative considered} → {reason for rejection}
-- ...
-
----
-```
-
-Lessons are **cumulative** — never prune prior iterations' entries. The file grows as
-iterations proceed so later passes can see the full history.
+Lessons are **cumulative** — never prune prior iterations' entries.
 
 #### Phase 2g: Early-Exit Check
 
-If `LOOP_POLICY.early_exit_on_no_improvement` is true (default), check whether to
-terminate the loop before `LOOP_COUNT` is reached:
+If `early_exit_on_no_improvement` is true and both agents explicitly stated "no meaningful
+further improvement possible" in their final exchange → early-exit (log in lessons.md).
+PASS alone is NOT exit grounds — only mutual "no further polish" signals.
 
-- Read the final **검증** or **테스트** result of this iteration
-- If both antithesis and thesis explicitly stated "no meaningful further improvement
-  possible" (or equivalent — "already optimal for focus angle", "diminishing returns")
-  in their final exchange → early-exit (log reason in lessons.md, break loop)
-- If no such signal → continue to iteration i+1
-
-Do NOT force early-exit just because the iteration PASSed — PASS is expected. Exit
-only when agents agree further polish would be fruitless.
-
-If HALT'd (persistent failure or dialectic HALT) this iteration → break loop and
-proceed to Phase 3 with status `halted`.
+HALT'd iteration → break loop, proceed to Phase 3 with status `halted`.
 
 ---
 
 ### Phase 3: Final Aggregate
 
 After the iteration loop completes (naturally or via early-exit/HALT), write
-`{WORKSPACE}/DELIVERABLE.md` — the cross-iteration synthesis:
-
-```markdown
----
-request_type: {request_type}
-complexity: {complexity}
-status: {completed | halted}
-iterations_planned: {LOOP_COUNT}
-iterations_executed: {actual count}
-early_exit: {true | false}
-rounds_total: {sum across all iterations and steps}
-created: {ISO 8601 timestamp}
----
-
-# Dialectic Synthesis Report (정반합)
-
-## Request
-{REQUEST}
-
-## Iteration Summary
-| # | Focus | Outcome | Rounds | Key Improvement |
-|---|-------|---------|--------|-----------------|
-| 1 | baseline | completed | {N} | {1-line summary} |
-| 2 | {focus angle} | completed | {N} | {1-line summary} |
-| ... | | | | |
-
-## Final Deliverable
-{Content of the final (last successful) iteration's DELIVERABLE.md —
- code summary + file list for implement/refactor, or document for design/analyze}
-
-## Lessons Learned
-See `{WORKSPACE}/lessons.md` — full iteration-by-iteration lesson log.
-
-### Key Takeaways
-- {1-2 most important lessons from the whole run}
-
-## Unresolved Items
-{Blockers from HALT'd iterations, if any; otherwise "none"}
-```
+`{WORKSPACE}/DELIVERABLE.md` — the cross-iteration synthesis using the format in
+`workspace-convention.md` §Top-Level DELIVERABLE.md Format. Include: request type,
+complexity, status, iteration summary table, final deliverable content, key takeaways
+from lessons.md, and unresolved items (if any).
 
 ### Phase 4: Pre-Output Self-Check (MANDATORY)
 
-Before emitting the final JSON, verify engine artifacts exist. Execute this check
-as a `Bash(...)` call:
+Verify engine artifacts exist via `Bash(...)`:
 
 ```bash
-MISSING=0
-MISSING_PATHS=""
+MISSING=0; MISSING_PATHS=""
 for step_dir in {WORKSPACE}/iteration-*/logs/step-*/; do
   [ -d "$step_dir" ] || continue
   for required in step-config.json round-1-thesis.md dialogue.md deliverable.md; do
-    if [ ! -f "$step_dir/$required" ]; then
-      echo "MISSING: $step_dir$required"
-      MISSING_PATHS="$MISSING_PATHS $step_dir$required"
-      MISSING=1
-    fi
+    [ ! -f "$step_dir/$required" ] && echo "MISSING: $step_dir$required" && MISSING_PATHS="$MISSING_PATHS $step_dir$required" && MISSING=1
   done
 done
 echo "SELF_CHECK_RESULT=$MISSING"
 ```
 
-If `MISSING=1`: your execution did NOT go through the dialectic engine for at
-least one step. You must NOT claim `status: completed`. Instead return:
-
-```json
-{"status":"halted","halt_reason":"missing_engine_artifacts","missing_paths":["..."]}
-```
-
-This check catches the degenerate case where MetaAgent simulated dialectic
-content via Write instead of invoking the engine. It is non-negotiable —
-skipping this check is itself a protocol violation.
+If `MISSING=1` → return `{"status":"halted","halt_reason":"missing_engine_artifacts","missing_paths":[...]}`.
+This is non-negotiable — catches simulated dialectic content.
 
 ### Phase 5: JSON Response
 
@@ -723,41 +525,24 @@ over K iterations with no retries, the minimum value is M×K. A report with
 
 ## Convergence Model
 
-The dialectic loop does NOT use a fixed iteration cap. Dialogue continues until
-genuine convergence or a HALT condition.
+No fixed iteration cap. Dialogue continues until convergence or HALT.
 
-### Convergence Conditions
+**Convergence**: ACCEPT (standard) or PASS/FAIL agreement (inverted). Also: mutual
+refinement (positions merge) or one agent concedes with valid reasoning.
 
-- Antithesis responds with **ACCEPT** (explicit agreement with reasoning)
-- Both agents reach **mutual refinement** (positions merge after substantive exchange)
-- One agent **concedes** with valid reasoning
-- Inverted steps: agreement on PASS (0 blockers) or the blocker list (FAIL)
-
-### HALT Conditions (the ONLY reasons to stop without convergence)
-
-1. **Circular argumentation**: Same contentions repeated 2+ consecutive exchanges. MetaAgent redirects once; if still circular → HALT
-2. **External contradiction**: Requirements/constraints that make the goal impossible
-3. **Missing information**: Information needed that neither agent possesses
-4. **Scope escalation**: Dialogue beyond the step's scope
+**HALT** (only reasons to stop without convergence):
+1. **Circular argumentation** — same contentions repeated 2+ exchanges; MetaAgent redirects once, then HALTs
+2. **External contradiction** — requirements make the goal impossible
+3. **Missing information** — neither agent possesses needed info
+4. **Scope escalation** — dialogue exceeds step scope
 
 ---
 
 ## Quality Invariants
 
-These are design defects when violated. AntithesisAgent must verify these before
-issuing ACCEPT — see antithesis.md's Pre-ACCEPT Quality Invariant Check. MetaAgent
-cannot reopen a completed dialogue, so quality enforcement is the antithesis agent's
-responsibility during the dialogue.
-
-1. **Semantic consistency** — the same concept means the same thing in every appearance
-2. **Behavioral consistency** — all code paths for the same operation behave identically
-3. **Compositional integrity** — function A's output into function B is sound for ALL valid inputs
-4. **Value flow soundness** — no intermediate computation produces NaN, Infinity, or unexpected type
-
-### Defensive Measure Rule
-
-A cap, clamp, or guard must be applied **before** the value is consumed by further
-computation. A cap in the caller doesn't protect computation inside the callee.
+Defined and enforced by AntithesisAgent's Pre-ACCEPT check (see antithesis.md §Pre-ACCEPT).
+MetaAgent cannot reopen a completed dialogue — quality enforcement is the antithesis
+agent's sole responsibility during the dialogue.
 
 ---
 
@@ -766,31 +551,14 @@ computation. A cap in the caller doesn't protect computation inside the callee.
 | Failure | Detection | Recovery |
 |---------|-----------|----------|
 | Dialectic engine error | Python non-zero exit | Check stderr, report error to MainOrchestrator |
-| Agent session crash | CLI death during dialogue | Engine reconnects once automatically, fails on second death |
-| Both agents fail | Connection errors | Engine writes partial output, exits with halted status |
-| HALT (impasse) | Circular argumentation, external contradiction, or missing info | Record both positions, set status "halted" |
-| Empty agent output | Zero-length response | Engine detects degenerate responses (<50 chars) for 3+ consecutive rounds → auto-HALT with `dialogue_degeneration` |
-| Unparseable verdicts | No ACCEPT/REFINE/COUNTER/HALT found | Engine detects 5+ consecutive UNKNOWN verdicts → auto-HALT with `unparseable_verdicts` |
+| Agent session crash | CLI death during dialogue | Engine reconnects once, fails on second death |
+| HALT (impasse) | Circular argumentation, external contradiction, missing info | Record both positions, set status "halted" |
 | Within-iter retry would overwrite | Existing step output | Append `-retry-{N}` suffix within the same iteration dir |
 | Persistent FAIL on same blockers | consecutive_fail_count ≥ `persistent_failure_halt_after` | HALT iteration, record in lessons.md, break loop |
-| Playwright CLI unavailable (web 테스트) | `npx playwright test` fails or playwright not installed | Fall back to static tests only; record limitation in DELIVERABLE.md |
-| Rate-limited agent | `_is_rate_limited()` detects pattern in short response (≤500 chars) | Engine HALTs immediately with `rate_limit` — no retry (unrecoverable) |
+| Playwright CLI unavailable (web 테스트) | `npx playwright test` fails or not installed | Fall back to static tests; record in DELIVERABLE.md |
 
-When operating in degraded mode:
-1. Save whatever artifacts were produced
-2. Flag degradation clearly in DELIVERABLE.md
-3. Set appropriate status in JSON output
+Degeneration HALTs (rate-limit, unparseable verdicts, dialogue degeneration) are detected
+and handled structurally by `dialectic.py` — see runtime/dialectic.py.
 
----
+When operating in degraded mode: save artifacts, flag in DELIVERABLE.md, set status in JSON.
 
-## Configuration Defaults
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| model | opus | Model for thesis and antithesis agents |
-| termination | convergence, HALT, or persistent failure | No fixed round cap per step |
-| checkpoint | per-round | Python engine writes round logs after each exchange |
-| loop_count | 1 | User-specified max iterations; MetaAgent may propose higher for complex polish work |
-| reentry_point | 구현 | Step to restart from on iteration 2+; `기획` means full redesign each pass |
-| early_exit_on_no_improvement | true | Exit loop before LOOP_COUNT when agents agree further polish is fruitless |
-| persistent_failure_halt_after | 3 | HALT iteration if same blocker set recurs this many consecutive times |

@@ -151,62 +151,33 @@ created: {ISO 8601 timestamp}
 
 Append-only log at `{workspace}/lessons.md`. Each iteration appends one section.
 
+Required sections per iteration entry:
+
 ```markdown
-## Iteration 1 (2026-04-14T14:30:00+09:00)
+## Iteration {N} ({ISO 8601 timestamp})
 
 ### Focus Angle
-baseline
+{angle or "baseline"}
 
 ### Concrete Improvements Made This Iteration
-- Initial implementation of {feature} with {approach}
-- {file list}
+- {diff-level summary of what changed}
 
 ### Blockers Resolved
-- (iteration 1: often none, unless within-iter retries occurred)
+- {blocker} → {resolution}
 
 ### Patterns Observed
-- {design tension discovered}
-- {project convention adopted}
+- {design tension, convention discovery, etc.}
 
 ### Open Observations (for future iterations)
-- Empty state rendering is minimal — could be improved
-- No keyboard shortcuts yet
-- API error states fall back to generic message
+- {carry-over candidates for next iteration's focus}
 
 ### Rejected Alternatives
-- Redux for state — rejected: project already uses Zustand, preserving convention
-- Optimistic updates — rejected: would require undo infrastructure not in scope
-
----
-
-## Iteration 2 (2026-04-14T14:45:00+09:00)
-
-### Focus Angle
-UX polish
-
-### Concrete Improvements Made This Iteration
-- Added Tab/Enter/Escape keyboard navigation
-- Polished empty state with illustration + CTA
-- Loading skeletons instead of spinner
-
-### Blockers Resolved
-- Focus trap missing in modal → added roving tabindex
-
-### Patterns Observed
-- Tailwind's `focus-visible:` variant cleaner than custom focus rings
-
-### Open Observations (for future iterations)
-- Performance: large list re-renders on every keystroke
-- A11y: color contrast on disabled state not tested
-
-### Rejected Alternatives
-- Full rewrite to use Headless UI — rejected: too wide a blast radius for UX polish
+- {alternative} — rejected: {reason}
 
 ---
 ```
 
-Lessons are **cumulative** — never prune prior iterations' entries. The file grows as
-iterations proceed so later passes can see the full history. The next iteration's
+Lessons are **cumulative** — never prune prior iterations' entries. The next iteration's
 thesis/antithesis receive this file's contents in their step context.
 
 ---

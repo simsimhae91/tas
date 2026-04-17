@@ -82,79 +82,46 @@ Before finalizing any edit to an agent file:
 
 ## Convergence Model
 
-No fixed iteration caps. Dialogue continues until ACCEPT (or PASS/FAIL in inverted mode) or HALT. This is intentional — artificial caps produce premature consensus. If you're tempted to add a round limit, the real problem is probably unclear pass criteria or role ambiguity.
+No fixed iteration caps — artificial caps produce premature consensus. See `agents/meta.md` Convergence Model + `runtime/dialectic.py` degeneration HALTs (rate-limit detection, unparseable verdicts, dialogue degeneration).
 
-The dialectic engine enforces three degeneration HALTs (these are NOT round caps — they detect dialogue death):
-
-- **Rate-limit detection**: Either agent's response is ≤500 chars and contains rate-limit indicator phrases (e.g., "rate limit", "hit your limit", "throttled") → immediate HALT with `rate_limit`. Checked before other degeneration patterns to prevent misclassification.
-- **Unparseable verdicts**: 5 consecutive rounds where antithesis response contains no parseable verdict → HALT with `unparseable_verdicts`. Root cause is usually missing verdict format instructions in the system prompt.
-- **Degenerate responses**: 3 consecutive rounds where BOTH agents produce <50 chars → HALT with `dialogue_degeneration`. Agents have nothing left to say.
-
-### System Prompt Assembly
-
-Agent template files (thesis.md, antithesis.md) are prepended by `dialectic.py` directly — NOT by MetaAgent. MetaAgent writes only step-specific context (role/goal/criteria) to the system prompt files. The engine reads template paths from `thesis_template_path` / `antithesis_template_path` in step-config.json. This is a structural guarantee that verdict formats and review lenses are always included, regardless of MetaAgent behavior.
+**System Prompt Assembly**: Agent templates (thesis.md, antithesis.md) are prepended by `dialectic.py` directly — NOT by MetaAgent. MetaAgent writes ONLY step-specific context (role/goal/criteria) to `system prompt files`. The engine reads template paths from step-config.json.
 
 ## Quality Standard
 
-tas must catch what a human expert reviewer would catch. Four invariants:
-
-1. **Semantic consistency** — same concept, same meaning everywhere
-2. **Behavioral consistency** — same operation, same behavior under same contract
-3. **Compositional integrity** — function A's output into function B is sound for ALL valid inputs
-4. **Value flow soundness** — no intermediate NaN/Infinity/type-mismatch, even if downstream caps "fix" it
-
-If review misses these, improve the review lenses — don't add defensive guards.
+tas must catch what a human expert reviewer would catch. See `agents/antithesis.md` Pre-ACCEPT Quality Invariant Check for the four invariants (semantic consistency, behavioral consistency, compositional integrity, value flow soundness). If review misses these, improve the review lenses — don't add defensive guards.
 
 ## Iteration Loop & Lessons Learned
 
 MetaAgent's Execute Mode has two nested loops:
 
-**Within-iteration retry** (automatic, unbounded until PASS or persistent failure):
-- 검증 FAIL → 구현 재실행 → 검증 (repeat)
-- 테스트 FAIL → 구현 재실행 → (검증) → 테스트 (repeat)
-- HALT iteration if the same blocker set recurs `loop_policy.persistent_failure_halt_after`
-  times consecutive (default 3)
-- Within-iter retries create sibling log dirs (`step-{id}-{slug}-retry-{N}/`) inside the
-  current iteration's directory — original logs are never overwritten
+**Within-iteration retry** (unbounded until PASS or persistent failure):
+- 검증 FAIL → 구현 재실행 → 검증; 테스트 FAIL → 구현 재실행 → 검증 → 테스트
+- HALT if same blocker recurs `loop_policy.persistent_failure_halt_after` times (default 3)
+- Retries create sibling dirs (`step-{id}-{slug}-retry-{N}/`) — never overwrite originals
 
-**Cross-iteration loop** (user-specified polish loop):
-- `LOOP_COUNT` from classify plan (user can adjust at approval; default 1)
-- Iteration 1: full baseline plan
-- Iteration 2+: reenter from `loop_policy.reentry_point` (default 구현) with
-  accumulated `lessons.md` context and a selected `focus_angle`
-- Early exit allowed when agents agree further polish is fruitless
+**Cross-iteration loop** (user-specified):
+- `LOOP_COUNT` from classify plan (default 1, user can adjust)
+- Iteration 2+ reenters from `loop_policy.reentry_point` (default 구현) with accumulated `lessons.md` and a selected `focus_angle`
+- Early exit when agents agree further polish is fruitless
 
-**lessons.md is append-only and load-bearing**: next iteration's thesis/antithesis
-receive the full file as part of step_context. Never prune prior entries. The file
-grows monotonically across iterations.
+**lessons.md is append-only and load-bearing**: never prune prior entries; next iteration's agents receive the full file.
 
-**Implication**: If you change the step set (e.g., add a new inverted check step), ensure:
-- The within-iter retry loop handles which step FAIL jumps back to which upstream step
-- The lessons extractor captures relevant fields for the new step type
-- The focus_angle rotation table in `workflow-patterns.md` stays sensible
+**Implication**: When adding new step types, ensure the retry-loop FAIL routing, lessons extractor, and `workflow-patterns.md` focus_angle table all stay consistent.
 
 ## Testing Strategy by Domain
 
-The 테스트 step behavior changes based on `project_domain` detected in Classify Mode.
-For web projects, dynamic testing via Playwright CLI (Bash-based `npx playwright test` +
-screenshots + UI/UX evaluation) is **required**, not optional. Playwright MCP tools are
-not available in dialectic agent sessions. For non-web domains, static + execution tests
-suffice. See `references/workflow-patterns.md` → "Dynamic Testing by Domain".
+Web projects require dynamic testing via Playwright CLI (`npx playwright test` + screenshots); Playwright MCP tools are NOT available in dialectic sessions. Non-web domains use static + execution tests. See `references/workflow-patterns.md` → "Dynamic Testing by Domain".
 
-**Implication**: When changing domain detection, update the testing strategy table in
-`workflow-patterns.md` and the testing-specific context injection in `meta.md`.
+**Implication**: When changing domain detection, update both `workflow-patterns.md` testing table and `meta.md` testing-context injection.
 
 ## Common Mistakes When Editing This Repo
 
-- **Adding implementation details to SKILL.md** — breaks information hiding
+- **Adding implementation details or codebase-reading logic to SKILL.md** — breaks information hiding and scope prohibition
 - **Reading agent files from SKILL.md** — breaks information hiding; Agent() prompt references meta.md by path only
 - **Making convergence depend on round count** — produces shallow consensus
 - **Bypassing dialectic.py** — MetaAgent must never spawn thesis/antithesis via `Agent()` directly; always use `Bash(bash runtime/run-dialectic.sh ...)`
-- **Using Bash(claude -p) instead of Agent()** — causes timeout, JSON parsing, and empty output failures
-- **Adding codebase-reading logic to SKILL.md** — breaks scope prohibition
-- **Adding resume/pipeline mechanisms** — this repo is quick-only. Long-lived project context belongs elsewhere
-- **Adding a fixed within-iteration retry cap** — within-iter retries are unbounded; HALT is governed by `persistent_failure_halt_after` (same-blocker recurrence), not a fixed count
-- **Copying agent instructions into system prompt files** — MetaAgent writes ONLY step-specific context (role/goal/criteria) to system prompt files. Agent templates (thesis.md, antithesis.md) are prepended by `dialectic.py` via `thesis_template_path`/`antithesis_template_path` in step-config.json. MetaAgent must NOT copy or summarize agent instructions — the engine handles this structurally
+- **Using Bash(`claude -p`) instead of Agent()** — causes timeout, JSON parsing, and empty output failures
+- **Copying agent instructions into `system prompt files`** — MetaAgent writes ONLY step-specific context to system prompt files; agent templates are prepended by `dialectic.py` via step-config.json paths. MetaAgent must NOT copy or summarize agent instructions
 - **Pruning lessons.md between iterations** — it must stay append-only; later iterations need the full history
-- **Forgetting to preserve retry log directories** — never overwrite `step-{id}-{slug}-retry-{N}`; each retry gets a new sibling dir within the current iteration
-- **Hardcoding loop_count** — it is user-specified; MetaAgent only proposes a default (usually 1)
+- **Adding resume/pipeline mechanisms or hardcoding `loop_count`** — this repo is quick-only; `loop_count` is user-specified, MetaAgent only proposes a default
+- **Adding a fixed retry cap or overwriting retry log dirs** — within-iter retries are unbounded (HALT by `persistent_failure_halt_after`); each retry gets its own `step-{id}-{slug}-retry-{N}/` dir

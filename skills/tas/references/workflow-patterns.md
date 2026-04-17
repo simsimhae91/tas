@@ -155,64 +155,7 @@ FAILs → HALT the iteration).
 
 ---
 
-## Iteration & Focus Angles (loop_count > 1)
+## Iteration Support (loop_count > 1)
 
-When the user approves a `loop_count` greater than 1, the plan runs multiple times.
-Iteration 1 establishes the baseline; subsequent iterations re-run from the
-`reentry_point` (default: 구현) with accumulated context.
-
-### Focus Angle Selection (Iteration 2+)
-
-Each post-baseline iteration applies a **focus angle** — a single review lens that
-elevates the bar beyond the previous PASS.
-
-Priority order for selecting an angle:
-
-1. **Carry-over from antithesis**: Use the most impactful `Non-blocking Observation`
-   from the prior iteration's DELIVERABLE.md
-2. **Domain-specific rotation** (when no clear carry-over):
-
-   | Domain | Angle rotation |
-   |--------|----------------|
-   | `web-frontend` | UX polish → accessibility → performance → edge cases → error states |
-   | `web-backend` / `api` | error handling → input validation → observability → performance |
-   | `cli` | error messages → edge inputs → help clarity → shell compatibility |
-   | `library` | API ergonomics → documentation → error types → composability |
-   | `mobile` | responsiveness → offline states → deep-link coverage → performance |
-   | `monorepo` | cross-package consistency → dependency alignment → build isolation → shared-config drift |
-   | `data-pipeline` | idempotency → schema evolution → failure recovery → observability |
-   | `iac-infra` | drift detection → blast radius → secret management → rollback safety |
-   | `unknown` | correctness depth → readability → simplification → naming |
-
-3. **Fallback**: "general code quality polish"
-
-MetaAgent records which angles have been used in `focus_angles_used` so later iterations
-don't repeat unless all angles have been covered.
-
-### Lessons Learned
-
-After each iteration, MetaAgent extracts a **lessons learned** entry and appends it to
-`{workspace}/lessons.md`. Subsequent iterations' step_context includes the full lessons.md
-content so thesis/antithesis can:
-
-- Build on previously applied improvements (avoid reintroducing rejected alternatives)
-- Target open observations explicitly
-- Recognize recurring patterns across passes
-
-Lesson entry fields (see `workspace-convention.md` for full schema):
-- **Focus Angle** — what this iteration targeted
-- **Concrete Improvements Made** — diff-level summary
-- **Blockers Resolved** — what went wrong and how fixed
-- **Patterns Observed** — design tensions, project convention discoveries
-- **Open Observations** — carry-over candidates
-- **Rejected Alternatives** — what was considered and why not chosen
-
-### Early Exit
-
-If both agents explicitly agree in their final exchange that further polish would not
-produce meaningful improvement (e.g., "already optimal for this angle"), MetaAgent
-terminates the loop before `loop_count` is reached and records the early-exit reason
-in lessons.md.
-
-Do NOT force early exit just because an iteration PASSed — PASS is expected. Exit only
-when agents concur that the return on another iteration is negligible.
+Focus angle selection, lessons learned extraction, and early-exit logic are defined in
+`meta.md` Phase 2b–2g. Lesson entry schema is in `workspace-convention.md`.
