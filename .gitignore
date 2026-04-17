@@ -6,3 +6,6 @@ _workspace/
 package.json
 package-lock.json
 tsconfig.json
+
+# python
+__pycache__/

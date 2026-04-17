@@ -41,14 +41,14 @@ The default flow for complex implementation/refactoring work:
 | **1. 기획 (Plan)** | Determine approach, identify affected files, define interfaces, surface constraints | - Approach addresses all stated requirements<br>- Existing patterns and conventions in the project identified<br>- Affected files enumerated<br>- No unnecessary complexity or speculative abstractions<br>- Dependencies and risks surfaced |
 | **2. 구현 (Implement)** | Write the code per the 기획 output | - Code compiles/parses without errors<br>- All requirements from 기획 addressed<br>- Follows project conventions (read neighboring files)<br>- No scope creep or dead code<br>- Standard/idiomatic patterns used<br>- Self-assessment against 기획's pass criteria |
 | **3. 검증 (Verify)** — *inverted* | Find every real defect before tests run | - Semantic consistency (same concept, same meaning)<br>- Behavioral consistency across all code paths<br>- Compositional integrity (A → B sound for all inputs)<br>- Value flow soundness (no NaN/Infinity/type mismatch intermediates)<br>- Defensive measures applied before value consumption<br>- 0 blockers = PASS, ≥1 blockers = FAIL (→ retry 구현) |
-| **4. 테스트 (Test)** — *inverted* | Prove correctness through execution — static + dynamic where applicable | - Static: unit tests written and passing<br>- Static: type checks pass, lint clean<br>- Dynamic (web): Playwright navigation + screenshots + UI/UX evaluation<br>- Dynamic (backend/CLI): integration tests run, output verified<br>- Coverage adequate for the scope of changes<br>- PASS (all green + coverage adequate) or FAIL (→ retry 구현) |
+| **4. 테스트 (Test)** — *inverted* | Prove correctness through execution — static + dynamic where applicable | - Static: unit tests written and passing<br>- Static: type checks pass, lint clean<br>- Dynamic (web): Playwright CLI via Bash (`npx playwright test`) + screenshots + UI/UX evaluation<br>- Dynamic (backend/CLI): integration tests run, output verified<br>- Coverage adequate for the scope of changes<br>- PASS (all green + coverage adequate) or FAIL (→ retry 구현) |
 
 ### 검증 vs 테스트 Boundary
 
 - **검증** is **static code analysis** — reading the diff and reasoning about correctness.
   No execution required. Catches design flaws, logic errors, composition issues.
 - **테스트** is **execution-based** — running the code (unit, integration, dynamic).
-  For web projects, MUST include browser-based UI/UX evaluation via Playwright MCP.
+  For web projects, MUST include browser-based UI/UX evaluation via Playwright CLI (Bash).
 
 Both use the **inverted convergence model**: thesis attacks/executes, antithesis judges.
 
@@ -57,16 +57,19 @@ Both use the **inverted convergence model**: thesis attacks/executes, antithesis
 | Domain | 테스트 Requirements |
 |--------|---------------------|
 | `web-frontend` | Unit tests + Playwright navigation + screenshots + visual/behavioral evaluation |
-| `web-backend-with-ui` | Unit tests + integration tests + Playwright smoke test of any served pages |
 | `web-backend` / `api` | Unit tests + integration tests hitting actual endpoints |
 | `cli` | Unit tests + subprocess execution tests with real args |
 | `library` | Unit tests + usage-example verification |
 | `mobile` | Unit tests + (platform-specific) emulator smoke test if tooling available |
+| `monorepo` | Per-package unit tests + cross-package integration tests + build isolation check (each package builds independently) |
+| `data-pipeline` | Unit tests on transform functions + idempotency check (run twice, same result) + schema validation against sample data |
+| `iac-infra` | `terraform validate` / `terraform plan` (or equivalent) + lint (`tflint`, `checkov`) + dry-run showing expected resource changes |
 | `unknown` | Unit tests + whatever execution the project's build tooling provides |
 
-For web projects, Playwright MCP tools (`mcp__plugin_playwright_playwright__*`) are the
-preferred dynamic verification channel. ThesisAgent spins up the dev server, navigates,
-captures snapshots/screenshots; AntithesisAgent evaluates them.
+For web projects, Playwright CLI via Bash (`npx playwright test`, `npx playwright screenshot`)
+is the dynamic verification channel — Playwright MCP tools are not available in dialectic
+agent sessions. ThesisAgent spins up the dev server and runs tests/captures screenshots
+via Bash; AntithesisAgent evaluates the results.
 
 ---
 
@@ -152,61 +155,7 @@ FAILs → HALT the iteration).
 
 ---
 
-## Iteration & Focus Angles (loop_count > 1)
+## Iteration Support (loop_count > 1)
 
-When the user approves a `loop_count` greater than 1, the plan runs multiple times.
-Iteration 1 establishes the baseline; subsequent iterations re-run from the
-`reentry_point` (default: 구현) with accumulated context.
-
-### Focus Angle Selection (Iteration 2+)
-
-Each post-baseline iteration applies a **focus angle** — a single review lens that
-elevates the bar beyond the previous PASS.
-
-Priority order for selecting an angle:
-
-1. **Carry-over from antithesis**: Use the most impactful `Non-blocking Observation`
-   from the prior iteration's DELIVERABLE.md
-2. **Domain-specific rotation** (when no clear carry-over):
-
-   | Domain | Angle rotation |
-   |--------|----------------|
-   | `web-frontend` | UX polish → accessibility → performance → edge cases → error states |
-   | `web-backend` / `api` | error handling → input validation → observability → performance |
-   | `cli` | error messages → edge inputs → help clarity → shell compatibility |
-   | `library` | API ergonomics → documentation → error types → composability |
-   | `mobile` | responsiveness → offline states → deep-link coverage → performance |
-   | `unknown` | correctness depth → readability → simplification → naming |
-
-3. **Fallback**: "general code quality polish"
-
-MetaAgent records which angles have been used in `focus_angles_used` so later iterations
-don't repeat unless all angles have been covered.
-
-### Lessons Learned
-
-After each iteration, MetaAgent extracts a **lessons learned** entry and appends it to
-`{workspace}/lessons.md`. Subsequent iterations' step_context includes the full lessons.md
-content so thesis/antithesis can:
-
-- Build on previously applied improvements (avoid reintroducing rejected alternatives)
-- Target open observations explicitly
-- Recognize recurring patterns across passes
-
-Lesson entry fields (see `workspace-convention.md` for full schema):
-- **Focus Angle** — what this iteration targeted
-- **Concrete Improvements Made** — diff-level summary
-- **Blockers Resolved** — what went wrong and how fixed
-- **Patterns Observed** — design tensions, project convention discoveries
-- **Open Observations** — carry-over candidates
-- **Rejected Alternatives** — what was considered and why not chosen
-
-### Early Exit
-
-If both agents explicitly agree in their final exchange that further polish would not
-produce meaningful improvement (e.g., "already optimal for this angle"), MetaAgent
-terminates the loop before `loop_count` is reached and records the early-exit reason
-in lessons.md.
-
-Do NOT force early exit just because an iteration PASSed — PASS is expected. Exit only
-when agents concur that the return on another iteration is negligible.
+Focus angle selection, lessons learned extraction, and early-exit logic are defined in
+`meta.md` Phase 2b–2g. Lesson entry schema is in `workspace-convention.md`.

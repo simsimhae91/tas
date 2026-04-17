@@ -76,7 +76,7 @@ or on HALT). Summarizes all iterations and references the final artifact.
 
 ```markdown
 ---
-request_type: {implement | design | review | refactor | analyze}
+request_type: {implement | design | review | refactor | analyze | general}
 complexity: {simple | medium | complex}
 status: {completed | halted}
 iterations_planned: {LOOP_COUNT}
@@ -119,7 +119,7 @@ Written at the end of each iteration before lessons extraction.
 ```markdown
 ---
 iteration: {N}
-status: {completed | halted | blocked}
+status: {completed | halted}
 focus_angle: {angle or "baseline (iteration 1)"}
 rounds_total: {sum across steps this iteration}
 within_iter_retries: {count of 구현 re-runs due to FAIL}
@@ -151,62 +151,33 @@ created: {ISO 8601 timestamp}
 
 Append-only log at `{workspace}/lessons.md`. Each iteration appends one section.
 
+Required sections per iteration entry:
+
 ```markdown
-## Iteration 1 (2026-04-14T14:30:00+09:00)
+## Iteration {N} ({ISO 8601 timestamp})
 
 ### Focus Angle
-baseline
+{angle or "baseline"}
 
 ### Concrete Improvements Made This Iteration
-- Initial implementation of {feature} with {approach}
-- {file list}
+- {diff-level summary of what changed}
 
 ### Blockers Resolved
-- (iteration 1: often none, unless within-iter retries occurred)
+- {blocker} → {resolution}
 
 ### Patterns Observed
-- {design tension discovered}
-- {project convention adopted}
+- {design tension, convention discovery, etc.}
 
 ### Open Observations (for future iterations)
-- Empty state rendering is minimal — could be improved
-- No keyboard shortcuts yet
-- API error states fall back to generic message
+- {carry-over candidates for next iteration's focus}
 
 ### Rejected Alternatives
-- Redux for state — rejected: project already uses Zustand, preserving convention
-- Optimistic updates — rejected: would require undo infrastructure not in scope
-
----
-
-## Iteration 2 (2026-04-14T14:45:00+09:00)
-
-### Focus Angle
-UX polish
-
-### Concrete Improvements Made This Iteration
-- Added Tab/Enter/Escape keyboard navigation
-- Polished empty state with illustration + CTA
-- Loading skeletons instead of spinner
-
-### Blockers Resolved
-- Focus trap missing in modal → added roving tabindex
-
-### Patterns Observed
-- Tailwind's `focus-visible:` variant cleaner than custom focus rings
-
-### Open Observations (for future iterations)
-- Performance: large list re-renders on every keystroke
-- A11y: color contrast on disabled state not tested
-
-### Rejected Alternatives
-- Full rewrite to use Headless UI — rejected: too wide a blast radius for UX polish
+- {alternative} — rejected: {reason}
 
 ---
 ```
 
-Lessons are **cumulative** — never prune prior iterations' entries. The file grows as
-iterations proceed so later passes can see the full history. The next iteration's
+Lessons are **cumulative** — never prune prior iterations' entries. The next iteration's
 thesis/antithesis receive this file's contents in their step context.
 
 ---
@@ -218,11 +189,12 @@ MetaAgent does not edit them directly.
 
 | File | Producer | Content |
 |------|----------|---------|
-| `thesis-system-prompt.md` | MetaAgent | Thesis role + step assignment prompt |
-| `antithesis-system-prompt.md` | MetaAgent | Antithesis role + step briefing prompt |
+| `thesis-system-prompt.md` | MetaAgent | Step-specific injection only (role/goal/criteria). Full agent template is prepended by the engine via `thesis_template_path` |
+| `antithesis-system-prompt.md` | MetaAgent | Step-specific injection only (role/goal/criteria). Full agent template is prepended by the engine via `antithesis_template_path` |
 | `step-config.json` | MetaAgent | Engine input: prompt paths, goals, model, convergence_model |
 | `round-{N}-thesis.md` | Engine | Thesis's response that round (full text) |
 | `round-{N}-antithesis.md` | Engine | Antithesis's response that round (full text) |
+| `dialogue.md` | Engine | Unified conversation transcript across all rounds |
 | `deliverable.md` | Engine | The converged output for this step |
 
 Retry runs create parallel directories (`step-{id}-{slug}-retry-{N}/`) — prior logs are preserved.

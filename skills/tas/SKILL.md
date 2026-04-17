@@ -59,7 +59,39 @@ SKILL_DIR="${CLAUDE_SKILL_DIR}"
 mkdir -p "${PROJECT_ROOT}/_workspace/quick"
 ```
 
-Extract request from `$ARGUMENTS`. If empty, ask the user what they want to accomplish.
+### SDK Preflight Check
+
+Before any MetaAgent invocation, check if the SDK is available:
+
+```bash
+TAS_SDK_STATUS="$(cat "${TMPDIR:-/tmp}/tas-sdk-status/sdk-status" 2>/dev/null)"
+```
+
+If `TAS_SDK_STATUS` equals `"missing"`, stop immediately:
+
+```
+⚠ claude-agent-sdk is not installed. /tas requires it to run.
+
+Install with one of:
+  pip install claude-agent-sdk
+  pipx install claude-agent-sdk
+  uv tool install claude-agent-sdk
+
+Then start a new session and try again.
+```
+
+Do NOT proceed to Classify. This avoids a confusing mid-execution failure.
+
+### Extract Request
+
+Extract request from `$ARGUMENTS`. If empty, ask the user what they want to accomplish with examples:
+
+```
+What would you like me to work on? Examples:
+  /tas add dark mode toggle to the settings page
+  /tas refactor the auth middleware to use JWT
+  /tas review the payment flow for edge cases
+```
 
 ### Trivial Gate
 
@@ -76,7 +108,7 @@ Examples — NOT trivial: "add sparkle effect", "refactor X", "improve Y", any U
 **Everything else → Classify.** Cost of unnecessary Classify: one subagent invocation.
 Cost of bypassing MetaAgent: unreviewed output.
 
-If trivial, respond directly: "This is straightforward — responding directly."
+If trivial, respond directly with the answer. No preamble or meta-narration — just answer the question.
 
 ---
 
@@ -109,7 +141,7 @@ Parse JSON from the Agent response text. Expected shape:
 {
   "command":"classify",
   "mode":"quick",
-  "request_type":"implement|design|review|refactor|analyze",
+  "request_type":"implement|design|review|refactor|analyze|general",
   "complexity":"simple|medium|complex",
   "steps":[
     {"id":"1","name":"기획","goal":"...","pass_criteria":["..."]},
@@ -124,7 +156,8 @@ Parse JSON from the Agent response text. Expected shape:
     "persistent_failure_halt_after":3
   },
   "workspace":"_workspace/quick/{timestamp}/",
-  "reasoning":"..."
+  "reasoning":"...",
+  "project_domain":"{domain or null}"
 }
 ```
 
@@ -137,50 +170,40 @@ Or for trivial requests that reached Classify:
 
 **If `mode: "direct"`**: Display MetaAgent's response. Done.
 
-**If `mode: "quick"` with `complexity: "simple"` (1 step)**:
+**If `mode: "quick"`**: Display plan with format adapted to step count:
+
 ```
-요청: {request}
-분류: Quick ({request_type}) — {complexity}
-단계: {steps[0].name} ({steps[0].goal})
-진행할까요?
-```
+{if 1 step: "Request (요청): {request}\nType (분류): Quick ({request_type}) — {complexity}\nStep (단계): {steps[0].name} — {steps[0].goal}"}
+{if 2-4 steps:
+  "## Execution Plan (정반합)\n\nRequest (요청): {request}\nType (분류): Quick ({request_type}) — {complexity}\n\n| # | Step (단계) | Goal (목표) |\n|---|------------|------------|\n{steps table rows}\n\nIterations (반복): {loop_count}"
+  if loop_count > 1:
+    "· Each pass refines from a different angle · Reentry: from {reentry_point} · Lessons carry forward"
+  "· Auto-stop: halts if same issue recurs {persistent_failure_halt_after} consecutive times\n\n{reasoning}"
+}
 
-**If `mode: "quick"` with `complexity: "medium"` or `"complex"` (2-4 steps)**:
-```
-## Execution Plan (정반합)
+Approve or modify (승인 또는 수정). Examples:
+  "approve" / "3 iterations" / "skip 테스트" / "reenter from 기획"
+  "focus on performance" / "add security check after 검증" / "modify 검증 criteria"
 
-요청: {request}
-분류: Quick ({request_type}) — {complexity}
-
-| # | 단계 | 목표 |
-|---|------|------|
-| 1 | {steps[0].name} | {steps[0].goal} |
-| 2 | {steps[1].name} | {steps[1].goal} |
-...
-
-반복(iteration): {loop_count}회
-  · 재진입 지점: {loop_policy.reentry_point} (2회차부터)
-  · 조기 종료: {"허용" if early_exit_on_no_improvement else "불허"} (양 agent가 추가 개선 불가 합의 시)
-  · 지속 실패 HALT: 동일 blocker {loop_policy.persistent_failure_halt_after}회 연속 시
-  · Iteration마다 lessons.md 누적 → 다음 회차 컨텍스트로 전달
-
-{reasoning}
-
-수정하거나 승인해주세요. (예: "반복 3회로", "재진입을 기획부터")
+> Tip: `/tas-review` (standalone review), `/tas-explain` (inspect past runs), `/tas-workspace` (manage workspaces)
 ```
 
 ### Handle User Response
 
-- **승인** → Initialize workspace, → Phase 2
-- **반복 횟수 조정 요청** (예: "3번 반복해줘", "한 번만"):
-  - Parse the new `loop_count` integer from user text
-  - Update the plan JSON in place (no re-classify needed)
-  - Re-display plan with the adjusted loop_count
-- **재진입 지점 조정 요청** (예: "기획부터 다시", "구현만 반복"):
-  - Update `loop_policy.reentry_point` to `기획` or `구현` accordingly
-  - Re-display plan
-- **단계 구성 수정 요청** → Re-invoke classify with the user's adjustment hint, → Display Plan again
-- **거부** → Done
+For any modification, show changelog (`{field}: {old} → {new}`) then re-display plan.
+
+| User intent | Examples | Action |
+|-------------|----------|--------|
+| **Approve** | "approve", "ok", "go", "승인", "ㅇㅇ" | → Phase 2 |
+| **Adjust iterations** | "3 iterations", "한 번만" | Update `loop_count` in-place |
+| **Adjust reentry** | "reenter from 기획", "구현만 반복" | Update `loop_policy.reentry_point` |
+| **Modify criteria** | "add performance criterion to 검증" | Replace/append `pass_criteria` for target step |
+| **Remove step** | "skip 테스트", "기획 생략" | Remove step, re-number IDs |
+| **Add step** | "add security check after 검증" | Insert after anchor step; ask for pass criteria (default: `["Goal achieved"]`) |
+| **Set focus** | "focus on performance", "보안 중심으로" | Add `focus_angle` to plan root |
+| **Multiple mods** | (several at once) | Apply all, re-display once |
+| **Major restructure** | (fundamental plan change) | Re-invoke Classify with hint |
+| **Reject** | "no", "cancel", "거부" | Done |
 
 ---
 
@@ -194,6 +217,30 @@ mkdir -p "$WORKSPACE"
 ```
 
 Write `$WORKSPACE/REQUEST.md` with original request text.
+
+### Dirty-Tree Check (implement/refactor only)
+
+```bash
+DIRTY="$(git status --porcelain 2>/dev/null | head -5)"
+DIRTY_COUNT="$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+```
+
+If non-empty, warn: "⚠ You have uncommitted changes ({DIRTY_COUNT} file(s))... tas will
+modify files directly. `git stash` first?" If user declines → abort.
+
+### Pre-Execution Message
+
+Display a brief scope message before invoking MetaAgent:
+
+```
+Running {len(steps)} step(s) × {loop_count} iteration(s)...
+```
+
+For `request_type` in `[implement, refactor]` and the working tree passed the dirty-tree check (clean or user confirmed), append:
+
+```
+⚠ Code will be modified directly (코드가 직접 수정됩니다). Review after: `git diff` | Undo: `git stash`
+```
 
 Invoke MetaAgent via Agent():
 
@@ -211,6 +258,8 @@ COMPLEXITY: {complexity from classify}
 PLAN: {steps array JSON from classify}
 LOOP_COUNT: {loop_count from classify, possibly adjusted by user}
 LOOP_POLICY: {loop_policy JSON from classify, possibly adjusted}
+PROJECT_DOMAIN: {project_domain from classify JSON, if present; omit line otherwise}
+FOCUS_ANGLE: {focus_angle from plan, if user specified; omit line otherwise}
 
 Return ONLY the JSON result line.",
   mode: "bypassPermissions",
@@ -229,7 +278,18 @@ Parse JSON from Agent response and present results.
 The Agent() response IS the JSON:
 
 ```json
-{"status":"completed","workspace":"...","summary":"...","iterations":N,"early_exit":bool,"rounds_total":N}
+{"status":"completed","workspace":"...","summary":"...","iterations":N,"early_exit":bool,"rounds_total":N,"engine_invocations":N}
+```
+
+### Validate Attestation
+
+If `status` is `"completed"` and `engine_invocations` is `0` or missing, the result
+is suspect — MetaAgent may have simulated the dialectic instead of running the engine.
+Warn the user:
+
+```
+⚠ MetaAgent reported completion but engine_invocations is 0.
+This may indicate the dialectic engine was not invoked. Check workspace logs.
 ```
 
 ### Display to User
@@ -244,40 +304,136 @@ ThesisAgent has bypassPermissions and modifies code directly during the dialecti
 Do NOT ask "적용할까요?" — code is already changed.
 
 ```
-정반합 수렴 완료 — {iterations}회 iteration, 총 {rounds_total}라운드.{" (조기 종료)" if early_exit}
+Converged (정반합) — {iterations} iteration(s), {rounds_total} rounds.
+{if early_exit: "ℹ Early exit (조기 종료): completed {iterations} of {loop_count} planned — further refinement deemed unproductive."}
 {summary from JSON}
 
-변경된 파일: `git diff --stat` 결과 표시
-산출물: {workspace}/DELIVERABLE.md
-학습사항: {workspace}/lessons.md (iteration별 개선 기록)
+Changed files: `git diff --stat` output
+Deliverable: {workspace}/DELIVERABLE.md
+Lessons: {workspace}/lessons.md
 
-> **Recommended**: Run `/tas-verify` to independently trace boundary values.
+> `/tas-verify` — independently verify boundary values and correctness
+> `/tas-explain {timestamp}` — inspect the dialectic debate
+> `/tas-workspace` — manage workspace artifacts
 ```
 
-The user can review with `git diff` and revert with `git checkout` if needed.
+The user can review and revert if needed:
+  · Review: `git diff` to see all changes
+  · Selective revert: `git checkout -- <file>` to undo specific files
+  · Full revert: `git stash` to shelve all changes (recoverable via `git stash pop`)
 
-**Design/analysis steps** (`request_type`: design, analysis, review):
+**Design/analysis steps** (`request_type`: design, analyze, review, general):
 
-ThesisAgent produces deliverable documents, not code changes. Present the result:
+ThesisAgent produces deliverable documents, not code changes. Read the deliverable and display it inline:
+
+```bash
+# Read the deliverable content with size guard
+DELIVERABLE_LINES="$(wc -l < ${WORKSPACE}/DELIVERABLE.md 2>/dev/null || echo 0)"
+DELIVERABLE_CONTENT="$(head -200 ${WORKSPACE}/DELIVERABLE.md 2>/dev/null)"
+```
+
+If the deliverable is 200 lines or fewer, display it in full:
 
 ```
-정반합 수렴 완료 — {iterations}회 iteration, 총 {rounds_total}라운드.{" (조기 종료)" if early_exit}
+Converged (정반합) — {iterations} iteration(s), {rounds_total} rounds.
+{if early_exit: "ℹ Early exit (조기 종료): completed {iterations} of {loop_count} planned — further refinement deemed unproductive."}
 {summary from JSON}
 
-결과물: {workspace}/DELIVERABLE.md
-학습사항: {workspace}/lessons.md
+---
+{DELIVERABLE_CONTENT}
+---
+
+Full deliverable: {workspace}/DELIVERABLE.md
+Lessons: {workspace}/lessons.md
+
+> `/tas-explain {timestamp}` — inspect the dialectic debate
+> `/tas-workspace` — manage workspace artifacts
 ```
+
+If the deliverable exceeds 200 lines, show a preview:
+
+```
+Converged (정반합) — {iterations} iteration(s), {rounds_total} rounds.
+{if early_exit: "ℹ Early exit (조기 종료): completed {iterations} of {loop_count} planned — further refinement deemed unproductive."}
+{summary from JSON}
+
+---
+{DELIVERABLE_CONTENT (first 200 lines)}
+
+... ({DELIVERABLE_LINES - 200} more lines)
+---
+
+Full deliverable ({DELIVERABLE_LINES} lines): {workspace}/DELIVERABLE.md
+  View all: `cat {workspace}/DELIVERABLE.md`
+  View section: `sed -n '200,300p' {workspace}/DELIVERABLE.md`
+  Or: "show me the rest of the deliverable"
+Lessons: {workspace}/lessons.md
+
+> `/tas-explain {timestamp}` — inspect the dialectic debate
+> `/tas-workspace` — manage workspace artifacts
+```
+
+If the deliverable file is missing or empty, fall back to showing just the path.
 
 **On HALT** (`status: "halted"`):
 
+Read `{workspace}/lessons.md` for blockers. Count retry attempts:
+
+```bash
+LAST_ITER="$(ls -d ${WORKSPACE}/iteration-* 2>/dev/null | sort -V | tail -1)"
+RETRY_COUNT="$(find ${LAST_ITER}/logs/ -type d -name '*-retry-*' 2>/dev/null | wc -l | tr -d ' ')"
 ```
-**Warning**: Iteration이 조기 중단되었습니다.
-Halt reason: {halt_reason}  (persistent_verify_failure, persistent_test_failure, circular_argumentation 등)
+
+Extract `{timestamp}` from the workspace path (`YYYYmmdd_HHMMSS`).
+
+#### HALT Reason Labels
+
+| halt_reason | Display label |
+|-------------|---------------|
+| `persistent_verify_failure` | Persistent verification failure (검증 반복 실패) |
+| `persistent_test_failure` | Persistent test failure (테스트 반복 실패) |
+| `circular_argumentation` | Circular argumentation (순환 논증) |
+| `convergence_failure` | Convergence failure (수렴 실패) |
+| `dialogue_degeneration` | Dialogue degeneration (대화 퇴화) |
+| `unparseable_verdicts` | Unparseable verdicts (판정 파싱 오류) |
+| `missing_engine_artifacts` | Missing engine artifacts (엔진 산출물 누락) |
+| `workspace_convention_violation` | Workspace convention violation (작업공간 규칙 위반) |
+| (other) | Use `halt_reason` as-is |
+
+#### HALT Display
+
+```
+⚠ Halted (중단됨)
+
+Reason: {display label}
 Halted at: {halted_at}
-완료된 iteration: {iterations}
+{if RETRY_COUNT > 0: "Auto-retried: {RETRY_COUNT} time(s) before halting"}
+
+Blockers (from lessons.md):
+{blocker descriptions from last retry entries}
+```
+
+#### Recovery Guidance
+
+| halt_reason | Recovery message |
+|-------------|-----------------|
+| `persistent_verify_failure` | "The same verification issue recurred. Review blockers and check relevant code." |
+| `persistent_test_failure` | "Tests failed repeatedly on the same issue. {test command if identifiable}" |
+| `circular_argumentation` | "Agents could not converge — request scope may be ambiguous or conflicting." |
+| `dialogue_degeneration` | "Agents produced insufficient responses — rephrase with more specific requirements." |
+| `unparseable_verdicts` | "Internal format error, typically transient." |
+| (other) | "Check lessons.md for details." |
+
+All HALT messages end with:
+```
+  → Fix/rephrase, then re-run: /tas {original request}
+  → Inspect the debate: /tas-explain {timestamp}
 
 Workspace: {workspace}
-학습사항: {workspace}/lessons.md — 중단까지의 기록
+Lessons: {workspace}/lessons.md
+
+> `/tas-explain {timestamp}` — inspect the dialectic debate
+> `/tas-workspace` — manage workspace artifacts
 ```
 
 **On error** (non-zero exit):
@@ -291,12 +447,23 @@ Workspace artifacts (if any): {workspace}
 
 ## Error Handling
 
-| Failure | Detection | Recovery |
-|---------|-----------|----------|
-| Agent response is not valid JSON | JSON parse failure | Display raw response, report error |
-| Agent returned empty response | Zero-length result | Retry once, then report error |
-| Agent tool error | Agent reports internal failure | Report to user, offer retry |
-| Any MetaAgent failure | Any of the above | **NEVER fall back to direct implementation. Report error and offer: retry / abort.** |
+**NEVER fall back to direct implementation on any error. Report and offer: retry / abort.**
+
+### Error Detection & Recovery
+
+Classify errors by priority order. If the Agent returned valid JSON with `status: "halted"`,
+that is a normal HALT (Phase 3), NOT an error.
+
+| Priority | Condition | Display | Recovery |
+|----------|-----------|---------|----------|
+| 1 | Response contains "ModuleNotFoundError" or "claude_agent_sdk" | ⚠ SDK not installed | Show install commands (pip/pipx/uv), ask to restart session |
+| 2 | Response is empty or zero-length | ⚠ No response (응답 없음) | Retry / Simplify (re-classify with "simplify") / Abort |
+| 3 | Non-empty but JSON parse fails | ⚠ Parse failure (파싱 실패) | Show first 200 chars of response. Retry / Abort |
+| 4 | `status: "halted"` in valid JSON | (not an error) | → Phase 3 "On HALT" |
+| 5 | Agent() failed with partial output | ⚠ Abnormal exit (비정상 종료) | Show partial output (200 chars). Retry / Abort |
+| 6 | Any other failure | ⚠ No response (응답 없음) | Retry / Abort |
+
+For all errors, include `Logs: {workspace}/` when workspace exists.
 
 ---
 
