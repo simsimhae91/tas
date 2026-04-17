@@ -37,6 +37,25 @@ DEGENERATE_HALT_AFTER = 3
 # HALT after this many consecutive rounds with unparseable verdict (UNKNOWN)
 UNKNOWN_VERDICT_HALT_AFTER = 5
 
+# Rate-limit indicator phrases (case-insensitive substring match).
+# If EITHER agent's response contains any of these AND the response is short
+# (< RATE_LIMIT_MAX_RESPONSE_LEN), HALT immediately — rate limiting is
+# unrecoverable within a dialogue session.
+RATE_LIMIT_PATTERNS: list[str] = [
+    "hit your limit",
+    "hit my limit",
+    "rate limit",
+    "usage limit",
+    "too many requests",
+    "over capacity",
+    "throttled",
+]
+
+# Responses longer than this are treated as substantive dialogue — rate-limit
+# error messages are typically 50-200 chars, while technical discussion about
+# rate limiting runs into hundreds or thousands of chars.
+RATE_LIMIT_MAX_RESPONSE_LEN = 500
+
 
 # ---------------------------------------------------------------------------
 # YAML frontmatter stripping
@@ -239,6 +258,19 @@ def _parse_halt_reason(response: str) -> str:
     return "convergence_failure"
 
 
+def _is_rate_limited(response: str) -> bool:
+    """Check if a response indicates API rate limiting.
+
+    Length gate: responses longer than RATE_LIMIT_MAX_RESPONSE_LEN are
+    treated as substantive dialogue (not error messages), even if they
+    contain rate-limit terminology as part of technical discussion.
+    """
+    if len(response.strip()) > RATE_LIMIT_MAX_RESPONSE_LEN:
+        return False
+    lower = response.lower()
+    return any(p in lower for p in RATE_LIMIT_PATTERNS)
+
+
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
@@ -412,6 +444,7 @@ async def run_dialectic(config: dict[str, Any]) -> dict[str, Any]:
         final_msg = ""
         consecutive_unknown = 0
         consecutive_degenerate = 0
+        rate_limited = False
 
         while True:
             # Antithesis evaluates
@@ -468,6 +501,30 @@ async def run_dialectic(config: dict[str, Any]) -> dict[str, Any]:
                     f"# HALTED at Round {round_num}\n\n"
                     f"## Last Thesis Position\n\n{thesis_msg}\n\n"
                     f"## Halt Signal\n\n{anti_msg}"
+                )
+                write_log(log_dir, round_num, "halt", final_msg)
+                break
+
+            # --- Rate-limit detection (before other degeneration checks) ---
+            # Rate-limit responses may be short (<50 chars) and/or unparseable,
+            # so check this FIRST to avoid misclassifying as dialogue_degeneration
+            # or unparseable_verdicts.  Length gate prevents false positives from
+            # technical discussions that mention "rate limit" as a domain concept.
+            if _is_rate_limited(thesis_msg) or _is_rate_limited(anti_msg):
+                limited_agent = "thesis" if _is_rate_limited(thesis_msg) else "antithesis"
+                print(
+                    f"  HALT: {limited_agent} hit API rate limit",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                rate_limited = True
+                verdict = "HALT"
+                final_msg = (
+                    f"# HALTED — Rate Limit\n\n"
+                    f"Agent `{limited_agent}` produced a response indicating "
+                    f"API rate limiting. The dialogue cannot continue.\n\n"
+                    f"## Last Thesis Position\n\n{thesis_msg}\n\n"
+                    f"## Last Antithesis Response\n\n{anti_msg}"
                 )
                 write_log(log_dir, round_num, "halt", final_msg)
                 break
@@ -560,7 +617,9 @@ async def run_dialectic(config: dict[str, Any]) -> dict[str, Any]:
             result["blockers"] = _extract_blockers(final_msg)
         # ISSUE-07: Parse structured HALT reason from antithesis response
         if verdict == "HALT":
-            if consecutive_degenerate >= DEGENERATE_HALT_AFTER:
+            if rate_limited:
+                result["halt_reason"] = "rate_limit"
+            elif consecutive_degenerate >= DEGENERATE_HALT_AFTER:
                 result["halt_reason"] = "dialogue_degeneration"
             elif consecutive_unknown >= UNKNOWN_VERDICT_HALT_AFTER:
                 result["halt_reason"] = "unparseable_verdicts"
@@ -703,8 +762,58 @@ def _self_test() -> None:
             preview = text[:60].replace("\n", "\\n")
             print(f"  FAIL: parse_verdict({preview!r}, 'inverted') = {result!r}, expected {expected!r}")
 
-    total = passed + failed + fm_passed + fm_failed + inv_passed + inv_failed
-    all_failed = failed + fm_failed + inv_failed
+    # --- _is_rate_limited tests ---
+    rl_cases: list[tuple[str, bool]] = [
+        # True: short responses with rate-limit indicators
+        ("You've hit your limit for the day", True),
+        ("Rate limit exceeded, please try again", True),
+        ("Too many requests in a short period", True),
+        ("I've hit my limit and cannot continue", True),
+        ("The server is over capacity", True),
+        ("Usage limit reached for this API key", True),
+        ("Request throttled. Please wait.", True),
+        # False: no rate-limit patterns
+        ("This is a normal response about code design", False),
+        # False: rate-limit patterns in LONG responses (technical discussion)
+        (
+            "For the rate limit middleware, I propose using a sliding window "
+            "approach with Redis as the backing store. The rate limit should "
+            "be configurable per endpoint with different tiers for "
+            "authenticated vs unauthenticated requests. Implementation plan: "
+            "1. Create a RateLimiter class that wraps Redis MULTI/EXEC "
+            "operations. 2. Add middleware to Express router. 3. Configure "
+            "per-route limits in the route definitions. This approach handles "
+            "distributed rate limiting across multiple server instances. "
+            "We should also add monitoring dashboards to track rate limit "
+            "hit counts per endpoint.",
+            False,
+        ),
+        (
+            "The usage limit configuration needs to support both per-user "
+            "and per-IP throttling strategies. Here is my detailed proposal "
+            "covering the implementation of rate limit headers, retry-after "
+            "semantics, and graceful degradation patterns for the API gateway "
+            "layer. The architecture should cleanly separate rate limit "
+            "policy from enforcement mechanism to allow future extension. "
+            "Additionally, we need to consider how the rate limit state is "
+            "shared across horizontally scaled instances using a distributed "
+            "cache layer with consistent hashing for partition tolerance.",
+            False,
+        ),
+    ]
+    rl_passed = 0
+    rl_failed = 0
+    for text, expected in rl_cases:
+        result = _is_rate_limited(text)
+        if result == expected:
+            rl_passed += 1
+        else:
+            rl_failed += 1
+            preview = text[:60].replace("\n", "\\n")
+            print(f"  FAIL: _is_rate_limited({preview!r}...) = {result!r}, expected {expected!r}")
+
+    total = passed + failed + fm_passed + fm_failed + inv_passed + inv_failed + rl_passed + rl_failed
+    all_failed = failed + fm_failed + inv_failed + rl_failed
     if all_failed:
         print(f"FAIL: {total - all_failed}/{total} passed, {all_failed} failed")
         sys.exit(1)

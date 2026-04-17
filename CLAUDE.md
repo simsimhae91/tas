@@ -84,8 +84,9 @@ Before finalizing any edit to an agent file:
 
 No fixed iteration caps. Dialogue continues until ACCEPT (or PASS/FAIL in inverted mode) or HALT. This is intentional — artificial caps produce premature consensus. If you're tempted to add a round limit, the real problem is probably unclear pass criteria or role ambiguity.
 
-The dialectic engine enforces two degeneration HALTs (these are NOT round caps — they detect dialogue death):
+The dialectic engine enforces three degeneration HALTs (these are NOT round caps — they detect dialogue death):
 
+- **Rate-limit detection**: Either agent's response is ≤500 chars and contains rate-limit indicator phrases (e.g., "rate limit", "hit your limit", "throttled") → immediate HALT with `rate_limit`. Checked before other degeneration patterns to prevent misclassification.
 - **Unparseable verdicts**: 5 consecutive rounds where antithesis response contains no parseable verdict → HALT with `unparseable_verdicts`. Root cause is usually missing verdict format instructions in the system prompt.
 - **Degenerate responses**: 3 consecutive rounds where BOTH agents produce <50 chars → HALT with `dialogue_degeneration`. Agents have nothing left to say.
 
