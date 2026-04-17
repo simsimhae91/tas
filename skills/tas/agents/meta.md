@@ -233,6 +233,7 @@ touch {WORKSPACE}/lessons.md  # if not exists
 Read agent definitions once (used for every step):
 - `{SKILL_DIR}/agents/thesis.md` → `thesis_instructions`
 - `{SKILL_DIR}/agents/antithesis.md` → `antithesis_instructions`
+- `{SKILL_DIR}/references/failure-patterns.md` → `failure_patterns` (기획 antithesis 주입용)
 
 Parse inputs:
 - `PLAN` → ordered list of steps (each has id, name, goal, pass_criteria)
@@ -379,6 +380,43 @@ For each step, build the config the Python engine consumes.
    Thesis system prompt = "---\nSTEP ROLE: {thesis_role}\nSTEP GOAL: {S.goal}\nPASS CRITERIA:\n{S.pass_criteria as bullets}"
    Antithesis system prompt = "---\nSTEP ROLE: {antithesis_role}\nSTEP GOAL: {S.goal}\nPASS CRITERIA:\n{S.pass_criteria as bullets}"
    ```
+
+   **기획-only antithesis enhancement** (when `S.name == "기획"`):
+
+   Append to the antithesis system prompt (after PASS CRITERIA):
+
+   ```
+   ---
+   ## Planning-Phase Directive
+
+   When evaluating the thesis's design proposal, go beyond verifying completeness
+   within the proposed approach. Actively consider:
+
+   1. **Alternative framework**: Could a fundamentally different architectural pattern,
+      library choice, or structural approach better serve the stated requirements?
+      If yes, present it as a COUNTER with concrete trade-off comparison.
+   2. **Assumption challenge**: What implicit assumptions does the thesis make about
+      the problem space? Are any of these assumptions worth questioning?
+   3. **Scope tension**: Is the proposed scope genuinely minimal, or does it include
+      speculative abstractions? Conversely, does it under-scope and defer critical
+      decisions that will be harder to fix later?
+   ```
+
+   Additionally, append the contents of `failure_patterns` (read in Phase 1) to the
+   antithesis system prompt:
+
+   ```
+   ---
+   ## Historical Failure Patterns (Asymmetric — thesis does not have this information)
+
+   {failure_patterns content}
+
+   Use these patterns as a checklist when evaluating the thesis's design proposal.
+   Flag any matches as specific refinement items in your evaluation.
+   ```
+
+   Do NOT append any of the above to `thesis-system-prompt.md` — this asymmetry is
+   intentional. The 기획-only enhancement applies ONLY when `S.name == "기획"`.
 
    **Inverted (검증/테스트)**:
    ```
@@ -736,6 +774,7 @@ computation. A cap in the caller doesn't protect computation inside the callee.
 | Within-iter retry would overwrite | Existing step output | Append `-retry-{N}` suffix within the same iteration dir |
 | Persistent FAIL on same blockers | consecutive_fail_count ≥ `persistent_failure_halt_after` | HALT iteration, record in lessons.md, break loop |
 | Playwright CLI unavailable (web 테스트) | `npx playwright test` fails or playwright not installed | Fall back to static tests only; record limitation in DELIVERABLE.md |
+| Rate-limited agent | `_is_rate_limited()` detects pattern in short response (≤500 chars) | Engine HALTs immediately with `rate_limit` — no retry (unrecoverable) |
 
 When operating in degraded mode:
 1. Save whatever artifacts were produced
