@@ -471,7 +471,8 @@ For all errors, include `Logs: {workspace}/` when workspace exists.
 
 | Setting | Default | Adjustable By |
 |---------|---------|---------------|
-| Agent model | opus | Fixed — always use the most capable model |
+| MetaAgent model | opus | Fixed — classify/execute run on the most capable model |
+| Dialectic model (Thesis/Antithesis) | sonnet-4-6 | Set in `agents/meta.md` step-config (`model` field) and `runtime/dialectic.py` fallback |
 | Workspace | `{PROJECT_ROOT}/_workspace/quick/{timestamp}/` | Timestamped per run |
 | Loop count | 1 | User at plan approval (`loop_count`) |
 | Reentry point | 구현 | User at plan approval (`loop_policy.reentry_point`) |

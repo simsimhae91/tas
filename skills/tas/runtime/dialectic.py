@@ -381,7 +381,7 @@ async def run_dialectic(config: dict[str, Any]) -> dict[str, Any]:
 
     step_id = config["step_id"]
     step_goal = config["step_goal"]
-    model = config.get("model", "claude-opus-4-6")
+    model = config.get("model", "claude-sonnet-4-6")
     project_root = config["project_root"]
     query_timeout = config.get("query_timeout", 600)
     language = config.get("language", "English")

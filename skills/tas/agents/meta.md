@@ -411,7 +411,7 @@ For each step, build the config the Python engine consumes.
      "step_id": "{S.id}",
      "step_goal": "{S.goal}",
      "project_root": "{PROJECT_ROOT}",
-     "model": "claude-opus-4-6",
+     "model": "claude-sonnet-4-6",
      "convergence_model": "{standard|inverted}",
      "language": "{ONLY set non-English if user explicitly requested a specific output language (e.g. '한국어로 작성'). Default: English. A Korean request with no language instruction means English output.}"
    }
