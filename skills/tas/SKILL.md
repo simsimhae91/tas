@@ -602,6 +602,9 @@ Extract `{timestamp}` from the workspace path (`YYYYmmdd_HHMMSS`).
 | `checkpoint_schema_unsupported` | Checkpoint schema unsupported (체크포인트 스키마 미지원) |
 | `workspace_missing` | Workspace missing (워크스페이스 경로 오류) |
 | `already_completed` | Already completed (이미 완료됨) |
+| `sdk_session_hang`     | SDK session hang (SDK 세션 무응답) |
+| `step_transition_hang` | Step transition hang (스텝 전환 중 무응답) |
+| `bash_wrapper_kill`    | Watchdog forced termination (워치독 강제 종료) |
 | (other) | Use `halt_reason` as-is |
 
 #### HALT Display
@@ -633,6 +636,9 @@ Blockers (from lessons.md):
 | `checkpoint_schema_unsupported` | "checkpoint schema {v} 미지원 (현재 1만 지원). tas 업데이트 또는 `/tas`로 새로 시작." |
 | `workspace_missing` | "워크스페이스 경로 없음 또는 `_workspace/quick/` 밖입니다. `/tas-workspace`로 목록 확인." |
 | `already_completed` | "이미 완료된 run입니다. 새 요청은 `/tas`." |
+| `sdk_session_hang`     | "SDK 응답이 없어 엔진이 중단됐습니다. `/tas --resume`으로 재시도하거나, 긴 step이면 `TAS_WATCHDOG_TIMEOUT_SEC`을 늘리세요." |
+| `step_transition_hang` | "엔진이 결과 없이 종료됐습니다. `/tas --resume`으로 재시도하세요. 반복되면 `/tas-workspace`로 로그를 확인하세요." |
+| `bash_wrapper_kill`    | "Watchdog이 설정된 시간 내 응답 부재로 프로세스를 종료했습니다. 긴 step이면 `TAS_WATCHDOG_TIMEOUT_SEC`을 늘린 후 `/tas --resume`으로 재시도하세요." |
 | (other) | "Check lessons.md for details." |
 
 All HALT messages end with:
