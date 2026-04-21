@@ -1,5 +1,7 @@
 # tas — Dialectic Workflow Plugin for Claude Code
 
+**English** · [한국어](./README.ko.md)
+
 A Claude Code plugin that runs user requests through **thesis–antithesis–synthesis (정반합)** using multi-agent orchestration. Adaptive 1–4 step workflows, user-controlled iteration loops, and cumulative lessons learned between passes.
 
 > Why use it? Most AI coding agents produce a single-pass answer. `tas` forces two agents to argue — one proposes, one attacks — until they converge. For ambiguous or high-stakes work, this surfaces failures a single pass would miss.
