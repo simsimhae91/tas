@@ -595,6 +595,13 @@ Extract `{timestamp}` from the workspace path (`YYYYmmdd_HHMMSS`).
 | `unparseable_verdicts` | Unparseable verdicts (판정 파싱 오류) |
 | `missing_engine_artifacts` | Missing engine artifacts (엔진 산출물 누락) |
 | `workspace_convention_violation` | Workspace convention violation (작업공간 규칙 위반) |
+| `no_checkpoint` | No checkpoint (체크포인트 없음) |
+| `plan_missing` | Plan missing (plan.json 없음) |
+| `checkpoint_corrupt` | Checkpoint corrupt (체크포인트 손상) |
+| `plan_hash_mismatch` | Plan hash mismatch (plan 해시 불일치) |
+| `checkpoint_schema_unsupported` | Checkpoint schema unsupported (체크포인트 스키마 미지원) |
+| `workspace_missing` | Workspace missing (워크스페이스 경로 오류) |
+| `already_completed` | Already completed (이미 완료됨) |
 | (other) | Use `halt_reason` as-is |
 
 #### HALT Display
@@ -619,6 +626,13 @@ Blockers (from lessons.md):
 | `circular_argumentation` | "Agents could not converge — request scope may be ambiguous or conflicting." |
 | `dialogue_degeneration` | "Agents produced insufficient responses — rephrase with more specific requirements." |
 | `unparseable_verdicts` | "Internal format error, typically transient." |
+| `no_checkpoint` | "체크포인트가 없습니다. `/tas {원래 요청}`으로 새로 시작하세요." |
+| `plan_missing` | "plan.json이 없어 재개할 수 없습니다 (Classify 전 종료 가능). `/tas`로 새로 시작하세요." |
+| `checkpoint_corrupt` | "체크포인트 JSON 파싱 실패. `/tas-workspace {workspace}`로 내용을 확인하거나 `/tas`로 새로 시작." |
+| `plan_hash_mismatch` | "plan.json이 Classify 승인 이후 수정됐습니다. 원본을 복구하거나 `/tas`로 새로 시작." |
+| `checkpoint_schema_unsupported` | "checkpoint schema {v} 미지원 (현재 1만 지원). tas 업데이트 또는 `/tas`로 새로 시작." |
+| `workspace_missing` | "워크스페이스 경로 없음 또는 `_workspace/quick/` 밖입니다. `/tas-workspace`로 목록 확인." |
+| `already_completed` | "이미 완료된 run입니다. 새 요청은 `/tas`." |
 | (other) | "Check lessons.md for details." |
 
 All HALT messages end with:
