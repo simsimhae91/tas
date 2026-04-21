@@ -13,6 +13,8 @@ _workspace/
   quick/                                      ← all runs (timestamped for isolation)
     {YYYYmmdd_HHMMSS}/
       REQUEST.md                                ← original user request
+      plan.json                                 ← approved plan (Classify output, mtime-immutable after approval)
+      checkpoint.json                           ← step-boundary progress (atomic write, updated after each step)
       DELIVERABLE.md                            ← final cross-iteration synthesis
       lessons.md                                ← lessons learned, appended per iteration
       iteration-1/
@@ -45,8 +47,7 @@ _workspace/
         ...
 ```
 
-Every run is timestamp-isolated. There is no "resume" mechanism — each `/tas` invocation
-produces a fresh workspace. For long-lived project context, use a separate tool outside tas.
+Every run is timestamp-isolated. A run may be **resumed** via `/tas --resume` (Phase 2; the resume path reads `checkpoint.json` and `plan.json` but never writes to a prior workspace). Each fresh `/tas` invocation still produces a new timestamped workspace — resume is opt-in, not automatic.
 
 ### Naming Rules
 
@@ -238,6 +239,90 @@ On inverted step FAIL (검증/테스트):
 
 Iteration-level HALT does NOT prevent the final DELIVERABLE.md from being written — the
 cross-iteration synthesis records partial progress and halt reason.
+
+---
+
+## Checkpoint Schema
+
+This workspace persists two state files: `plan.json` (the approved Classify output, immutable after write) and `checkpoint.json` (step-boundary progress, atomically rewritten after each completed step). Together they are the sole trust source for Phase 2 resume — other files (`dialogue.md`, `round-*.md`, `deliverable.md`) are opaque to the resume path.
+
+### checkpoint.json fields (schema_version 1)
+
+| Field | Type | Required | Null allowed? | Values / Constraints |
+|-------|------|----------|---------------|----------------------|
+| `schema_version` | integer | yes | no | MUST equal `1`. Other values → HALT with `halt_reason: "checkpoint_schema_unsupported"` |
+| `workspace` | string | yes | no | Absolute path to `_workspace/quick/{timestamp}/` (self-documenting for crash dumps) |
+| `plan_hash` | string | yes | no | SHA-256 hex (64 chars) of canonical `plan.json` at Classify approval time |
+| `current_step` | string \| null | yes | **yes** | ID of the **next** step to execute; `null` only when `status == "finalized"` |
+| `completed_steps` | string[] | yes | no | Ordered list of step IDs already completed; `[]` at initial write |
+| `current_chunk` | string \| null | yes | **yes** | Phase 4 reserved slot. In Phase 1: always `null` |
+| `completed_chunks` | string[] | yes | no | Phase 4 reserved slot. In Phase 1: always `[]` |
+| `status` | string | yes | no | Enum: `"running"` \| `"halted"` \| `"finalized"` |
+| `updated_at` | string | yes | no | ISO 8601 UTC timestamp (e.g., `"2026-04-21T12:34:56.789012+00:00"`); regenerated on each write |
+| `halt_reason` | string \| null | no (optional) | yes | Present only when `status == "halted"` |
+
+### Example — initial write (after Classify approval, before step 1 starts)
+
+```json
+{
+  "schema_version": 1,
+  "workspace": "/Users/name/project/_workspace/quick/20260421_123456",
+  "plan_hash": "7c9e6679f1a3f83e1d2a4b2c5e3d7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e",
+  "current_step": "1",
+  "completed_steps": [],
+  "current_chunk": null,
+  "completed_chunks": [],
+  "status": "running",
+  "updated_at": "2026-04-21T12:34:56.789012+00:00"
+}
+```
+
+### Example — after step 2 completes (next is step 3)
+
+```json
+{
+  "schema_version": 1,
+  "workspace": "/Users/name/project/_workspace/quick/20260421_123456",
+  "plan_hash": "7c9e6679f1a3f83e1d2a4b2c5e3d7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e",
+  "current_step": "3",
+  "completed_steps": ["1", "2"],
+  "current_chunk": null,
+  "completed_chunks": [],
+  "status": "running",
+  "updated_at": "2026-04-21T12:48:12.345678+00:00"
+}
+```
+
+### Example — halted mid-run (persistent verify failure on step 3)
+
+```json
+{
+  "schema_version": 1,
+  "workspace": "/Users/name/project/_workspace/quick/20260421_123456",
+  "plan_hash": "7c9e6679f1a3f83e1d2a4b2c5e3d7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e",
+  "current_step": "3",
+  "completed_steps": ["1", "2"],
+  "current_chunk": null,
+  "completed_chunks": [],
+  "status": "halted",
+  "halt_reason": "persistent_verify_failure",
+  "updated_at": "2026-04-21T13:02:44.567890+00:00"
+}
+```
+
+### plan.json notes
+
+- `plan.json` is written **once**, at Execute Mode Phase 1 Initialize (immediately after Classify approval), via `python3 runtime/checkpoint.py write-plan`. The write CLI enforces "already exists → exit 3"; **plan.json is mtime-immutable after approval**.
+- `plan.json` uses canonical JSON serialization (`sort_keys=True`, `separators=(",",":")`, `ensure_ascii=False`) so that re-formatting by tools like `jq` does not invalidate `plan_hash`.
+- The plan dict preserves a Phase 4 reserved slot: `implementation_chunks: null` (not omitted) so downstream schema migration is forward-compatible.
+
+### plan_hash algorithm
+
+Canonical JSON (`sort_keys=True, separators=(",", ":"), ensure_ascii=False`) → SHA-256 hex digest (64 chars). Single source of truth: `skills/tas/runtime/checkpoint.py::compute_plan_hash`.
+
+### Atomic write invariant
+
+Both `plan.json` and `checkpoint.json` writes follow the tempfile + `fsync` + `os.replace` pattern implemented in `skills/tas/runtime/checkpoint.py::_atomic_write_json`. After any call (or exception), the target file either reflects the pre-call state or the full new payload — never a torn write.
 
 ---
 
