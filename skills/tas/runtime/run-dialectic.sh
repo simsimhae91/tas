@@ -32,6 +32,19 @@ if [ -z "$PYTHON" ]; then
   exit 1
 fi
 
+# -- Phase 3.1 TOPO-01: EXIT trap writes atomic done + exit markers --
+# Covers all exit paths: normal exit, Python raise, Layer A asyncio.timeout
+# re-raise, Layer B SIGTERM (exit 124 from timeout(1) or 143 from bash
+# receiving SIGTERM first — both observable; Plan 02 Test C accepts both).
+# atomic via tempfile + mv -f (POSIX rename()), matching Phase 1
+# checkpoint.py _atomic_write_json.
+# LOG_DIR is the directory containing the step-config.json passed as $1.
+# CRITICAL: bash MUST remain the parent process of the Python engine (no
+# `exec` keyword on the final invocation lines) — `bash -c 'trap … EXIT;
+# exec …'` does NOT fire the trap (Phase 3.1 Issue #1, empirically verified).
+LOG_DIR="$(dirname "$1")"
+trap 'rc=$?; echo "$rc" > "${LOG_DIR}/engine.exit.tmp" && mv -f "${LOG_DIR}/engine.exit.tmp" "${LOG_DIR}/engine.exit"; : > "${LOG_DIR}/engine.done.tmp" && mv -f "${LOG_DIR}/engine.done.tmp" "${LOG_DIR}/engine.done"' EXIT
+
 # -- Phase 3 WATCH-03: Layer B watchdog (Bash timeout(1) wrapping) --
 # Default watchdog budget — 20 min per step (CONTEXT D-03 §3.2).
 # Override via environment (see 03-CONTEXT.md "user override path"):
@@ -55,11 +68,11 @@ fi
 if [ -n "$TIMEOUT_BIN" ]; then
   # 2-stage kill: TIMEOUT_SEC → SIGTERM; KILL_GRACE_SEC later → SIGKILL.
   # Exit codes (coreutils §timeout-invocation): 124 SIGTERM, 137 SIGKILL.
-  exec "$TIMEOUT_BIN" --kill-after="${WATCHDOG_KILL_GRACE_SEC}s" \
+  "$TIMEOUT_BIN" --kill-after="${WATCHDOG_KILL_GRACE_SEC}s" \
        "${WATCHDOG_TIMEOUT_SEC}s" \
        "$PYTHON" "$SCRIPT_DIR/dialectic.py" "$@"
 else
   echo "⚠ tas watchdog: neither 'timeout' nor 'gtimeout' found — Layer B disabled." >&2
   echo "  Install via 'brew install coreutils' on macOS. Layer A (asyncio.timeout) remains active." >&2
-  exec "$PYTHON" "$SCRIPT_DIR/dialectic.py" "$@"
+  "$PYTHON" "$SCRIPT_DIR/dialectic.py" "$@"
 fi
