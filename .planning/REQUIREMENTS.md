@@ -37,7 +37,7 @@
 - [x] **TOPO-01** — `run-dialectic.sh`가 EXIT trap으로 `engine.done` / `engine.exit` atomic marker를 기록한다 (tempfile + `mv -f` POSIX rename). 정상 종료, `timeout 124/137`, Python raise 모든 경로에서 trap 통과.
 - [ ] **TOPO-02** — MetaAgent Execute Phase 2d step 7이 `nohup bash run-dialectic.sh <config> > <log> 2>&1 & echo $!` 형태 + `run_in_background: false`로 엔진을 기동하고, PID + 4종 path metadata JSON을 즉시 반환한다 (`timeout:` 파라미터 사용 금지).
 - [ ] **TOPO-03** — SKILL.md Phase 2가 MetaAgent 반환 JSON 5-field (engine_pid, log_path, heartbeat_path, exit_path, done_path) 을 소비해 `until test -f $DONE_PATH || ! kill -0 $PID` 폴링 루프를 10분 Bash cap-safe 단위(19 × 30s)로 소유하며, info-hiding 경계를 보존한다 (`dialogue.md` / `round-*.md` / `deliverable.md` / `lessons.md` / `heartbeat.txt` 접근 금지).
-- [ ] **TOPO-04** — `references/engine-invocation-protocol.md`가 file-marker polling 계약으로 전면 재작성된다 (task-notification 계약 제거, 금지 bullet 3종 추가).
+- [x] **TOPO-04** — `references/engine-invocation-protocol.md`가 file-marker polling 계약으로 전면 재작성된다 (task-notification 계약 제거, 금지 bullet 3종 추가).
 - [ ] **TOPO-05** — `step_transition_hang` enum이 "PID 사망 + engine.done 부재" 경로를 흡수하며, 신규 halt_reason enum 추가 없이 Phase 3 분류표 (03-CONTEXT.md D-05) 가 재사용된다.
 - [ ] **TOPO-06** — Approach B (subagent nohup fire-and-forget) 경로가 end-to-end `/tas` 실행에서 dialectic 첫 round를 정상 완주시킨다 (사후 검증 단계; CLAUDE.md Common Mistakes bullet + engine-invocation-protocol.md 가이드 반영).
 - [ ] **VERIFY-TOPO-01** — `/tas-verify`에 Canary #7 (subagent orphan survival) 이 등록되고, 기본 `$T=120` / 확장 `$T=1800` 모드에서 exit 0 반환한다 (PASS 조건: subagent duration < 10s, `$MARKER=survived`, PID PPID=1 로 $T 생존).
@@ -126,7 +126,7 @@
 | TOPO-01 | Phase 3.1 (Engine Invocation Topology Refactor) | Complete |
 | TOPO-02 | Phase 3.1 (Engine Invocation Topology Refactor) | Pending |
 | TOPO-03 | Phase 3.1 (Engine Invocation Topology Refactor) | Pending |
-| TOPO-04 | Phase 3.1 (Engine Invocation Topology Refactor) | Pending |
+| TOPO-04 | Phase 3.1 (Engine Invocation Topology Refactor) | Complete |
 | TOPO-05 | Phase 3.1 (Engine Invocation Topology Refactor) | Pending |
 | TOPO-06 | Phase 3.1 (Engine Invocation Topology Refactor) | Pending |
 | VERIFY-TOPO-01 | Phase 3.1 (Engine Invocation Topology Refactor) | Pending |

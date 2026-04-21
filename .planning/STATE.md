@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 3.1 Plan 02 complete (run-dialectic.sh EXIT trap + Layer B `exec` removed — Issue #1 fix; 5-case test_exit_trap.sh active)
-last_updated: "2026-04-21T15:05:35Z"
-last_activity: 2026-04-21 -- Phase 3.1 Plan 02 complete
+stopped_at: Phase 3.1 Plan 03 complete (engine-invocation-protocol.md rewrite — Scenario B file-marker polling contract; 8-section doc, 247 lines; Issue #1 + #2 close-out at doc level)
+last_updated: "2026-04-21T15:14:39Z"
+last_activity: 2026-04-21 -- Phase 3.1 Plan 03 complete
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 25
-  completed_plans: 13
-  percent: 52
+  completed_plans: 14
+  percent: 56
 ---
 
 # Project State
@@ -27,19 +27,19 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 3.1 — EXECUTING (Engine Invocation Topology Refactor)
-Plan: 2/7 complete (Plan 03 next — engine-invocation-protocol.md rewrite)
-Status: Wave 1 in progress — Issue #1 fix landed (run-dialectic.sh EXIT trap + `exec` removal)
-Last activity: 2026-04-21 -- Phase 3.1 Plan 02 complete (2 tasks, 3m29s)
+Plan: 3/7 complete (Plan 04 next — meta.md step 7-8 rewrite, Scenario B)
+Status: Wave 2 started — Scenario B ownership locked in protocol doc (MetaAgent spawns AND polls; MainOrchestrator consumes final JSON only)
+Last activity: 2026-04-21 -- Phase 3.1 Plan 03 complete (1 task, 3m37s)
 
-Progress: [█████░░░░░] 52% (13/25 plans — Phase 3.1 Plan 02 complete)
+Progress: [██████░░░░] 56% (14/25 plans — Phase 3.1 Plan 03 complete)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 12
+- Total plans completed: 13
 - Average duration: -
-- Total execution time: ~3m29s (this plan)
+- Total execution time: ~3m37s (this plan)
 
 **By Phase:**
 
@@ -50,8 +50,8 @@ Progress: [█████░░░░░] 52% (13/25 plans — Phase 3.1 Plan 0
 
 **Recent Trend:**
 
-- Last 5 plans: 03.1-02 (run-dialectic.sh EXIT trap + Layer B `exec` removed — Issue #1 fix + 5-case test_exit_trap.sh, 3m29s, 2 files) → 03.1-01 (Wave 0 scaffolding: TOPO family + 3 stub tests + Canary #7 placeholder, 3m9s, 6 files) → 03-07 (SKILL.md + engine-invocation-protocol + ARCHITECTURE + Canary #5/#6 wiring, 9m22s, 8 files) → 03-06 (MetaAgent classification + halt_reason enum, 3m12s, 1 file) → 03-05 (Layer B Bash timeout wrapper + graceful degrade, 1m52s, 1 file)
-- Trend: 03.1-02 shipped the core Phase 3.1 behavioral change — engine.done + engine.exit atomic markers on all 4 exit paths, with `exec` removed per PLAN-REVIEW Issue #1. Test E (real-chain integration) PASSes on macOS without claude_agent_sdk via sed-copy + mock dialectic injection. No Rule auto-fixes triggered; plan executed verbatim. Ready for Plan 03 (engine-invocation-protocol.md rewrite).
+- Last 5 plans: 03.1-03 (engine-invocation-protocol.md rewrite — Scenario B ownership + Issue #1 exec-forbidden bullet + 143 row; 8-section 247-line doc; 1 Rule 3 auto-fix for plan-verbatim-vs-grep contradiction, 3m37s, 1 file) → 03.1-02 (run-dialectic.sh EXIT trap + Layer B `exec` removed — Issue #1 fix + 5-case test_exit_trap.sh, 3m29s, 2 files) → 03.1-01 (Wave 0 scaffolding: TOPO family + 3 stub tests + Canary #7 placeholder, 3m9s, 6 files) → 03-07 (SKILL.md + engine-invocation-protocol + ARCHITECTURE + Canary #5/#6 wiring, 9m22s, 8 files) → 03-06 (MetaAgent classification + halt_reason enum, 3m12s, 1 file)
+- Trend: 03.1-03 locked Scenario B (MetaAgent spawns AND polls; MainOrchestrator consumes final JSON only) at the authoritative reference doc, making Plan 04 (meta.md step 7-9 rewrite) a mechanical inheritance of the contract and Plan 05 (SKILL.md) a radical scope reduction to a single Phase 0b prohibition bullet. Failure classification table now maps 124/137/143 all to bash_wrapper_kill per Plan 02 Test C observations. 1 Rule 3 auto-fix documented in SUMMARY §Deviations §1: forbidden-enum prohibition bullet reworded so `halt_reason` and enum names no longer share a grep-visible line, passing the plan's acceptance `grep -cE "halt_reason.*(engine_lost|...)" == 0` without dropping the prohibition prose.
 
 *Updated after each plan completion*
 | Phase 03 P02 | 2m46s | 3 tasks | 1 files |
@@ -62,6 +62,7 @@ Progress: [█████░░░░░] 52% (13/25 plans — Phase 3.1 Plan 0
 | Phase 03 P07 | 9m22s | 4 tasks + 1 bonus | 8 files |
 | Phase 03.1 P01 | 3m9s | 3 tasks | 6 files (3 new stubs + REQUIREMENTS.md + canaries.md + SUMMARY.md) |
 | Phase 03.1 P02 | 3m29s | 2 tasks | 2 files (run-dialectic.sh EXIT trap + `exec` removed; test_exit_trap.sh 5-case) |
+| Phase 03.1 P03 | 3m37s | 1 task | 1 file (engine-invocation-protocol.md rewrite — Scenario B + Issue #1 close-out + 143 row) |
 
 ## Accumulated Context
 
@@ -121,6 +122,11 @@ Recent decisions affecting current work (TAS-M1 kickoff):
 - [Phase 3.1]: Trap body kept on one line with single quotes — `echo "$rc" > ... && mv -f ... ; : > ... && mv -f ...` preserves `$?` capture at trap-fire time. Multi-line or double-quoted trap would either parse-fail or expand `$?` prematurely (03.1-02)
 - [Phase 3.1]: Test E strategy = E-1 (sed-copy) only — rewrites `if python3 -c "import claude_agent_sdk" …` to `if true` so Test E PASSes on hosts without claude_agent_sdk. E-2 (sdk-gated) was rejected at plan time because it would SKIP on this host (03.1-02)
 - [Phase 3.1]: Mock dialectic.sh emits `{"status":"completed","verdict":"ACCEPT"}` + exit 0 — matches Phase 3 D-04 stdout-last-line JSON contract shape so Test E exercises a realistic happy path Plan 05 polling will later consume (03.1-02)
+- [Phase 3.1]: Plan 03 adopted Scenario B verbatim in engine-invocation-protocol.md (Plan Review Issue #2 close-out) — MetaAgent owns spawn AND poll within one Agent() call; MainOrchestrator consumes only pre-Phase-3.1 `status: completed | halted` final JSON. Downstream effect: Plan 04 inherits the polling contract automatically when meta.md says "Read this file"; Plan 05 SKILL.md work reduces to a single Phase 0b prohibition bullet (polling block deleted) (03.1-03)
+- [Phase 3.1]: 143-row added to failure classification table (124/137/143 all → bash_wrapper_kill, watchdog_layer=B). Matches Plan 02 Test C's empirical observation that `timeout 1s bash -c 'trap…EXIT; sleep 5'` yields $?∈{124, 143} depending on which process receives SIGTERM first. No new halt_reason enum (03.1-03)
+- [Phase 3.1]: `exec` forbidden bullet added to "What NOT to do" list — text-level regression guard triple-stacking with Plan 02 code fix and Plan 07 static grep invariant 6. Preserves regression surface even if someone "cleans up" run-dialectic.sh in the future without reading Plan 02's commit (03.1-03 T-03.1-11b mitigation)
+- [Phase 3.1]: Internal vs final envelope schemas separated under §Return metadata schema — internal envelope (engine_pid + 4 paths + step_id + iteration + workspace) explicitly "never serialized out to MainOrchestrator", final envelope preserves pre-Phase-3.1 shape. Dedicated ❌ bullet forbids exposing internal as `status: engine_launched`. Prevents Scenario A semantic reintroduction (03.1-03)
+- [Phase 3.1]: Plan 03 Rule 3 auto-fix — forbidden-enum prohibition bullet reworded to split `halt_reason` token and (engine_lost|polling_orphan_death|engine_exit_missing) enum names across separate lines. Plan's verbatim text had them on same line, which failed the plan's own acceptance grep `halt_reason.*(enum_name) == 0`. Rewording preserves prohibition semantics + forbidden-name inline list (valuable for future agents to see past mistakes). SUMMARY §Deviations §1 documents the contradiction and fix (03.1-03)
 
 ### Pending Todos
 
@@ -146,6 +152,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-21T15:05:35Z
-Stopped at: Phase 3.1 Plan 02 complete (run-dialectic.sh EXIT trap + Layer B `exec` removed — Issue #1 fix; 5-case test_exit_trap.sh, 2 tasks, 3m29s)
-Resume file: .planning/phases/03.1-engine-invocation-topology-refactor/03.1-03-PLAN.md
+Last session: 2026-04-21T15:14:39Z
+Stopped at: Phase 3.1 Plan 03 complete (engine-invocation-protocol.md rewrite — 8-section Scenario B file-marker polling contract, 247 lines; Plan Review Issue #1 + #2 close-out at doc level; 1 Rule 3 auto-fix for plan-verbatim-vs-grep contradiction; 1 task, 3m37s)
+Resume file: .planning/phases/03.1-engine-invocation-topology-refactor/03.1-04-PLAN.md
