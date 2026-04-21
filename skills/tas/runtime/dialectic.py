@@ -518,6 +518,7 @@ def _make_client(
         **({"disallowed_tools": disallowed} if disallowed else {}),
         cwd=project_root,
         max_turns=50,
+        max_buffer_size=10 * 1024 * 1024,
     )
 
     return ClaudeSDKClient(options=options)
