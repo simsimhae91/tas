@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 3.1 Plan 05 complete (SKILL.md Phase 0b halt_reason enum freeze bullet added — 1-line insertion inside HTML prohibition comment block; Scenario B preserved: no Phase 2.5 polling block introduced; info-hiding 9-match baseline preserved; TOPO-05 requirement closed)
-last_updated: "2026-04-21T15:47:09Z"
-last_activity: 2026-04-21 -- Phase 3.1 Plan 05 complete
+stopped_at: Phase 3.1 Plan 06 complete (Canary #7 2-Phase regression guard — Phase 1 orphan survival + Phase 2 real-chain integration via sed-copy mock injection; VERIFY-TOPO-01 closed; smoke mode 10.4s end-to-end PASS; Plan Review §"관측 1" integration gap closed)
+last_updated: "2026-04-21T15:57:43Z"
+last_activity: 2026-04-21 -- Phase 3.1 Plan 06 complete
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 25
-  completed_plans: 16
-  percent: 64
+  completed_plans: 17
+  percent: 68
 ---
 
 # Project State
@@ -27,19 +27,19 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 3.1 — EXECUTING (Engine Invocation Topology Refactor)
-Plan: 5/7 complete (Plan 06 next — Canary #7 real implementation: simulate_subagent_orphan.py mock orphan harness + canaries.md registration)
-Status: Wave 3 complete — SKILL.md Phase 0b HTML prohibition block now contains halt_reason enum freeze bullet (engine_lost / polling_orphan_death / engine_exit_missing prohibited); step_transition_hang absorbs polling-orphan-death path per D-TOPO-05; Scenario B preserved (no Phase 2.5 polling block added); info-hiding 9-match baseline preserved; HALT Reason Labels + Recovery Guidance tables byte-identical
-Last activity: 2026-04-21 -- Phase 3.1 Plan 05 complete (1 task, ~1m)
+Plan: 6/7 complete (Plan 07 next — CLAUDE.md Common Mistakes update + Phase 3.1 final regression verification: info-hiding + enum freeze + canary suite green)
+Status: Wave 4 complete — Canary #7 2-Phase guard live (Phase 1 orphan survival + Phase 2 real-chain integration via sed-copy mock injection); VERIFY-TOPO-01 closed; `/tas-verify` now enumerates simulate_subagent_orphan.{py,sh} with real body (no PENDING prefix); canaries.md §Canary #7 full PASS/FAIL contract replaces Plan 01 placeholder; smoke mode (T=10s) end-to-end 10.4s wall-clock PASS; Plan Review §"관측 1" integration gap closed via sed-copy mock strategy matching Plan 02 Test E
+Last activity: 2026-04-21 -- Phase 3.1 Plan 06 complete (2 tasks, 5m11s)
 
-Progress: [██████░░░░] 64% (16/25 plans — Phase 3.1 Plan 05 complete)
+Progress: [███████░░░] 68% (17/25 plans — Phase 3.1 Plan 06 complete)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 16
+- Total plans completed: 17
 - Average duration: -
-- Total execution time: ~1m (this plan)
+- Total execution time: 5m11s (this plan)
 
 **By Phase:**
 
@@ -47,12 +47,12 @@ Progress: [██████░░░░] 64% (16/25 plans — Phase 3.1 Plan 0
 |-------|-------|------------|----------|
 | 02    | 2     | -          | -        |
 | 03    | 7     | ~26.0 min  | ~3.7 min |
-| 03.1  | 5     | ~16.3 min  | ~3.3 min |
+| 03.1  | 6     | ~21.5 min  | ~3.6 min |
 
 **Recent Trend:**
 
-- Last 5 plans: 03.1-05 (SKILL.md Phase 0b halt_reason enum freeze bullet — 1-line insertion inside HTML prohibition comment block; Scenario B invariants preserved: Phase 2.5 polling block NOT added, info-hiding 9-match baseline preserved, HALT Reason Labels + Recovery Guidance tables byte-identical; 1 Rule 3 auto-fix for plan's `<!-- Phase 0b does NOT` awk range pattern which did not span across the separate `<!--` opening line and `Phase 0b does NOT:` text line; TOPO-05 requirement closed, ~1m, 1 task, 1 file) → 03.1-04 (meta.md Scenario B rewrite — step 7 nohup spawn + step 8/8b local polling + classify + final JSON synthesis; TOPO-02 + TOPO-03 complete; 5 Rule 3 auto-fixes documented, 5m6s, 1 file, 2 commits) → 03.1-03 (engine-invocation-protocol.md rewrite — Scenario B ownership + Issue #1 exec-forbidden bullet + 143 row; 8-section 247-line doc; 1 Rule 3 auto-fix for plan-verbatim-vs-grep contradiction, 3m37s, 1 file) → 03.1-02 (run-dialectic.sh EXIT trap + Layer B `exec` removed — Issue #1 fix + 5-case test_exit_trap.sh, 3m29s, 2 files) → 03.1-01 (Wave 0 scaffolding: TOPO family + 3 stub tests + Canary #7 placeholder, 3m9s, 6 files)
-- Trend: 03.1-05 closes TOPO-05 at the SKILL.md side with the smallest viable change — one prohibition bullet inside the existing HTML comment block, zero new enum additions, zero polling logic. Scenario B (Plan 04) means SKILL.md's Phase 2 Execute handler stays pre-Phase-3.1 byte-identical; MetaAgent already owns the full engine lifecycle and returns the pre-existing `status: completed | halted` JSON contract. Plan Review Issue #2 is now fully resolved across doc (Plan 03), code-prompt (Plan 04), and orchestrator-guardrail (Plan 05) layers. One Rule 3 auto-fix for the plan's `<!-- Phase 0b does NOT` awk range pattern vs the file's line-break between `<!--` and `Phase 0b does NOT:` — same phase-level maturity pattern as Plans 03 (1x) and 04 (5x). Next: Plan 06 implements Canary #7 (simulate_subagent_orphan.py mock orphan harness) to verify VERIFY-TOPO-01.
+- Last 5 plans: 03.1-06 (Canary #7 2-Phase regression guard — Phase 1 synthetic orphan survival + Phase 2 real-chain integration via sed-copy mock injection on run-dialectic.sh; stdlib-only Python harness 291 net line-additions + bash wrapper header refresh + canaries.md §Canary #7 full PASS/FAIL contract; Plan Review §"관측 1" integration gap closed — Issue #1 `exec` regression would now FAIL Phase 2 immediately; SKIP path explicit + Plan 07 invariant 6 static backstop; smoke T=10s end-to-end 10.4s wall-clock; 1 Rule 3 auto-fix for forbidden-imports grep matching string literal in sed-copy target; VERIFY-TOPO-01 closed, 5m11s, 2 tasks, 3 files + SUMMARY) → 03.1-05 (SKILL.md Phase 0b halt_reason enum freeze bullet — 1-line insertion inside HTML prohibition comment block; Scenario B invariants preserved; 1 Rule 3 auto-fix for awk range pattern; TOPO-05 closed, ~1m, 1 task, 1 file) → 03.1-04 (meta.md Scenario B rewrite — step 7 nohup spawn + step 8/8b local polling + classify + final JSON synthesis; TOPO-02 + TOPO-03 complete; 5 Rule 3 auto-fixes documented, 5m6s, 1 file, 2 commits) → 03.1-03 (engine-invocation-protocol.md rewrite — Scenario B ownership + Issue #1 exec-forbidden bullet + 143 row; 8-section 247-line doc; 1 Rule 3 auto-fix for plan-verbatim-vs-grep contradiction, 3m37s, 1 file) → 03.1-02 (run-dialectic.sh EXIT trap + Layer B `exec` removed — Issue #1 fix + 5-case test_exit_trap.sh, 3m29s, 2 files)
+- Trend: 03.1-06 ships the last regression-guard of Phase 3.1 before the final wrap-up (Plan 07). Canary #7 now provides 2-Phase coverage: Phase 1 replays EXPERIMENT-2/3v2 (FINDINGS §7 — 30-min orphan survival) as a <10s smoke assertion, and Phase 2 — new relative to the pre-plan draft, added per Plan Review §"관측 1" — exercises the REAL run-dialectic.sh chain by sed-copying the script with a mock dialectic injected at the 3 replacement sites (claude_agent_sdk check, python3 selector, final invocation), then bash-runs the modified copy and asserts `engine.done` + `engine.exit=='0'`. This is the exact regression path for Issue #1 (`exec` reintroduction would suppress the EXIT trap and fail Phase 2 immediately). SKIP path is explicit-with-reason (silent PASS forbidden) — Plan 07 invariant 6 static `grep -c '^[[:space:]]*exec ' == 0` backstops the SKIP case so the regression surface is never unguarded. The 8th Phase 3.1 plan-verbatim-vs-grep contradiction Rule 3 auto-fix was recorded (03:1x, 04:5x, 05:1x, 06:1x) — this time the forbidden-imports grep matched a necessary string literal inside the sed-copy replacement block; tightened semantic interpretation to line-anchored `^(import|from)` instead of distorting the implementation. VERIFY-TOPO-01 closed. Next: Plan 07 finalizes Phase 3.1 with CLAUDE.md Common Mistakes update + full invariant suite (canary green + static `exec` grep + info-hiding baseline preserved).
 
 *Updated after each plan completion*
 | Phase 03 P02 | 2m46s | 3 tasks | 1 files |
@@ -66,6 +66,7 @@ Progress: [██████░░░░] 64% (16/25 plans — Phase 3.1 Plan 0
 | Phase 03.1 P03 | 3m37s | 1 task | 1 file (engine-invocation-protocol.md rewrite — Scenario B + Issue #1 close-out + 143 row) |
 | Phase 03.1 P04 | 5m6s | 2 tasks | 1 file (meta.md step 7 nohup spawn + step 8/8b Scenario B polling + classify; 5 Rule 3 auto-fixes) |
 | Phase 03.1 P05 | ~1m | 1 task | 1 file (SKILL.md Phase 0b halt_reason enum freeze bullet; 1 Rule 3 auto-fix for plan awk range pattern line-break mismatch) |
+| Phase 03.1 P06 | 5m11s | 2 tasks | 3 files (simulate_subagent_orphan.py full 2-Phase body + simulate_subagent_orphan.sh header refresh + canaries.md §Canary #7 PASS/FAIL contract; 1 Rule 3 auto-fix for forbidden-imports grep matching sed-copy string literal) |
 
 ## Accumulated Context
 
@@ -140,6 +141,12 @@ Recent decisions affecting current work (TAS-M1 kickoff):
 - [Phase 3.1]: Plan 04 Classify Mode Phase 3 (complex-request plan-validation dialectic) updated to Scenario B — was out of nominal plan scope (step 7-8), but plan's whole-file grep `run_in_background: true == 0` encoded cross-section consistency. Cheaper fix than narrowing the grep; plan-validation dialectic now consistent with the post-3.1 protocol doc mechanism (04)
 - [Phase 3.1]: Plan 05 lands the smallest-viable TOPO-05 close-out — 1 bullet inside the existing Phase 0b HTML prohibition comment block declaring halt_reason enum freeze. Zero new enum additions (engine_lost / polling_orphan_death / engine_exit_missing explicitly prohibited); `step_transition_hang` absorbs the polling-orphan-death path per D-TOPO-05. Phase 2 Execute handler + HALT Reason Labels table + Recovery Guidance table all byte-identical. Info-hiding 9-match baseline preserved (bullet wording avoids the 5 protected artifact literals). Plan Review Issue #2 resolution complete across all 3 layers (doc=Plan 03, code-prompt=Plan 04, orchestrator-guardrail=Plan 05). (05)
 - [Phase 3.1]: Plan 05 Rule 3 auto-fix for plan's `<!-- Phase 0b does NOT` awk range pattern — plan's acceptance `awk '/<!-- Phase 0b does NOT/,/-->/'` expected a single line containing both tokens, but the file has `<!--` on L300 and `Phase 0b does NOT:` on L301 (separate lines). Executor ran the adjusted `awk '/<!--$/,/-->/'` which produces correct output; bullet-in-block semantic invariant passes, only the acceptance grep syntax needed tuning. Same phase-level maturity pattern as Plans 03 (1x) and 04 (5x). Now 7 total Rule 3 plan-verbatim-vs-grep auto-fixes across Phase 3.1. (05)
+- [Phase 3.1]: Plan 06 lands Canary #7 as a 2-Phase regression guard (Phase 1 synthetic orphan survival + Phase 2 real-chain integration via sed-copy mock injection) rather than Phase-1-only. Phase 2 directly closes Plan Review §"관측 1" — the integration gap where `exec` reintroduction to run-dialectic.sh would bypass synthetic orphan-survival checks and only surface at real `/tas` runtime. sed-copy strategy mirrors Plan 02 Task 2 Test E verbatim (3 string replacements: claude_agent_sdk check → `true`, `python3` selector → `/bin/sh`, final invocation → mock script path). Phase 2 SKIP path explicit (silent PASS forbidden) + Plan 07 invariant 6 static backstop handle environmental failures gracefully. (06)
+- [Phase 3.1]: Plan 06 2-commit split (feat Python body + docs bash header & canaries.md) over single-commit — matches Phase 3.1 Plan 01/02/03/04/05 atomic-per-task pattern, lets `git bisect` pinpoint harness regressions independently of canaries.md drift. Python harness is the load-bearing behavior change; bash wrapper + canaries.md are pure documentation/registration. (06)
+- [Phase 3.1]: Plan 06 Rule 3 auto-fix for forbidden-imports grep (`grep -c 'import claude_agent_sdk|import pytest|import psutil' == 0`) — the Phase 2 sed-copy block embeds `'if python3 -c "import claude_agent_sdk" 2>/dev/null; then'` as a STRING LITERAL (the exact run-dialectic.sh line being rewritten), which the loose grep pattern counts as 1. Line-anchored `grep -cE "^(import |from )(claude_agent_sdk|pytest|psutil)"` reports 0. Semantic invariant ('stdlib only') is intact — tightened the grep interpretation rather than dropping the load-bearing string literal. This is the 8th Phase 3.1 plan-verbatim-vs-grep contradiction (Plans 03:1x, 04:5x, 05:1x, 06:1x). (06)
+- [Phase 3.1]: Plan 06 canary harness stdlib selection — `subprocess.check_output(["ps", "-o", "ppid=", "-p", PID])` with ValueError/CalledProcessError guards over `psutil.Process(pid).ppid()`. Zero new deps; matches D-VERIFY-TOPO-01 Rationale "합성 canary 가 목적에 충분". `_pid_alive` treats EPERM as alive per the Bash `kill -0` convention documented in engine-invocation-protocol.md §Liveness probe. (06)
+- [Phase 3.1]: Plan 06 PASS stdout grammar is EXTENDED (not replaced) — original Plan 01 placeholder `PASS: canary #7 (subagent orphan survived ${DURATION}s, PPID=1)` now reads `PASS: canary #7 (subagent orphan survived ${DURATION}s, PPID=1; real-chain integration: <PASS|SKIP (reason)>)`. Preserves substring match for Plan 07 lint rows while adding the Phase 2 label. (06)
+- [Phase 3.1]: Plan 06 canary wall-clock — smoke T=10s end-to-end 10.4s via bash wrapper (Phase 1 ~10s + Phase 2 <0.5s). Default T=120 stays at ~135s CI envelope. Phase 2's 30s `subprocess.run(timeout=30)` budget is generous (30x observed) — bounds CI cost if the mock stdout redirection hangs or the trap handler deadlocks. (06)
 
 ### Pending Todos
 
@@ -165,6 +172,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-21T15:47:09Z
-Stopped at: Phase 3.1 Plan 05 complete (SKILL.md Phase 0b HTML prohibition comment block gains 1 halt_reason enum freeze bullet — "Introduce new halt_reason enums (e.g. engine_lost, polling_orphan_death, engine_exit_missing) — Phase 3.1 D-TOPO-05 freeze; step_transition_hang absorbs the polling-orphan-death path". Scenario B preserved: Phase 2 Execute handler untouched, HALT Reason Labels + Recovery Guidance tables byte-identical, info-hiding 9-match baseline preserved. 1 Rule 3 auto-fix for plan's awk range pattern line-break mismatch. 1 task, ~1m, 1 docs commit: 08ff7f1)
-Resume file: .planning/phases/03.1-engine-invocation-topology-refactor/03.1-06-PLAN.md
+Last session: 2026-04-21T15:57:43Z
+Stopped at: Phase 3.1 Plan 06 complete (Canary #7 2-Phase regression guard — Phase 1 orphan survival + Phase 2 real-chain integration via sed-copy mock injection on run-dialectic.sh. simulate_subagent_orphan.py 291 net line-additions replaces Plan 01 PENDING stub; simulate_subagent_orphan.sh header restates 2-Phase mission while preserving `exec python3 $PYTHON_HARNESS` delegation byte-identically; canaries.md §Canary #7 PENDING placeholder → full PASS/FAIL contract with Phase 1 + Phase 2 criteria, 8 FAIL signal rows, smoke/default/extended invocation recipes. Plan Review §"관측 1" integration gap closed — Issue #1 `exec` reintroduction would FAIL Phase 2 immediately via missing engine.done. Phase 2 SKIP path explicit (silent PASS forbidden) + Plan 07 invariant 6 static `grep -c '^[[:space:]]*exec ' == 0` backstop. Smoke mode (T=10s) end-to-end 10.4s wall-clock. 1 Rule 3 auto-fix for forbidden-imports grep matching string literal in sed-copy block (8th Phase 3.1 plan-verbatim-vs-grep case). VERIFY-TOPO-01 closed. 2 tasks, 5m11s, 2 commits: b2df637 (feat), 21c5a99 (docs))
+Resume file: .planning/phases/03.1-engine-invocation-topology-refactor/03.1-07-PLAN.md
