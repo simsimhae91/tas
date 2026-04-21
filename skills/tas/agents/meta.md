@@ -139,8 +139,9 @@ Read `{SKILL_DIR}/references/workflow-patterns.md` for canonical templates.
 
 **Complex only**: Create `classify-{timestamp}/logs/validation/`, write lightweight
 thesis ("plan proposer") and antithesis ("plan challenger") prompts + step-config.json,
-execute via `Bash(bash {SKILL_DIR}/runtime/run-dialectic.sh ..., timeout: 300000)`.
-Parse result — if REFINE/COUNTER, adjust the plan.
+invoke the engine per `references/engine-invocation-protocol.md`
+(`Bash(..., run_in_background: true)` → await notification → Read output file →
+parse final JSON line). If REFINE/COUNTER, adjust the plan.
 
 **Do NOT use Agent() for plan validation.** Always use the dialectic engine.
 
@@ -190,8 +191,12 @@ mkdir -p {WORKSPACE}
 touch {WORKSPACE}/lessons.md  # if not exists
 ```
 
-Read once: `{SKILL_DIR}/agents/thesis.md`, `{SKILL_DIR}/agents/antithesis.md`,
-`{SKILL_DIR}/references/failure-patterns.md` (기획 antithesis 주입용).
+Read once:
+- `{SKILL_DIR}/agents/thesis.md`, `{SKILL_DIR}/agents/antithesis.md`
+- `{SKILL_DIR}/references/engine-invocation-protocol.md` — how to invoke `run-dialectic.sh` (run_in_background, liveness, completion handling). You MUST follow this protocol.
+- `{SKILL_DIR}/references/workspace-convention.md` §"Iteration & Retry Flow" — canonical retry/HALT rules
+- `{SKILL_DIR}/references/workflow-patterns.md` §"Iteration Support" — focus angle selection
+- `{SKILL_DIR}/references/failure-patterns.md` + `{SKILL_DIR}/references/planning-antithesis-directive.md` — injected into antithesis for 기획 steps only
 
 Parse: `PLAN` (steps array), `LOOP_COUNT` (≥1), `LOOP_POLICY` (reentry_point,
 early_exit_on_no_improvement, persistent_failure_halt_after).
@@ -219,31 +224,11 @@ If the user set reentry to `기획`, the full flow runs every iteration (full re
 
 #### Phase 2b: Select Focus Angle (Iteration 2+)
 
-For iteration 2+, select a **focus angle** — the perspective this iteration will apply
-to push beyond the previous iteration's PASS.
-
-**External override**: If `FOCUS_ANGLE` was provided in the input and has not already been
-used (not in `focus_angles_used`), use it as this iteration's focus angle and skip the
-selection logic below. Record it in `focus_angles_used` as normal.
-
-Priority order (when no external override):
-
-1. **Carry-over from antithesis**: if prior iterations produced `Non-blocking Observations`,
-   pick the most impactful one as this iteration's focus
-2. **Domain-specific rotation**: for the detected `project_domain`, cycle through
-   angles not yet used:
-   - `web-frontend`: UX polish → accessibility → performance → edge cases → error states
-   - `api` / `web-backend`: error handling → input validation → observability → performance
-   - `cli`: error messages → edge inputs → help clarity → shell compatibility
-   - `library`: API ergonomics → documentation → error types → composability
-   - `monorepo`: cross-package consistency → dependency alignment → build isolation → shared-config drift
-   - `data-pipeline`: idempotency → schema evolution → failure recovery → observability
-   - `iac-infra`: drift detection → blast radius → secret management → rollback safety
-   - `mobile`: responsiveness → offline states → deep-link coverage → performance
-   - other/unknown: correctness depth → readability → simplification → naming
-3. **Fallback**: "general code quality polish"
-
-Record selected angle in `focus_angles_used` so later iterations don't repeat.
+Select this iteration's focus angle per `references/workflow-patterns.md`
+§"Iteration Support" — priority order (external override → antithesis
+carry-over → domain rotation → fallback) and the full domain rotation table
+live there. Record the selected angle in `focus_angles_used` so later
+iterations don't repeat it.
 
 #### Phase 2c: Assemble Improvement Context (Iteration 2+)
 
@@ -314,40 +299,10 @@ For each step, build the config the Python engine consumes.
 
    **기획-only antithesis enhancement** (when `S.name == "기획"`):
 
-   Append to the antithesis system prompt (after PASS CRITERIA):
-
-   ```
-   ---
-   ## Planning-Phase Directive
-
-   When evaluating the thesis's design proposal, go beyond verifying completeness
-   within the proposed approach. Actively consider:
-
-   1. **Alternative framework**: Could a fundamentally different architectural pattern,
-      library choice, or structural approach better serve the stated requirements?
-      If yes, present it as a COUNTER with concrete trade-off comparison.
-   2. **Assumption challenge**: What implicit assumptions does the thesis make about
-      the problem space? Are any of these assumptions worth questioning?
-   3. **Scope tension**: Is the proposed scope genuinely minimal, or does it include
-      speculative abstractions? Conversely, does it under-scope and defer critical
-      decisions that will be harder to fix later?
-   ```
-
-   Additionally, append the contents of `failure_patterns` (read in Phase 1) to the
-   antithesis system prompt:
-
-   ```
-   ---
-   ## Historical Failure Patterns (Asymmetric — thesis does not have this information)
-
-   {failure_patterns content}
-
-   Use these patterns as a checklist when evaluating the thesis's design proposal.
-   Flag any matches as specific refinement items in your evaluation.
-   ```
-
-   Do NOT append any of the above to `thesis-system-prompt.md` — this asymmetry is
-   intentional. The 기획-only enhancement applies ONLY when `S.name == "기획"`.
+   Append the directive + failure_patterns content to the antithesis system
+   prompt EXACTLY as specified in `references/planning-antithesis-directive.md`.
+   Do NOT append any of that content to `thesis-system-prompt.md` — the
+   asymmetry is the anti-confirmation-bias mechanism.
 
    **Inverted (검증/테스트)**:
    ```
@@ -419,15 +374,19 @@ For each step, build the config the Python engine consumes.
 
    Template paths tell the engine where to find agent instruction files for prepending.
 
-7. **Execute PingPong**:
+7. **Execute engine** per `references/engine-invocation-protocol.md` — invoke
+   with `run_in_background: true`, capture `bash_id` and `output_file_path`:
    ```
    Bash({
      command: "bash {SKILL_DIR}/runtime/run-dialectic.sh {LOG_DIR}/step-config.json",
-     timeout: 900000
+     run_in_background: true,
+     description: "Dialectic for step {S.id}"
    })
    ```
 
-8. **Parse result** from the last line of stdout:
+8. **Await completion**: the harness emits a `<task-notification>` system-reminder
+   when the background process exits. On `status: completed`, `Read(output_file_path)`
+   and parse the last non-empty line as JSON:
    - Standard: `{"status":"completed","rounds":N,"verdict":"ACCEPT","deliverable_path":"..."}`
    - Inverted PASS: `{"status":"completed","rounds":N,"verdict":"PASS","deliverable_path":"..."}`
    - Inverted FAIL: `{"status":"completed","rounds":N,"verdict":"FAIL","blockers":[...],"deliverable_path":"..."}`
@@ -438,16 +397,17 @@ For each step, build the config the Python engine consumes.
 
 #### Within-Iteration FAIL Handling
 
-No fixed retry cap — iterate until PASS, HALT, or persistent failure.
+Implement the retry/HALT logic exactly as specified in
+`references/workspace-convention.md` §"Iteration & Retry Flow" →
+"Within an iteration". Summary (authoritative copy is in the reference):
 
-For **검증 FAIL** or **테스트 FAIL**:
-1. Capture blockers/failures from result
-2. Compare to previous FAIL of the same step in this iteration:
-   - Substantively identical → increment `consecutive_fail_count[step]`; else reset to 1
-   - If `consecutive_fail_count >= persistent_failure_halt_after` → HALT with
-     `persistent_verify_failure` or `persistent_test_failure`
-3. Otherwise: build retry context (`## Required Fixes from {step}\n{blockers}`),
-   jump back to **구현** with retry context. For 테스트 FAIL, re-run 검증 first (if in plan).
+- No fixed retry cap — iterate until PASS, HALT, or persistent failure
+- Compare each FAIL to the prior FAIL of the same step: substantively identical
+  → increment `consecutive_fail_count[step]`, else reset to 1
+- `consecutive_fail_count[step] >= persistent_failure_halt_after` → HALT with
+  `persistent_verify_failure` or `persistent_test_failure`
+- Otherwise: build retry context, jump back to 구현 (re-run 검증 first on
+  테스트 FAIL if in plan). Retries live in sibling `-retry-{N}/` dirs
 
 **Engine HALT** (circular argumentation etc.): stop iteration, proceed to Phase 2e.
 
@@ -548,17 +508,16 @@ agent's sole responsibility during the dialogue.
 
 ## Edge Cases & Error Handling
 
+MetaAgent-level cases:
+
 | Failure | Detection | Recovery |
 |---------|-----------|----------|
-| Dialectic engine error | Python non-zero exit | Check stderr, report error to MainOrchestrator |
-| Agent session crash | CLI death during dialogue | Engine reconnects once, fails on second death |
-| HALT (impasse) | Circular argumentation, external contradiction, missing info | Record both positions, set status "halted" |
 | Within-iter retry would overwrite | Existing step output | Append `-retry-{N}` suffix within the same iteration dir |
-| Persistent FAIL on same blockers | consecutive_fail_count ≥ `persistent_failure_halt_after` | HALT iteration, record in lessons.md, break loop |
-| Playwright CLI unavailable (web 테스트) | `npx playwright test` fails or not installed | Fall back to static tests; record in DELIVERABLE.md |
+| Persistent FAIL on same blockers | `consecutive_fail_count ≥ persistent_failure_halt_after` | HALT iteration, record in lessons.md, break loop |
+| Playwright CLI unavailable (web 테스트) | `npx playwright test` fails or not installed | Fall back to static tests; flag in DELIVERABLE.md |
+| Engine process lost | No completion notification AND liveness probe fails | Return `halt_reason: engine_lost` (see engine-invocation-protocol.md) |
 
-Degeneration HALTs (rate-limit, unparseable verdicts, dialogue degeneration) are detected
-and handled structurally by `dialectic.py` — see runtime/dialectic.py.
-
-When operating in degraded mode: save artifacts, flag in DELIVERABLE.md, set status in JSON.
+Engine-internal degeneration (rate-limit, unparseable verdicts, dialogue
+degeneration) is detected by `dialectic.py` and surfaces as a HALT verdict —
+record as `halted` and proceed to Phase 2e.
 
