@@ -500,6 +500,15 @@ For each step, build the config the Python engine consumes.
    })
    ```
 
+   > **Phase 3 watchdog note**: Bash `timeout(1)` wrapping is performed
+   > **inside** `run-dialectic.sh` (see WATCH-03). Do NOT add another
+   > `timeout` wrapper at the `Bash(...)` tool level — double wrapping
+   > confuses exit-code classification. The `Agent()` tool itself has no
+   > timeout parameter; Phase 3's "timeout on each step Agent() call"
+   > requirement (WATCH-04) is fulfilled by (a) run-dialectic.sh's Bash
+   > timeout + (b) step-config `query_timeout` passed to the engine's
+   > `asyncio.timeout` (Layer A).
+
 8. **Await completion**: the harness emits a `<task-notification>` system-reminder
    when the background process exits. On `status: completed`, `Read(output_file_path)`
    and parse the last non-empty line as JSON:
