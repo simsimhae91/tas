@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "tas",
-      "source": ".",
+      "source": "./",
       "description": "Dialectic (정반합) workflow plugin — 3-layer orchestration with thesis/antithesis agents and iteration loops."
     }
   ]
