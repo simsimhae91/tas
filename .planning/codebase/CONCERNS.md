@@ -10,15 +10,22 @@ this system. Classical bugs (Python runtime issues) are secondary and well-conta
 
 ## Tech Debt
 
-### meta.md exceeds the Claude attention-degradation threshold
+### meta.md exceeds the Claude attention-degradation threshold — PARTIAL
 
-- Issue: `agents/meta.md` is ~6,688 tokens (564 lines). Research referenced in
-  memory (`project_prompt_sizing.md`, 2026-04-17) places Claude's accuracy
-  degradation at ~5,500 tokens — meta.md is inside the "active degradation" zone.
-  This is the single largest known risk to orchestration reliability because
-  MetaAgent's conformance (engine-only producer, whitelist writes, convergence
-  model, retry routing, asymmetric planning) all depend on it being followed
-  exactly.
+**Status (2026-04-21 refactor)**: 564 → 523 lines (-42). Focus Angle table
+and 기획-only antithesis block externalized; Within-Iteration FAIL details
+delegated to `workspace-convention.md`. Still above the 500-line comfort
+target, but out of the worst of the degradation zone. Further reduction
+(Input Contract table, Phase 2d "Prepare Dialectic Config" JSON) requires
+more invasive externalization of load-bearing content — deferred.
+
+- Issue: `agents/meta.md` was ~6,688 tokens (564 lines). Research referenced
+  in memory (`project_prompt_sizing.md`, 2026-04-17) places Claude's accuracy
+  degradation at ~5,500 tokens — meta.md was well inside the "active
+  degradation" zone. This is the single largest known risk to orchestration
+  reliability because MetaAgent's conformance (engine-only producer,
+  whitelist writes, convergence model, retry routing, asymmetric planning)
+  all depend on it being followed exactly.
 - Files: `skills/tas/agents/meta.md`
 - Impact: Silent drift in MetaAgent behavior as the model under-weights later
   instructions; the attestation invariants (engine_invocations ≥ M×K,
@@ -47,7 +54,17 @@ this system. Classical bugs (Python runtime issues) are secondary and well-conta
   `references/halt-recovery.md` file. MainOrchestrator reads it on demand only
   when `status: halted`.
 
-### Duplication of load-bearing rules across files
+### Duplication of load-bearing rules across files — RESOLVED
+
+**Status (2026-04-21 refactor)**:
+- (1) **Quality Invariants** — verified no drift. All three copies
+  (antithesis.md, meta.md, CLAUDE.md) were already pointer-references to
+  antithesis.md §Pre-ACCEPT, not redundant content. No change needed.
+- (2) **Focus Angle rotation** — moved to `workflow-patterns.md`
+  §"Iteration Support". meta.md Phase 2b now cites the reference.
+- (3) **Retry/FAIL flow** — `workspace-convention.md` §"Iteration & Retry
+  Flow" is canonical. meta.md Phase 2d now delegates to it with a short
+  summary of the rule shape only.
 
 - Issue: Three documented redundancies exist — (1) Quality Invariants in
   `meta.md` §Quality Invariants + `antithesis.md` §Pre-ACCEPT + `CLAUDE.md`;
@@ -83,7 +100,21 @@ this system. Classical bugs (Python runtime issues) are secondary and well-conta
 
 ## Prompt/Behavioral Fragilities (this project's unique class)
 
-### MetaAgent ↔ Bash tool background-transition gap 🔴 CONFIRMED IN PRODUCTION
+### MetaAgent ↔ Bash tool background-transition gap — RESOLVED (was 🔴 CONFIRMED IN PRODUCTION)
+
+**Status (2026-04-21 refactor)**: Fixed in commit `a57053b` (meta.md refactor)
++ `734ba1e` (new `references/engine-invocation-protocol.md`) + `bb2f2d4`
+(CLAUDE.md Common Mistakes registration). Both `run-dialectic.sh`
+invocations now use `run_in_background: true`. The canonical liveness
+pattern from `hooks/stop-check.sh` line 63 is now documented and cited
+from meta.md Phase 1 Initialize. All 5 recommendations below are done:
+`run_in_background` at start ✓, `BashOutput`/output-file polling via
+harness notification ✓, canonical ps-based liveness ✓, `timeout:` values
+removed ✓, "background-transition response" documented in the protocol
+file ✓. Remaining: `/tas-verify` canary for 10-min+ scenario (tracked
+separately).
+
+
 
 - Risk: `agents/meta.md` invokes the engine via
   `Bash({ command: "bash run-dialectic.sh {step-config}", timeout: 900000 })`

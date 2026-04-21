@@ -2,6 +2,7 @@ node_modules/
 src/
 .openchrome/
 .claude/
+.planning/
 _workspace/
 package.json
 package-lock.json
