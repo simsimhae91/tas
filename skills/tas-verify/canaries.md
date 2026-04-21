@@ -97,6 +97,43 @@ this (e.g., "implement a rate limiter" with no pass criteria beyond
 
 ---
 
+## Canary #4 — Resume info-hiding (I-1 regression guard)
+
+**Guards**: `.planning/phases/02-resume-entry/02-CONTEXT.md` D-07 Layer 2; RESUME-02.
+Catches the regression class where `SKILL.md` Phase 0b (or any other Phase) reads
+dialectic artifacts — breaks the MainOrchestrator info-hiding boundary.
+
+**Exercise**: run the grep check against `skills/tas/SKILL.md`. This is a
+static lint — no `/tas` invocation needed:
+
+```bash
+SKILL_PATH="${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/SKILL.md"
+grep -nE 'dialogue\.md|round-[0-9]+-(thesis|antithesis)\.md|deliverable\.md|lessons\.md' "$SKILL_PATH"
+```
+
+**Pass criteria**:
+- Command exit code **1** (zero matches — SKILL.md does not reference any
+  dialectic artifact filename as a Read target)
+- No stdout lines
+- Note: matches within SCOPE warning comments or anti-feature HTML blocks are
+  ALLOWED (the regex is intentionally strict; reviewer visually confirms
+  matches are only in forbidden-list documentation, not in Read() calls).
+  Running this canary should still exit 1 overall — the SCOPE comment uses
+  the filenames *as examples of forbidden targets*, and the line should be
+  structured so the bare filenames do not appear literally in the SCOPE line
+  (the SCOPE line uses them inside a narrative sentence — verify via diff
+  against Plan 01 acceptance criteria).
+
+**Fail signals (regression)**:
+- Exit code 0 (any match found) → MainOrchestrator has developed an info-leak
+  path; remove the reference and route users to `/tas-explain` or
+  `/tas-workspace` for dialectic inspection instead (per CLAUDE.md line 128
+  post-Phase-2 wording).
+- Any stdout line like `NNN:<content containing dialogue.md, round-N-thesis.md,
+  round-N-antithesis.md, deliverable.md, or lessons.md>` in a Read/Bash context
+
+---
+
 ## When to add a new canary
 
 Add one whenever:
