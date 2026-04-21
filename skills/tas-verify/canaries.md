@@ -206,6 +206,42 @@ python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_step_transit
 
 ---
 
+## Canary #7 — Subagent-spawned orphan survival (VERIFY-TOPO-01)
+
+**Status**: PENDING — Phase 3.1 Plan 06 will populate the pass/fail contract
+once `simulate_subagent_orphan.{py,sh}` (currently stub from Plan 01) is
+implemented.
+
+**Guards (planned)**: `.planning/phases/03.1-engine-invocation-topology-refactor/03.1-CONTEXT.md`
+D-VERIFY-TOPO-01; TOPO-01 (EXIT trap); TOPO-06 (invocation protocol).
+Catches regressions where subagent-spawned `nohup` processes are reaped at
+subagent return (harness `bash_id` lifecycle).
+
+**Exercise (planned)**: subprocess-spawn a bash mock that runs
+`nohup ... & echo $!`, verify PID survives for $T seconds with PPID=1 and
+marker content is written.
+
+```bash
+# Default CI mode (T=120s)
+python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_subagent_orphan.py"
+
+# Or via bash wrapper
+bash "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_subagent_orphan.sh"
+```
+
+**Pass criteria (planned — locked in Plan 06)**:
+- Exit 0 with stdout `PASS: canary #7 (subagent orphan survived ${DURATION}s, PPID=1)`
+- Subagent duration < 10s (fire-and-forget contract)
+- PPID == 1 within 2s of spawn (init reparenting)
+- Marker content == "survived"
+- Wall-clock ≈ DURATION + 10s (default 120s → ≤ 130s)
+
+**Current behavior (Wave 0 stub)**: exits 0 with `PENDING:` notice so
+Plan 01 Task 2 Nyquist verify succeeds. Plan 06 replaces stub with real
+subagent orphan simulation.
+
+---
+
 ## When to add a new canary
 
 Add one whenever:
