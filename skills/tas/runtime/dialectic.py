@@ -676,7 +676,7 @@ def main() -> None:
 
 
 def _self_test() -> None:
-    """Regression tests for parse_verdict and _strip_frontmatter. Run via: python3 dialectic.py --self-test"""
+    """Regression tests for parse_verdict, _strip_frontmatter, and checkpoint schema. Run via: python3 dialectic.py --self-test"""
 
     # --- _strip_frontmatter tests ---
     fm_cases: list[tuple[str, str]] = [
@@ -812,8 +812,69 @@ def _self_test() -> None:
             preview = text[:60].replace("\n", "\\n")
             print(f"  FAIL: _is_rate_limited({preview!r}...) = {result!r}, expected {expected!r}")
 
-    total = passed + failed + fm_passed + fm_failed + inv_passed + inv_failed + rl_passed + rl_failed
-    all_failed = failed + fm_failed + inv_failed + rl_failed
+    # --- checkpoint schema regression tests (VERIFY-02) ---
+    import importlib.util
+    import shutil as _shutil
+    import tempfile as _tempfile
+
+    _ck_path = Path(__file__).parent / "checkpoint.py"
+    _spec = importlib.util.spec_from_file_location("checkpoint", _ck_path)
+    _ck = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_ck)
+
+    ck_cases_passed = 0
+    ck_cases_failed = 0
+
+    _tmp_ws = Path(_tempfile.mkdtemp())
+    try:
+        payload = {
+            "schema_version": 1,
+            "workspace": str(_tmp_ws),
+            "plan_hash": "a" * 64,
+            "current_step": "1",
+            "completed_steps": [],
+            "current_chunk": None,
+            "completed_chunks": [],
+            "status": "running",
+            "updated_at": "2026-04-21T00:00:00+00:00",
+        }
+        _ck.write_checkpoint(_tmp_ws, **payload)
+        restored = _ck.read_checkpoint(_tmp_ws)
+        if restored == payload:
+            ck_cases_passed += 1
+        else:
+            ck_cases_failed += 1
+            print(f"  FAIL: checkpoint round-trip diff: {restored!r}")
+
+        required = {"schema_version", "workspace", "plan_hash", "current_step",
+                    "completed_steps", "current_chunk", "completed_chunks", "status", "updated_at"}
+        if restored is not None and required.issubset(restored.keys()) and restored.get("schema_version") == 1:
+            ck_cases_passed += 1
+        else:
+            ck_cases_failed += 1
+            missing = required - set(restored.keys() if restored else set())
+            sv = restored.get("schema_version") if restored else None
+            print(f"  FAIL: checkpoint missing fields: {missing} or schema_version != 1 (got {sv!r})")
+
+        plan_a = {"steps": [{"id": "1", "name": "기획"}], "loop_count": 2}
+        plan_b = {"loop_count": 2, "steps": [{"id": "1", "name": "기획"}]}
+        if _ck.compute_plan_hash(plan_a) == _ck.compute_plan_hash(plan_b):
+            ck_cases_passed += 1
+        else:
+            ck_cases_failed += 1
+            print("  FAIL: plan_hash is not key-order-stable")
+
+        plan_c = dict(plan_a, loop_count=3)
+        if _ck.compute_plan_hash(plan_a) != _ck.compute_plan_hash(plan_c):
+            ck_cases_passed += 1
+        else:
+            ck_cases_failed += 1
+            print("  FAIL: plan_hash did not change on semantic diff")
+    finally:
+        _shutil.rmtree(_tmp_ws, ignore_errors=True)
+
+    total = passed + failed + fm_passed + fm_failed + inv_passed + inv_failed + rl_passed + rl_failed + ck_cases_passed + ck_cases_failed
+    all_failed = failed + fm_failed + inv_failed + rl_failed + ck_cases_failed
     if all_failed:
         print(f"FAIL: {total - all_failed}/{total} passed, {all_failed} failed")
         sys.exit(1)
