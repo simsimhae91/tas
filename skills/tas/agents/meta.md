@@ -517,6 +517,52 @@ For each step, build the config the Python engine consumes.
    - Inverted FAIL: `{"status":"completed","rounds":N,"verdict":"FAIL","blockers":[...],"deliverable_path":"..."}`
    - HALT: `{"status":"halted","rounds":N,"verdict":"HALT","halt_reason":"...","deliverable_path":"..."}`
 
+   **Classification table (CONTEXT D-05 — authoritative; reproduced here
+   for executor locality):** Apply the exit-code × last-line-JSON
+   classification table in 03-CONTEXT.md D-05 BEFORE treating the result as
+   either normal or HALT.
+
+   | exit | last-line JSON | classification | `halt_reason` | `watchdog_layer` |
+   |------|----------------|----------------|---------------|------------------|
+   | 0 | verdict: `ACCEPT` / `PASS` / `FAIL` | normal completion | — | — |
+   | 0 | `status: halted`, `halt_reason: sdk_session_hang` | Layer A hit | `sdk_session_hang` | `A` |
+   | 0 | `status: halted`, other `halt_reason` | engine internal HALT | (pass through) | null |
+   | non-zero | valid JSON | engine crash + partial info | (pass through, else `engine_crash`) | `A` or null |
+   | **124 / 137** | (any) | **Layer B SIGTERM/SIGKILL** | **`bash_wrapper_kill`** | **`B`** |
+   | non-zero (other) | JSON absent | engine crash | `engine_crash` | null |
+   | **0** | **JSON absent or parse-fail** | **step-transition hang** | **`step_transition_hang`** | **`B`** |
+
+   For `bash_wrapper_kill` or `step_transition_hang`, the engine did not
+   emit a halted JSON (process was SIGKILLed or exited without reaching
+   the stdout emit). Synthesize a HALT JSON locally:
+
+   ```json
+   {
+     "status": "halted",
+     "verdict": "HALT",
+     "halt_reason": "<bash_wrapper_kill|step_transition_hang>",
+     "watchdog_layer": "B",
+     "wrapper_exit": <exit_code>,
+     "last_heartbeat": <parsed-from-{LOG_DIR}/heartbeat.txt, else null>,
+     "round": <from heartbeat.round_n, else null>,
+     "speaker": <from heartbeat.speaker, else null>,
+     "halted_at": "iteration-{i}/step-{S.id}",
+     "deliverable_path": null
+   }
+   ```
+
+   Read `{LOG_DIR}/heartbeat.txt` for forensics via:
+   ```
+   Bash({
+     command: "cat {LOG_DIR}/heartbeat.txt",
+     run_in_background: false,
+     description: "Forensics: last heartbeat before Layer B kill"
+   })
+   ```
+   File absence → `last_heartbeat: null` (not an error). If `dialectic.py`
+   already emitted a halted JSON with `last_heartbeat` populated, that JSON
+   takes precedence over MetaAgent's local `cat`.
+
 9. **Read deliverable** at `deliverable_path` and append a summary to
    `cumulative_context_this_iter` (so downstream steps within this iteration can reference).
 
