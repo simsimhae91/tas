@@ -305,6 +305,7 @@ Phase 0b does NOT:
 - Fall back to Classify if plan.json is missing (halt plan_missing instead — Pitfall 3)
 - Invoke /tas-explain inline (user routes there via Phase 3 HALT recovery guidance)
 - Read dialectic artifacts (dialogue.md / round-*.md / deliverable.md / lessons.md — I-1 regression)
+- Introduce new halt_reason enums (e.g. engine_lost, polling_orphan_death, engine_exit_missing) — Phase 3.1 D-TOPO-05 freeze; step_transition_hang absorbs the polling-orphan-death path
 -->
 
 ---
