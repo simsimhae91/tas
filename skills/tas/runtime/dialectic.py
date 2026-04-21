@@ -824,9 +824,51 @@ async def run_dialectic(config: dict[str, Any]) -> dict[str, Any]:
             else:
                 result["halt_reason"] = _parse_halt_reason(anti_msg)
 
+        halted_json_emitted = True
         return result
 
+    except (asyncio.TimeoutError, asyncio.CancelledError):
+        # Layer A watchdog hit — emit halted JSON, set emit flag, re-raise so
+        # asyncio.run()'s top-level except drives exit code 1. D-05 classifier
+        # reads both exit_code and the halted JSON — halt_reason is locked to
+        # sdk_session_hang here so the "non-zero exit + valid halted JSON with
+        # sdk_session_hang" combo routes to Layer A (not engine_crash fallback).
+        halt = _build_halt_payload(
+            reason="sdk_session_hang",
+            layer="A",
+            log_dir=log_dir,
+            round_n=current_round,
+            speaker=current_speaker,
+            run_started_at=run_started_at,
+            step_id=step_id,
+            workspace=str(project_root),
+        )
+        print(json.dumps(halt, ensure_ascii=False), flush=True)
+        halted_json_emitted = True
+        raise
+
     finally:
+        # D-04 defensive fallback — fires only when neither the success path
+        # (halted_json_emitted flipped true before `return result`) nor the
+        # TimeoutError/CancelledError branch (which also sets the flag) ran.
+        # Covers unexpected exceptions that bypass both emit paths so the
+        # stdout-last-line JSON contract is never broken (Pitfall 6).
+        if not halted_json_emitted:
+            try:
+                fallback = _build_halt_payload(
+                    reason="engine_crash",
+                    layer=None,
+                    log_dir=log_dir,
+                    round_n=current_round,
+                    speaker=current_speaker,
+                    run_started_at=run_started_at,
+                    step_id=step_id,
+                    workspace=str(project_root),
+                )
+                print(json.dumps(fallback, ensure_ascii=False), flush=True)
+            except Exception:  # noqa: BLE001 — must not mask original exc
+                pass
+
         # Always disconnect — order matters (LIFO for cancel scope safety)
         for agent, name in [(antithesis, "antithesis"), (thesis, "thesis")]:
             try:
