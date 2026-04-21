@@ -345,6 +345,95 @@ def append_dialogue(
 
 
 # ---------------------------------------------------------------------------
+# Heartbeat — round-boundary progress signal for Layer A/B watchdogs
+# ---------------------------------------------------------------------------
+# Mirrors checkpoint.py::_atomic_write_json pattern INLINE (PATTERNS A1:
+# never `from checkpoint import ...` — cross-module coupling forbidden).
+# Failure policy DIFFERS from checkpoint: heartbeat swallows + logs, never
+# raises (D-02 "best-effort — watchdog must not impede main dialectic flow").
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Atomically write `text` (UTF-8) to `path` on the same filesystem.
+
+    Uses tempfile in `path.parent` + os.fsync + os.replace (POSIX atomic
+    rename). Callers decide whether to raise or swallow on failure.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_fd, tmp_name = tempfile.mkstemp(
+        dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_name, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def _heartbeat(log_dir: Path, round_n: int, speaker: str, phase: str) -> None:
+    """Atomically update {log_dir}/heartbeat.txt with the 4-field schema.
+
+    Schema (line-delimited, utf-8, LF endings):
+      timestamp=<ISO 8601 UTC microsecond precision, +00:00 suffix>
+      round_n=<1-based integer>
+      speaker=<thesis|antithesis|final>
+      phase=<before_query|after_response>
+
+    Best-effort: write failures log a stderr warning via logger.warning and
+    DO NOT interrupt the main dialectic flow (CONTEXT D-02 "Failure handling").
+    Called 8 times per speaker pair in run_dialectic.
+    """
+    path = log_dir / "heartbeat.txt"
+    payload = (
+        f"timestamp={datetime.now(timezone.utc).isoformat()}\n"
+        f"round_n={round_n}\n"
+        f"speaker={speaker}\n"
+        f"phase={phase}\n"
+    )
+    try:
+        _atomic_write_text(path, payload)
+    except Exception as exc:  # noqa: BLE001 — must not interrupt dialectic
+        logger.warning("heartbeat write failed (%s): %s", path, exc)
+
+
+def _read_last_heartbeat(log_dir: Path) -> dict[str, Any] | None:
+    """Best-effort read of heartbeat.txt into a 4-field dict, or None on any failure.
+
+    Used by _build_halt_payload (Plan 04) and by MetaAgent forensics
+    (Plan 05 `cat {LOG_DIR}/heartbeat.txt`). Missing file, parse failure,
+    or missing required fields all return None (non-error).
+    """
+    path = log_dir / "heartbeat.txt"
+    if not path.exists():
+        return None
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    out: dict[str, Any] = {}
+    for line in text.splitlines():
+        if "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        out[k.strip()] = v.strip()
+    required = {"timestamp", "round_n", "speaker", "phase"}
+    if not required.issubset(out):
+        return None
+    try:
+        out["round_n"] = int(out["round_n"])
+    except ValueError:
+        return None
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Client factory
 # ---------------------------------------------------------------------------
 
