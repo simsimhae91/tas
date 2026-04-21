@@ -156,7 +156,7 @@ Files (all `test -f`):
 Commits (all `git log --oneline --all | grep`):
 - FOUND: 2ea5b4b (feat(03-03): add _atomic_write_text + _heartbeat + _read_last_heartbeat helpers)
 - FOUND: e2db24f (feat(03-03): insert state trackers + 8 heartbeat call-sites in run_dialectic)
-- FOUND: 27cbb31 (docs(03-03): add execution summary for Phase 3 Plan 03 — metadata commit)
+- FOUND: 438df92 (docs(03-03): add execution summary for Phase 3 Plan 03 — metadata commit)
 
 Acceptance greps (all exit 0 unless noted):
 - FOUND: `^def _atomic_write_text(` → 1
