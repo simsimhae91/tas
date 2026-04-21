@@ -127,7 +127,7 @@
 | TOPO-02 | Phase 3.1 (Engine Invocation Topology Refactor) | Complete (Plan 03.1-04) |
 | TOPO-03 | Phase 3.1 (Engine Invocation Topology Refactor) | Complete (Plan 03.1-04, Scenario B: MetaAgent-owned polling) |
 | TOPO-04 | Phase 3.1 (Engine Invocation Topology Refactor) | Complete |
-| TOPO-05 | Phase 3.1 (Engine Invocation Topology Refactor) | Pending |
+| TOPO-05 | Phase 3.1 (Engine Invocation Topology Refactor) | Complete (Plan 03.1-05, SKILL.md Phase 0b halt_reason enum freeze bullet) |
 | TOPO-06 | Phase 3.1 (Engine Invocation Topology Refactor) | Pending |
 | VERIFY-TOPO-01 | Phase 3.1 (Engine Invocation Topology Refactor) | Pending |
 

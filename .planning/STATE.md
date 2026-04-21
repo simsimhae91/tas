@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 3.1 Plan 04 complete (meta.md Scenario B rewrite — step 7 nohup spawn + step 8/8b local polling & classify; MetaAgent now owns full engine lifecycle; 5 Rule 3 auto-fixes documented)
-last_updated: "2026-04-21T15:25:33Z"
-last_activity: 2026-04-21 -- Phase 3.1 Plan 04 complete
+stopped_at: Phase 3.1 Plan 05 complete (SKILL.md Phase 0b halt_reason enum freeze bullet added — 1-line insertion inside HTML prohibition comment block; Scenario B preserved: no Phase 2.5 polling block introduced; info-hiding 9-match baseline preserved; TOPO-05 requirement closed)
+last_updated: "2026-04-21T15:47:09Z"
+last_activity: 2026-04-21 -- Phase 3.1 Plan 05 complete
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 25
-  completed_plans: 15
-  percent: 60
+  completed_plans: 16
+  percent: 64
 ---
 
 # Project State
@@ -27,19 +27,19 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 3.1 — EXECUTING (Engine Invocation Topology Refactor)
-Plan: 4/7 complete (Plan 05 next — SKILL.md Phase 0b prohibition bullet only; Scenario B means no Phase 2.5 polling block)
-Status: Wave 2 complete — meta.md step 7 nohup spawn + step 8/8b Scenario B local polling & classify committed; MetaAgent now owns full engine lifecycle within a single Agent() call; MainOrchestrator consumes only pre-3.1 `status: completed | halted` JSON
-Last activity: 2026-04-21 -- Phase 3.1 Plan 04 complete (2 tasks, 5m6s)
+Plan: 5/7 complete (Plan 06 next — Canary #7 real implementation: simulate_subagent_orphan.py mock orphan harness + canaries.md registration)
+Status: Wave 3 complete — SKILL.md Phase 0b HTML prohibition block now contains halt_reason enum freeze bullet (engine_lost / polling_orphan_death / engine_exit_missing prohibited); step_transition_hang absorbs polling-orphan-death path per D-TOPO-05; Scenario B preserved (no Phase 2.5 polling block added); info-hiding 9-match baseline preserved; HALT Reason Labels + Recovery Guidance tables byte-identical
+Last activity: 2026-04-21 -- Phase 3.1 Plan 05 complete (1 task, ~1m)
 
-Progress: [██████░░░░] 60% (15/25 plans — Phase 3.1 Plan 04 complete)
+Progress: [██████░░░░] 64% (16/25 plans — Phase 3.1 Plan 05 complete)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 15
+- Total plans completed: 16
 - Average duration: -
-- Total execution time: ~5m6s (this plan)
+- Total execution time: ~1m (this plan)
 
 **By Phase:**
 
@@ -47,12 +47,12 @@ Progress: [██████░░░░] 60% (15/25 plans — Phase 3.1 Plan 0
 |-------|-------|------------|----------|
 | 02    | 2     | -          | -        |
 | 03    | 7     | ~26.0 min  | ~3.7 min |
-| 03.1  | 4     | ~15.3 min  | ~3.8 min |
+| 03.1  | 5     | ~16.3 min  | ~3.3 min |
 
 **Recent Trend:**
 
-- Last 5 plans: 03.1-04 (meta.md Scenario B rewrite — step 7 nohup spawn + step 8/8b local polling + classify + final JSON synthesis; TOPO-02 + TOPO-03 complete; 5 Rule 3 auto-fixes documented, 5m6s, 1 file, 2 commits) → 03.1-03 (engine-invocation-protocol.md rewrite — Scenario B ownership + Issue #1 exec-forbidden bullet + 143 row; 8-section 247-line doc; 1 Rule 3 auto-fix for plan-verbatim-vs-grep contradiction, 3m37s, 1 file) → 03.1-02 (run-dialectic.sh EXIT trap + Layer B `exec` removed — Issue #1 fix + 5-case test_exit_trap.sh, 3m29s, 2 files) → 03.1-01 (Wave 0 scaffolding: TOPO family + 3 stub tests + Canary #7 placeholder, 3m9s, 6 files) → 03-07 (SKILL.md + engine-invocation-protocol + ARCHITECTURE + Canary #5/#6 wiring, 9m22s, 8 files)
-- Trend: 03.1-04 lands the Scenario B code-prompt implementation matching Plan 03's doc-level close-out — MetaAgent now owns spawn AND poll within one Agent() call, 19 × 30s chunked polling caps under 10-min Bash harness limit, `TAS_POLL_INTERVAL_SEC` override for tuning, heartbeat.txt forensic cat stays inside meta.md (info-hiding preserved, Canary #4 guard intact). Plan Review Issue #2 (Plan 04 ↔ Plan 05 ownership contradiction) now closed at both doc and code levels. Plan 05 SKILL.md scope reduces to a single Phase 0b prohibition bullet per PLAN-REVIEW §Issue #2 "수정 방향 2" — no Phase 2.5 polling block to insert. 5 Rule 3 auto-fixes applied inline (polling-prohibition + final-envelope + bash_id topology note + Classify Mode plan-validation + Edge Cases `engine_lost` row) — same falsifiable-grep-vs-verbatim-prose pattern as Plan 03 §Deviations §1, now clearly a phase-level maturity pattern.
+- Last 5 plans: 03.1-05 (SKILL.md Phase 0b halt_reason enum freeze bullet — 1-line insertion inside HTML prohibition comment block; Scenario B invariants preserved: Phase 2.5 polling block NOT added, info-hiding 9-match baseline preserved, HALT Reason Labels + Recovery Guidance tables byte-identical; 1 Rule 3 auto-fix for plan's `<!-- Phase 0b does NOT` awk range pattern which did not span across the separate `<!--` opening line and `Phase 0b does NOT:` text line; TOPO-05 requirement closed, ~1m, 1 task, 1 file) → 03.1-04 (meta.md Scenario B rewrite — step 7 nohup spawn + step 8/8b local polling + classify + final JSON synthesis; TOPO-02 + TOPO-03 complete; 5 Rule 3 auto-fixes documented, 5m6s, 1 file, 2 commits) → 03.1-03 (engine-invocation-protocol.md rewrite — Scenario B ownership + Issue #1 exec-forbidden bullet + 143 row; 8-section 247-line doc; 1 Rule 3 auto-fix for plan-verbatim-vs-grep contradiction, 3m37s, 1 file) → 03.1-02 (run-dialectic.sh EXIT trap + Layer B `exec` removed — Issue #1 fix + 5-case test_exit_trap.sh, 3m29s, 2 files) → 03.1-01 (Wave 0 scaffolding: TOPO family + 3 stub tests + Canary #7 placeholder, 3m9s, 6 files)
+- Trend: 03.1-05 closes TOPO-05 at the SKILL.md side with the smallest viable change — one prohibition bullet inside the existing HTML comment block, zero new enum additions, zero polling logic. Scenario B (Plan 04) means SKILL.md's Phase 2 Execute handler stays pre-Phase-3.1 byte-identical; MetaAgent already owns the full engine lifecycle and returns the pre-existing `status: completed | halted` JSON contract. Plan Review Issue #2 is now fully resolved across doc (Plan 03), code-prompt (Plan 04), and orchestrator-guardrail (Plan 05) layers. One Rule 3 auto-fix for the plan's `<!-- Phase 0b does NOT` awk range pattern vs the file's line-break between `<!--` and `Phase 0b does NOT:` — same phase-level maturity pattern as Plans 03 (1x) and 04 (5x). Next: Plan 06 implements Canary #7 (simulate_subagent_orphan.py mock orphan harness) to verify VERIFY-TOPO-01.
 
 *Updated after each plan completion*
 | Phase 03 P02 | 2m46s | 3 tasks | 1 files |
@@ -65,6 +65,7 @@ Progress: [██████░░░░] 60% (15/25 plans — Phase 3.1 Plan 0
 | Phase 03.1 P02 | 3m29s | 2 tasks | 2 files (run-dialectic.sh EXIT trap + `exec` removed; test_exit_trap.sh 5-case) |
 | Phase 03.1 P03 | 3m37s | 1 task | 1 file (engine-invocation-protocol.md rewrite — Scenario B + Issue #1 close-out + 143 row) |
 | Phase 03.1 P04 | 5m6s | 2 tasks | 1 file (meta.md step 7 nohup spawn + step 8/8b Scenario B polling + classify; 5 Rule 3 auto-fixes) |
+| Phase 03.1 P05 | ~1m | 1 task | 1 file (SKILL.md Phase 0b halt_reason enum freeze bullet; 1 Rule 3 auto-fix for plan awk range pattern line-break mismatch) |
 
 ## Accumulated Context
 
@@ -137,6 +138,8 @@ Recent decisions affecting current work (TAS-M1 kickoff):
 - [Phase 3.1]: Plan 04 Rule 3 auto-fix pattern now at 5 inline fixes — bash_id + run_in_background: true (polling bullet) + engine_launched (final envelope note) + Classify Mode Phase 3 task-notification residue + Edge Cases `halt_reason: engine_lost` row. Third occurrence in Phase 3.1 (Plans 02/03/04); Plan 02 = 0, Plan 03 = 1, Plan 04 = 5. Pattern: when plan prose literally contains a token the plan's acceptance grep forbids, reword to preserve semantics and pass grep rather than reinterpret grep. Now a phase-level maturity pattern — future plans should screen verbatim text against acceptance greps pre-commit (04)
 - [Phase 3.1]: Plan 04 Edge Cases table Engine-process-lost row migrated from obsolete `halt_reason: engine_lost` to `step_transition_hang` + D-TOPO-05 absorption note — aligns table with Plan 03 doc's forbidden-enum prohibition + D-TOPO-05 enum freeze. Detection mechanism updated to Scenario B step 8 (kill -0 $ENGINE_PID + !test -f engine.done). The former `engine_lost` name still appears (prefixed with "ad-hoc … absorbed") so future agents see the rename-rationale; grep pattern `halt_reason.*(engine_lost|...) == 0` stays green (04)
 - [Phase 3.1]: Plan 04 Classify Mode Phase 3 (complex-request plan-validation dialectic) updated to Scenario B — was out of nominal plan scope (step 7-8), but plan's whole-file grep `run_in_background: true == 0` encoded cross-section consistency. Cheaper fix than narrowing the grep; plan-validation dialectic now consistent with the post-3.1 protocol doc mechanism (04)
+- [Phase 3.1]: Plan 05 lands the smallest-viable TOPO-05 close-out — 1 bullet inside the existing Phase 0b HTML prohibition comment block declaring halt_reason enum freeze. Zero new enum additions (engine_lost / polling_orphan_death / engine_exit_missing explicitly prohibited); `step_transition_hang` absorbs the polling-orphan-death path per D-TOPO-05. Phase 2 Execute handler + HALT Reason Labels table + Recovery Guidance table all byte-identical. Info-hiding 9-match baseline preserved (bullet wording avoids the 5 protected artifact literals). Plan Review Issue #2 resolution complete across all 3 layers (doc=Plan 03, code-prompt=Plan 04, orchestrator-guardrail=Plan 05). (05)
+- [Phase 3.1]: Plan 05 Rule 3 auto-fix for plan's `<!-- Phase 0b does NOT` awk range pattern — plan's acceptance `awk '/<!-- Phase 0b does NOT/,/-->/'` expected a single line containing both tokens, but the file has `<!--` on L300 and `Phase 0b does NOT:` on L301 (separate lines). Executor ran the adjusted `awk '/<!--$/,/-->/'` which produces correct output; bullet-in-block semantic invariant passes, only the acceptance grep syntax needed tuning. Same phase-level maturity pattern as Plans 03 (1x) and 04 (5x). Now 7 total Rule 3 plan-verbatim-vs-grep auto-fixes across Phase 3.1. (05)
 
 ### Pending Todos
 
@@ -162,6 +165,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-21T15:25:33Z
-Stopped at: Phase 3.1 Plan 04 complete (meta.md Scenario B rewrite — step 7 nohup spawn with `run_in_background: false` + step 8 local polling loop + step 8b classify-and-synthesize-final-JSON; MetaAgent now owns full engine lifecycle within one Agent() call, MainOrchestrator consumes pre-3.1 `status: completed | halted` contract byte-compatibly; 5 Rule 3 auto-fixes for plan-verbatim-vs-grep contradictions; 2 tasks, 5m6s, 2 feat commits: b3271af + 537500f)
-Resume file: .planning/phases/03.1-engine-invocation-topology-refactor/03.1-05-PLAN.md
+Last session: 2026-04-21T15:47:09Z
+Stopped at: Phase 3.1 Plan 05 complete (SKILL.md Phase 0b HTML prohibition comment block gains 1 halt_reason enum freeze bullet — "Introduce new halt_reason enums (e.g. engine_lost, polling_orphan_death, engine_exit_missing) — Phase 3.1 D-TOPO-05 freeze; step_transition_hang absorbs the polling-orphan-death path". Scenario B preserved: Phase 2 Execute handler untouched, HALT Reason Labels + Recovery Guidance tables byte-identical, info-hiding 9-match baseline preserved. 1 Rule 3 auto-fix for plan's awk range pattern line-break mismatch. 1 task, ~1m, 1 docs commit: 08ff7f1)
+Resume file: .planning/phases/03.1-engine-invocation-topology-refactor/03.1-06-PLAN.md
