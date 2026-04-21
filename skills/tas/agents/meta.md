@@ -144,9 +144,10 @@ Read `{SKILL_DIR}/references/workflow-patterns.md` for canonical templates.
 
 **Complex only**: Create `classify-{timestamp}/logs/validation/`, write lightweight
 thesis ("plan proposer") and antithesis ("plan challenger") prompts + step-config.json,
-invoke the engine per `references/engine-invocation-protocol.md`
-(`Bash(..., run_in_background: true)` → await notification → Read output file →
-parse final JSON line). If REFINE/COUNTER, adjust the plan.
+invoke the engine per `references/engine-invocation-protocol.md` (Scenario B —
+spawn via `nohup ... & echo $!` with `run_in_background: false`, poll
+`engine.done` / `engine.exit` markers locally in ≤9.5-min chunks, then parse
+final JSON line from `tail -n 1 engine.log`). If REFINE/COUNTER, adjust the plan.
 
 **Do NOT use Agent() for plan validation.** Always use the dialectic engine.
 
@@ -490,24 +491,37 @@ For each step, build the config the Python engine consumes.
 
    Template paths tell the engine where to find agent instruction files for prepending.
 
-7. **Execute engine** per `references/engine-invocation-protocol.md` — invoke
-   with `run_in_background: true`, capture `bash_id` and `output_file_path`:
+7. **Spawn engine** per `references/engine-invocation-protocol.md` — fire-and-forget
+   via `nohup`, capture PID on stdout:
+
    ```
    Bash({
-     command: "bash {SKILL_DIR}/runtime/run-dialectic.sh {LOG_DIR}/step-config.json",
-     run_in_background: true,
-     description: "Dialectic for step {S.id}"
+     command: "nohup bash ${SKILL_DIR}/runtime/run-dialectic.sh ${LOG_DIR}/step-config.json > ${LOG_DIR}/engine.log 2>&1 & echo $!",
+     run_in_background: false,
+     description: "Spawn dialectic engine for step {S.id}"
    })
    ```
 
-   > **Phase 3 watchdog note**: Bash `timeout(1)` wrapping is performed
-   > **inside** `run-dialectic.sh` (see WATCH-03). Do NOT add another
-   > `timeout` wrapper at the `Bash(...)` tool level — double wrapping
-   > confuses exit-code classification. The `Agent()` tool itself has no
-   > timeout parameter; Phase 3's "timeout on each step Agent() call"
-   > requirement (WATCH-04) is fulfilled by (a) run-dialectic.sh's Bash
-   > timeout + (b) step-config `query_timeout` passed to the engine's
-   > `asyncio.timeout` (Layer A).
+   The call returns in milliseconds with stdout being a single integer — the
+   engine PID. Capture it as `ENGINE_PID`.
+
+   > **Phase 3.1 topology note** (TOPO-02 / D-TOPO-03): the three elements
+   > `nohup` + `&` + `echo $!` are all load-bearing — removing any one
+   > breaks orphan survival. `run_in_background: false` is also critical:
+   > `true` would register a harness-tracked shell reference bound to this
+   > subagent session, which the Claude Code harness reaps when the subagent
+   > returns, killing the engine mid-round (Phase 3 close blocker — see
+   > FINDINGS-nohup-bg-pattern.md §7). **NEVER attach `timeout:` to this
+   > `Bash(...)` call** — the spawn itself is ms-long; engine lifetime is
+   > tracked via file markers.
+   >
+   > The Phase 3 Bash `timeout(1)` Layer B watchdog (WATCH-03) runs **inside**
+   > `run-dialectic.sh`, not at the `Bash()` tool level. Phase 3.1 adds an
+   > EXIT trap (TOPO-01) ahead of that wrapper so `engine.done` + `engine.exit`
+   > are written on every exit path (normal / raise / SIGTERM 124 or 143 /
+   > SIGKILL 137). The `run-dialectic.sh` script MUST NOT use the `exec`
+   > keyword on its final invocation lines — bash must remain Python's parent
+   > so the EXIT trap can fire (Phase 3.1 Issue #1 close-out).
 
 8. **Await completion**: the harness emits a `<task-notification>` system-reminder
    when the background process exits. On `status: completed`, `Read(output_file_path)`
