@@ -112,6 +112,203 @@ If trivial, respond directly with the answer. No preamble or meta-narration — 
 
 ---
 
+## Phase 0b: Resume Gate (triggered by --resume)
+
+```text
+# SCOPE: SKILL.md may ONLY Read checkpoint.json / plan.json / REQUEST.md (content).
+# Directory listing via `ls iteration-*/` is metadata only — allowed.
+# Reading dialogue.md, round-*.md, deliverable.md, or lessons.md is an I-1 regression.
+```
+
+If `$ARGUMENTS` contains `--resume`, route here and skip Phase 1 (Classify). On any pre-condition failure below, emit a halt JSON directly — do NOT call MetaAgent.
+
+### Step 1: Workspace Resolution
+
+Parse `$ARGUMENTS` for the `--resume` token. If a path argument follows, take it as `PATH_ARG`; otherwise use latest-auto detection.
+
+```bash
+# Path-arg branch (user supplied `/tas --resume <workspace_path>`)
+WORKSPACE="$(PROJECT_ROOT="${PROJECT_ROOT}" python3 -c '
+import os, sys
+p = os.path.realpath(sys.argv[1])
+root = os.path.realpath(os.environ["PROJECT_ROOT"] + "/_workspace/quick")
+if p == root or p.startswith(root + os.sep):
+    print(p); sys.exit(0)
+sys.exit(3)
+' "$PATH_ARG")"  # non-zero exit → halt `workspace_missing`
+
+# Latest-auto branch (user supplied `/tas --resume` with no path)
+WORKSPACE="$(ls -1dt "${PROJECT_ROOT}/_workspace/quick/"*/ 2>/dev/null \
+  | grep -v '/classify-' \
+  | head -1 | sed 's#/$##')"
+# empty string → halt `no_checkpoint`
+```
+
+On path-arg failure → emit `halt_reason: workspace_missing`. On empty latest-auto → emit `halt_reason: no_checkpoint`. The `classify-*` prefix is excluded — Classify-mode workspaces are not resume targets.
+
+### Step 2: Pre-Conditions (emit halt JSON directly — do NOT call MetaAgent on failure)
+
+Run these 7 checks sequentially against the resolved `$WORKSPACE`. Any failure → emit the halt JSON shape (below) to stdout and `exit 0`. The JSON flows to Phase 3 "On HALT" rendering without invoking MetaAgent.
+
+```bash
+# 1. Workspace directory exists
+test -d "$WORKSPACE" || { HALT_REASON=workspace_missing; EMIT_HALT; exit 0; }
+
+# 2. checkpoint.json present
+test -f "$WORKSPACE/checkpoint.json" || { HALT_REASON=no_checkpoint; EMIT_HALT; exit 0; }
+
+# 3. plan.json present
+test -f "$WORKSPACE/plan.json" || { HALT_REASON=plan_missing; EMIT_HALT; exit 0; }
+
+# 4. checkpoint.json parses (stdout = one-line JSON, exit 0)
+CKPT_JSON="$(python3 "${SKILL_DIR}/runtime/checkpoint.py" read "$WORKSPACE")" \
+  || { HALT_REASON=checkpoint_corrupt; EMIT_HALT; exit 0; }
+
+# 5. schema_version == 1
+SCHEMA_V="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("schema_version"))' "$CKPT_JSON")"
+[ "$SCHEMA_V" = "1" ] || { HALT_REASON=checkpoint_schema_unsupported; EMIT_HALT; exit 0; }
+
+# 6. status not in {completed, finalized}
+CKPT_STATUS="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("status",""))' "$CKPT_JSON")"
+case "$CKPT_STATUS" in
+  completed|finalized) HALT_REASON=already_completed; EMIT_HALT; exit 0 ;;
+esac
+
+# 7. plan_hash matches recomputed hash of plan.json
+EXPECTED_HASH="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("plan_hash",""))' "$CKPT_JSON")"
+ACTUAL_HASH="$(python3 "${SKILL_DIR}/runtime/checkpoint.py" hash "$WORKSPACE/plan.json")"
+[ "$EXPECTED_HASH" = "$ACTUAL_HASH" ] || { HALT_REASON=plan_hash_mismatch; EMIT_HALT; exit 0; }
+```
+
+Halt JSON shape (emitted on any of the 7 failures — MetaAgent is NEVER called on failure; Phase 0b `Agent()` call count on failure path is 0):
+
+```json
+{"status":"halted","workspace":"{path-or-empty}","halt_reason":"{enum}","summary":"{korean-message}","halted_at":"resume-gate"}
+```
+
+The `{korean-message}` values come from the Phase 3 Recovery Guidance table for each `halt_reason`. After emitting, Phase 3 "On HALT" rendering handles display unchanged.
+
+### Step 3: User Summary + Confirmation
+
+Derive display values without reading any dialectic artifact. Directory listing via `ls iteration-*/` is metadata only — it does NOT count as reading iteration content (SCOPE comment above).
+
+```bash
+# Iteration count (derived from directory structure — metadata only)
+ITER_LATEST="$(ls -1d "${WORKSPACE}/iteration-"*/ 2>/dev/null \
+  | sed -E 's#.*iteration-([0-9]+)/$#\1#' \
+  | sort -n | tail -1)"
+ITER_LATEST="${ITER_LATEST:-0}"
+N=$(( ITER_LATEST > 0 ? ITER_LATEST : 1 ))
+
+# Parse plan.json top-level fields (NO internal dialectic fields)
+PLAN_JSON_CONTENT="$(cat "$WORKSPACE/plan.json")"
+REQUEST_TYPE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("request_type",""))' "$PLAN_JSON_CONTENT")"
+COMPLEXITY="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("complexity",""))' "$PLAN_JSON_CONTENT")"
+LOOP_COUNT="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("loop_count",1))' "$PLAN_JSON_CONTENT")"
+
+# Checkpoint cursor (current_step + completed_steps)
+K="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("current_step",""))' "$CKPT_JSON")"
+COMPLETED_JSON="$(python3 -c 'import json,sys; print(json.dumps(json.loads(sys.argv[1]).get("completed_steps",[])))' "$CKPT_JSON")"
+M="$(python3 -c 'import json,sys
+arr = json.loads(sys.argv[1])
+print(arr[-1] if arr else "")' "$COMPLETED_JSON")"
+
+# slug lookup — map step id -> step name via plan.steps[]
+slug() { python3 -c '
+import json, sys
+steps = json.loads(sys.argv[1]).get("steps",[])
+sid = sys.argv[2]
+for s in steps:
+  if str(s.get("id")) == str(sid):
+    print(s.get("name","")); break
+' "$PLAN_JSON_CONTENT" "$1"; }
+
+SLUG_PREV="$(slug "$M")"   # may be empty if completed_steps is empty
+SLUG_NEXT="$(slug "$K")"
+COMPLETED_NAMES="$(python3 -c '
+import json,sys
+plan = json.loads(sys.argv[1]); ids = json.loads(sys.argv[2])
+by_id = {str(s.get("id")): s.get("name","") for s in plan.get("steps",[])}
+print(", ".join(by_id.get(str(i), str(i)) for i in ids))
+' "$PLAN_JSON_CONTENT" "$COMPLETED_JSON")"
+```
+
+Print the summary (Korean, verbatim labels — D-04 format):
+
+```
+워크스페이스: {ABSOLUTE_WORKSPACE_PATH}
+
+Iteration {N} / Step {M} ({SLUG_PREV}) 완료.
+  완료된 스텝: {COMPLETED_NAMES}
+  요청 타입: {REQUEST_TYPE} · 복잡도: {COMPLEXITY} · LOOP_COUNT={LOOP_COUNT}
+다음: Step {K} ({SLUG_NEXT}).
+
+계속할까요? (y/n)
+```
+
+If `COMPLETED_STEPS` is empty (no steps done yet in the current iteration), substitute the first summary line with `Iteration {N} / 아직 완료된 스텝 없음.` and omit the `완료된 스텝:` row.
+
+Y/N handling (natural-language prompt + wait-for-response — do NOT use `AskUserQuestion`; matches Phase 1 Classify approval UX):
+
+| User input | Synonym set | Action |
+|------------|-------------|--------|
+| **Approve** | `y` / `yes` / `ok` / `ㅇ` / `ㅇㅇ` / `계속` / `go` | Proceed to Step 4 |
+| **Cancel** | `n` / `no` / `cancel` / `취소` / `ㄴ` / `ㄴㄴ` | Print exactly `Resume 취소됨. /tas {original request}로 새 run을 시작하세요.` and exit (do NOT call MetaAgent) |
+| **Other** | anything else | Re-ask once: `y/n 로 답해주세요.` — on second non-match, treat as cancel |
+
+### Step 4: Invoke MetaAgent Execute with MODE: resume
+
+Read the original request from the workspace's trust source (do NOT re-read `$ARGUMENTS` — REQUEST.md is canonical for resume):
+
+```bash
+ORIGINAL_REQUEST="$(cat "$WORKSPACE/REQUEST.md")"
+```
+
+Parse `plan.json` fields needed for the Agent() prompt (`steps`, `loop_policy`, `project_domain`, `focus_angle`) — SKILL.md passes these through verbatim and does NOT interpret them.
+
+```
+Agent({
+  description: "tas resume: {request_type} ({complexity}, loop×{loop_count})",
+  prompt: "Read ${SKILL_DIR}/agents/meta.md and follow its instructions exactly.
+
+MODE: resume
+REQUEST: {content of REQUEST.md}
+WORKSPACE: {ABSOLUTE_WORKSPACE_PATH}
+PROJECT_ROOT: {PROJECT_ROOT}
+SKILL_DIR: {SKILL_DIR}
+REQUEST_TYPE: {plan.request_type}
+COMPLEXITY: {plan.complexity}
+PLAN: {plan.steps JSON verbatim}
+LOOP_COUNT: {plan.loop_count}
+LOOP_POLICY: {plan.loop_policy JSON}
+PROJECT_DOMAIN: {plan.project_domain — omit line if null}
+FOCUS_ANGLE: {plan.focus_angle — omit line if null}
+RESUME_FROM: {checkpoint.current_step}
+COMPLETED_STEPS: {checkpoint.completed_steps JSON}
+PLAN_HASH: {checkpoint.plan_hash}
+
+Return ONLY the JSON result line.",
+  mode: "bypassPermissions",
+  model: "opus"
+})
+```
+
+**Agent() call count on success path: exactly 1.** Do NOT call Classify Agent() under any circumstance on the resume path — re-classify during resume is a Pitfall 3 violation (CLAUDE.md Common Mistakes). If `plan.json` is missing, Step 2 already halted with `plan_missing` — never fall back to Classify.
+
+After MetaAgent returns, the response is a JSON line with the same shape as Phase 2 Execute → Phase 3 "Present Results" handles rendering unchanged.
+
+<!--
+Phase 0b does NOT:
+- Present a list-selection UI for multiple workspaces (Latest + explicit path only — PROJECT.md Out of Scope)
+- Repair corrupt checkpoints (user must `/tas` fresh — no --force-resume)
+- Clean up stale workspaces (`/tas-workspace clean` is a separate skill)
+- Fall back to Classify if plan.json is missing (halt plan_missing instead — Pitfall 3)
+- Invoke /tas-explain inline (user routes there via Phase 3 HALT recovery guidance)
+- Read dialectic artifacts (dialogue.md / round-*.md / deliverable.md / lessons.md — I-1 regression)
+-->
+
+---
+
 ## Phase 1: Classify
 
 MetaAgent analyzes the request and returns an execution plan with complexity judgment
