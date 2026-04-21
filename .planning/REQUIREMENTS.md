@@ -34,7 +34,7 @@
 
 ### C.1 Engine Invocation Topology
 
-- [ ] **TOPO-01** — `run-dialectic.sh`가 EXIT trap으로 `engine.done` / `engine.exit` atomic marker를 기록한다 (tempfile + `mv -f` POSIX rename). 정상 종료, `timeout 124/137`, Python raise 모든 경로에서 trap 통과.
+- [x] **TOPO-01** — `run-dialectic.sh`가 EXIT trap으로 `engine.done` / `engine.exit` atomic marker를 기록한다 (tempfile + `mv -f` POSIX rename). 정상 종료, `timeout 124/137`, Python raise 모든 경로에서 trap 통과.
 - [ ] **TOPO-02** — MetaAgent Execute Phase 2d step 7이 `nohup bash run-dialectic.sh <config> > <log> 2>&1 & echo $!` 형태 + `run_in_background: false`로 엔진을 기동하고, PID + 4종 path metadata JSON을 즉시 반환한다 (`timeout:` 파라미터 사용 금지).
 - [ ] **TOPO-03** — SKILL.md Phase 2가 MetaAgent 반환 JSON 5-field (engine_pid, log_path, heartbeat_path, exit_path, done_path) 을 소비해 `until test -f $DONE_PATH || ! kill -0 $PID` 폴링 루프를 10분 Bash cap-safe 단위(19 × 30s)로 소유하며, info-hiding 경계를 보존한다 (`dialogue.md` / `round-*.md` / `deliverable.md` / `lessons.md` / `heartbeat.txt` 접근 금지).
 - [ ] **TOPO-04** — `references/engine-invocation-protocol.md`가 file-marker polling 계약으로 전면 재작성된다 (task-notification 계약 제거, 금지 bullet 3종 추가).
@@ -123,7 +123,7 @@
 | VERIFY-01 (b) | Phase 3 (2-Layer Hang Watchdog) | Complete (Plan 03-07) |
 | VERIFY-01 (c) | Phase 4 (Chunk Decomposition) | Pending |
 | VERIFY-02 | Phase 1 (Checkpoint Foundation) | Pending |
-| TOPO-01 | Phase 3.1 (Engine Invocation Topology Refactor) | Pending |
+| TOPO-01 | Phase 3.1 (Engine Invocation Topology Refactor) | Complete |
 | TOPO-02 | Phase 3.1 (Engine Invocation Topology Refactor) | Pending |
 | TOPO-03 | Phase 3.1 (Engine Invocation Topology Refactor) | Pending |
 | TOPO-04 | Phase 3.1 (Engine Invocation Topology Refactor) | Pending |

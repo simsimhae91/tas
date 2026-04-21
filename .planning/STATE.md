@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 3.1 Plan 01 complete (Wave 0 scaffolding — TOPO family registered + 3 stub tests + Canary #7 placeholder)
-last_updated: "2026-04-21T14:55:43Z"
-last_activity: 2026-04-21 -- Phase 3.1 Plan 01 complete
+stopped_at: Phase 3.1 Plan 02 complete (run-dialectic.sh EXIT trap + Layer B `exec` removed — Issue #1 fix; 5-case test_exit_trap.sh active)
+last_updated: "2026-04-21T15:05:35Z"
+last_activity: 2026-04-21 -- Phase 3.1 Plan 02 complete
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 25
-  completed_plans: 12
-  percent: 48
+  completed_plans: 13
+  percent: 52
 ---
 
 # Project State
@@ -27,19 +27,19 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 3.1 — EXECUTING (Engine Invocation Topology Refactor)
-Plan: 1/7 complete (Plan 02 next — run-dialectic.sh EXIT trap)
-Status: Wave 0 scaffolding complete
-Last activity: 2026-04-21 -- Phase 3.1 Plan 01 complete (3 tasks, 3m9s)
+Plan: 2/7 complete (Plan 03 next — engine-invocation-protocol.md rewrite)
+Status: Wave 1 in progress — Issue #1 fix landed (run-dialectic.sh EXIT trap + `exec` removal)
+Last activity: 2026-04-21 -- Phase 3.1 Plan 02 complete (2 tasks, 3m29s)
 
-Progress: [█████░░░░░] 48% (12/25 plans — Phase 3.1 Plan 01 complete)
+Progress: [█████░░░░░] 52% (13/25 plans — Phase 3.1 Plan 02 complete)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 11
+- Total plans completed: 12
 - Average duration: -
-- Total execution time: ~9m22s (this plan)
+- Total execution time: ~3m29s (this plan)
 
 **By Phase:**
 
@@ -50,8 +50,8 @@ Progress: [█████░░░░░] 48% (12/25 plans — Phase 3.1 Plan 0
 
 **Recent Trend:**
 
-- Last 5 plans: 03.1-01 (Wave 0 scaffolding: TOPO family + 3 stub tests + Canary #7 placeholder, 3m9s, 6 files) → 03-07 (SKILL.md + engine-invocation-protocol + ARCHITECTURE + Canary #5/#6 wiring, 9m22s, 8 files) → 03-06 (MetaAgent classification + halt_reason enum, 3m12s, 1 file) → 03-05 (Layer B Bash timeout wrapper + graceful degrade, 1m52s, 1 file) → 03-04 (halt JSON emit + fallback, 3m41s, 1 file)
-- Trend: 03.1-01 is pure scaffolding — 0 behavioral code change, exit-0 PENDING stubs satisfy Wave 1/4 Nyquist. No deviations / Rule auto-fixes. Ready for Plan 02 (run-dialectic.sh EXIT trap).
+- Last 5 plans: 03.1-02 (run-dialectic.sh EXIT trap + Layer B `exec` removed — Issue #1 fix + 5-case test_exit_trap.sh, 3m29s, 2 files) → 03.1-01 (Wave 0 scaffolding: TOPO family + 3 stub tests + Canary #7 placeholder, 3m9s, 6 files) → 03-07 (SKILL.md + engine-invocation-protocol + ARCHITECTURE + Canary #5/#6 wiring, 9m22s, 8 files) → 03-06 (MetaAgent classification + halt_reason enum, 3m12s, 1 file) → 03-05 (Layer B Bash timeout wrapper + graceful degrade, 1m52s, 1 file)
+- Trend: 03.1-02 shipped the core Phase 3.1 behavioral change — engine.done + engine.exit atomic markers on all 4 exit paths, with `exec` removed per PLAN-REVIEW Issue #1. Test E (real-chain integration) PASSes on macOS without claude_agent_sdk via sed-copy + mock dialectic injection. No Rule auto-fixes triggered; plan executed verbatim. Ready for Plan 03 (engine-invocation-protocol.md rewrite).
 
 *Updated after each plan completion*
 | Phase 03 P02 | 2m46s | 3 tasks | 1 files |
@@ -61,6 +61,7 @@ Progress: [█████░░░░░] 48% (12/25 plans — Phase 3.1 Plan 0
 | Phase 03 P06 | 3m12s | 3 tasks | 1 files |
 | Phase 03 P07 | 9m22s | 4 tasks + 1 bonus | 8 files |
 | Phase 03.1 P01 | 3m9s | 3 tasks | 6 files (3 new stubs + REQUIREMENTS.md + canaries.md + SUMMARY.md) |
+| Phase 03.1 P02 | 3m29s | 2 tasks | 2 files (run-dialectic.sh EXIT trap + `exec` removed; test_exit_trap.sh 5-case) |
 
 ## Accumulated Context
 
@@ -115,6 +116,11 @@ Recent decisions affecting current work (TAS-M1 kickoff):
 - [Phase 3.1]: simulate_subagent_orphan.sh stub uses `exec python3` to delegate to .py stub — single source of truth for PENDING message; Plan 06 bash-layer logic supplements rather than replaces (03.1-01)
 - [Phase 3.1]: Canary #7 placeholder front-loads the planned Pass criteria verbatim from D-VERIFY-TOPO-01 — Plan 06 Task 2 becomes a text swap (flip PENDING status + strip "(planned)") rather than from-scratch authoring (03.1-01)
 - [Phase 3.1]: test_exit_trap.sh uses `set -euo pipefail` (stricter than Canary #6's `set -u`) — Plan 02's 4 sequential test cases need failure propagation, stub inherits the strict mode so Plan 02 doesn't touch the shebang/mode line (03.1-01)
+- [Phase 3.1]: Plan 02 revised mode line to `set -u` (dropping `-e -o pipefail`) — Test B deliberately drives rc=1 through the harness; `set -e` would abort at the first harness return, masking B/C/D/E (03.1-02 deviation from 03.1-01 default, intentional)
+- [Phase 3.1]: Issue #1 empirical fix = `exec` removal from both Layer B branches + EXIT trap insertion, bundled as ONE commit — splitting would leave HEAD in a state where the trap is installed but non-firing, which is worse than the pre-Plan-02 baseline (03.1-02 feat commit `12d60b4`)
+- [Phase 3.1]: Trap body kept on one line with single quotes — `echo "$rc" > ... && mv -f ... ; : > ... && mv -f ...` preserves `$?` capture at trap-fire time. Multi-line or double-quoted trap would either parse-fail or expand `$?` prematurely (03.1-02)
+- [Phase 3.1]: Test E strategy = E-1 (sed-copy) only — rewrites `if python3 -c "import claude_agent_sdk" …` to `if true` so Test E PASSes on hosts without claude_agent_sdk. E-2 (sdk-gated) was rejected at plan time because it would SKIP on this host (03.1-02)
+- [Phase 3.1]: Mock dialectic.sh emits `{"status":"completed","verdict":"ACCEPT"}` + exit 0 — matches Phase 3 D-04 stdout-last-line JSON contract shape so Test E exercises a realistic happy path Plan 05 polling will later consume (03.1-02)
 
 ### Pending Todos
 
@@ -140,6 +146,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-21T14:55:43Z
-Stopped at: Phase 3.1 Plan 01 complete (Wave 0 scaffolding — 3 tasks, 3m9s)
-Resume file: .planning/phases/03.1-engine-invocation-topology-refactor/03.1-02-PLAN.md
+Last session: 2026-04-21T15:05:35Z
+Stopped at: Phase 3.1 Plan 02 complete (run-dialectic.sh EXIT trap + Layer B `exec` removed — Issue #1 fix; 5-case test_exit_trap.sh, 2 tasks, 3m29s)
+Resume file: .planning/phases/03.1-engine-invocation-topology-refactor/03.1-03-PLAN.md
