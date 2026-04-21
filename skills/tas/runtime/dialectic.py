@@ -21,10 +21,9 @@ import os
 import re
 import sys
 import tempfile
-from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, AsyncIterator, Awaitable, TypeVar
+from typing import Any, Awaitable, TypeVar
 
 logger = logging.getLogger("tas.dialectic")
 
