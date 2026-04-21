@@ -83,7 +83,7 @@ Plans:
 - [x] 03.1-02-PLAN.md — run-dialectic.sh EXIT trap (atomic engine.done + engine.exit markers) + test_exit_trap.sh 5-case unit+integration test (TOPO-01; Issue #1 fix: `exec` removed from Layer B)
 - [x] 03.1-03-PLAN.md — engine-invocation-protocol.md 전면 rewrite (task-notification → file-marker polling 계약) (TOPO-04)
 - [x] 03.1-04-PLAN.md — meta.md Execute Phase 2d step 7-8 rewrite (nohup spawn + Scenario B local polling & classify) (TOPO-02, TOPO-03)
-- [ ] 03.1-05-PLAN.md — SKILL.md Phase 2.5 polling loop + halt_reason enum freeze + info-hiding 9-match baseline 유지 (TOPO-03, TOPO-05)
+- [ ] 03.1-05-PLAN.md — SKILL.md Phase 0b prohibition bullet only (Scenario B means no Phase 2.5 polling block; info-hiding 9-match baseline preserved) (TOPO-05)
 - [ ] 03.1-06-PLAN.md — Canary #7 실제 구현 (simulate_subagent_orphan.py mock orphan harness + canaries.md 등록) (VERIFY-TOPO-01)
 - [ ] 03.1-07-PLAN.md — CLAUDE.md Common Mistakes update + Phase 3.1 전체 회귀 최종 검증 (info-hiding + enum freeze + canary suite) (TOPO-06)
 
