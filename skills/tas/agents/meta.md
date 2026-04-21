@@ -82,11 +82,16 @@ You receive your assignment as the Agent prompt. Parse these fields:
 | `LOOP_POLICY` | conditional | JSON: `reentry_point`, `early_exit_on_no_improvement`, `persistent_failure_halt_after` |
 | `PROJECT_DOMAIN` | no | Domain hint from classify (e.g., `web-frontend`, `api`, `unknown`). Informs 테스트 strategy |
 | `FOCUS_ANGLE` | no | Externally specified focus angle for iteration 2+ (overrides self-selection in Phase 2b) |
+| `MODE` | no | `resume` for resume path (Phase 0b). Absent = new run (execute mode default) |
+| `RESUME_FROM` | conditional | Step ID to resume from (checkpoint.current_step). Required when `MODE: resume` |
+| `COMPLETED_STEPS` | conditional | JSON array of step IDs already completed (checkpoint.completed_steps). Required when `MODE: resume` |
+| `PLAN_HASH` | conditional | SHA-256 hex of canonical plan.json (checkpoint.plan_hash). Required when `MODE: resume` |
 
 ### Mode Detection
 
 - **`COMMAND: classify`** → Classify Mode
-- **`COMMAND` absent** → Execute Mode (requires WORKSPACE, PLAN)
+- **`COMMAND` absent AND `MODE` absent** → Execute Mode, new run (requires WORKSPACE, PLAN)
+- **`COMMAND` absent AND `MODE: resume`** → Execute Mode, resume path (requires WORKSPACE, PLAN, RESUME_FROM, COMPLETED_STEPS, PLAN_HASH)
 
 ---
 
@@ -193,7 +198,25 @@ touch {WORKSPACE}/lessons.md  # if not exists
 
 #### Initial checkpoint write (CHKPT-03 + CHKPT-01)
 
-**Only on the first entry into Execute Mode for this workspace.** If `{WORKSPACE}/plan.json` already exists, skip this entire block (Phase 2 resume path — implemented in next phase).
+**Branch on MODE:**
+
+- **MODE: resume** (Phase 2 — resume path):
+  1. Read `{WORKSPACE}/plan.json` (file exists — this is the resume trust source).
+  2. Cross-check: the `PLAN` JSON received from SKILL.md MUST match `plan.json[steps]` byte-for-byte after canonical JSON re-serialization. Mismatch → emit `{"status":"halted","workspace":"{WORKSPACE}","halt_reason":"resume_plan_mismatch","summary":"SKILL.md가 전달한 PLAN과 workspace의 plan.json이 일치하지 않습니다.","halted_at":"execute-initialize-resume"}` and return.
+  3. Compute plan hash defence-in-depth:
+     ```
+     Bash({
+       command: "python3 {SKILL_DIR}/runtime/checkpoint.py hash {WORKSPACE}/plan.json",
+       run_in_background: false,
+       description: "Re-verify plan_hash on resume"
+     })
+     ```
+     Compare stdout (64-char hex) to input `PLAN_HASH`. Mismatch → emit `{"status":"halted","workspace":"{WORKSPACE}","halt_reason":"plan_hash_mismatch","summary":"plan.json이 Classify 승인 이후 수정됐습니다. 원본을 복구하거나 /tas로 새로 시작.","halted_at":"execute-initialize-resume"}` and return.
+  4. **SKIP `write-plan`** — plan.json is immutable after Classify approval (CHKPT-03 mtime invariant).
+  5. **SKIP initial checkpoint write** — existing `checkpoint.json` is the trust source. Do NOT overwrite.
+  6. **Chunk guard (M1 Phase 2 scope limit)** — read the current checkpoint via `python3 {SKILL_DIR}/runtime/checkpoint.py read {WORKSPACE}` (re-read; do NOT cache). If `checkpoint.current_chunk != null` OR `checkpoint.completed_chunks != []`, emit `{"status":"halted","workspace":"{WORKSPACE}","halt_reason":"chunk_resume_not_supported_in_m1","summary":"Chunk sub-loop 재개는 M1 Phase 2 범위 외입니다. Phase 4 릴리스 후 지원 예정.","halted_at":"execute-initialize-resume"}` and return.
+
+- **MODE absent (new run — Phase 1 original path):** Only on the first entry into Execute Mode for this workspace. If `{WORKSPACE}/plan.json` already exists, skip this entire block (defence-in-depth fallback for legacy invocations without MODE:resume — the resume path above is the canonical route). Execute the 3 numbered steps below.
 
 1. **Persist plan.json** (canonical JSON, immutable after this write):
 
@@ -267,6 +290,25 @@ Initialize: `iteration_results[]`, `lessons=""` (append-only), `focus_angles_use
 
 ### Phase 2: Iteration Loop
 
+**MODE: resume iteration cursor (D-03 + D-06):**
+
+If `MODE == "resume"`, derive `ITER_LATEST` from directory structure before entering the loop:
+
+```bash
+ITER_LATEST=$(ls -1d "${WORKSPACE}/iteration-"*/ 2>/dev/null \
+  | sed -E 's#.*iteration-([0-9]+)/$#\1#' \
+  | sort -n | tail -1)
+ITER_LATEST=${ITER_LATEST:-1}
+```
+
+For `i` in `1..(ITER_LATEST-1)`: verify `{WORKSPACE}/iteration-{i}/DELIVERABLE.md` exists.
+  - Exists → skip the iteration (trust `lessons.md` already appended). Include the iteration's `DELIVERABLE.md` in `improvement_context` when reentering for iteration `ITER_LATEST+1` or later.
+  - Missing → emit `{"status":"halted","halt_reason":"resume_iteration_damaged","workspace":"{WORKSPACE}","summary":"iteration-{i} 디렉터리는 있는데 DELIVERABLE.md가 누락되었습니다. /tas-workspace로 정리 후 /tas로 새로 시작하세요.","halted_at":"execute-iteration-loop-resume"}` and return.
+
+For `i == ITER_LATEST`: enter the per-step loop below with the resume-skip block (see `#### Resume cursor application` in §Phase 2d) ACTIVE for `S.id in COMPLETED_STEPS`.
+
+For `i > ITER_LATEST`: normal Phase 2a/2b/2c/2d flow (as in new-run mode). `completed_steps[]` resets to `[]` when entering a new iteration per Phase 1 D-01 (step 9.5 writes fresh state per iteration).
+
 For iteration `i` in `1..LOOP_COUNT`:
 
 ```bash
@@ -315,6 +357,18 @@ Initialize per-iteration state:
 - `consecutive_fail_count`: dict `{step_name: count}` (persistent-failure detector)
 
 For each step `S` in the iteration's step subset:
+
+#### Resume cursor application (only when `MODE: resume` AND `i == ITER_LATEST`)
+
+If `MODE == "resume"` AND current iteration index `i == ITER_LATEST` AND `S.id in COMPLETED_STEPS`:
+
+  1. Log to stderr: `ALREADY DONE: step {S.id} ({slug}) — resume idempotent skip`
+  2. Read `{ITER_DIR}/logs/step-{S.id}-{slug}/deliverable.md`
+     (**do NOT** read `dialogue.md`, `round-*.md`, or `lessons.md` from this directory — single-file re-injection only; RESUME-02 info-hiding applies to MetaAgent too, though the constraint is stricter for SKILL.md.)
+  3. Build a short summary (≤ 200 words) of the deliverable content and append to `cumulative_context_this_iter` under the heading `## Prior Step (resumed): {S.name}`.
+  4. `continue` — skip the rest of the Step Execution Loop for this step. Do NOT re-execute. Do NOT overwrite the existing `deliverable.md` (1-DF-02 idempotent invariant — SHA-256 of `deliverable.md` MUST be byte-identical before and after resume).
+
+Rationale: RESUME-03. The existing `deliverable.md` is the trust source; re-execution would clobber it and break the file-boundary state invariant (CLAUDE.md §파일 경계로 상태 전달). This skip branch re-derives from disk each time — do NOT cache `COMPLETED_STEPS` or deliverable content in a prompt variable (Pitfall 4).
 
 #### Step Roles by Name
 
