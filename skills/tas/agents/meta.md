@@ -523,59 +523,99 @@ For each step, build the config the Python engine consumes.
    > keyword on its final invocation lines — bash must remain Python's parent
    > so the EXIT trap can fire (Phase 3.1 Issue #1 close-out).
 
-8. **Await completion**: the harness emits a `<task-notification>` system-reminder
-   when the background process exits. On `status: completed`, `Read(output_file_path)`
-   and parse the last non-empty line as JSON:
-   - Standard: `{"status":"completed","rounds":N,"verdict":"ACCEPT","deliverable_path":"..."}`
-   - Inverted PASS: `{"status":"completed","rounds":N,"verdict":"PASS","deliverable_path":"..."}`
-   - Inverted FAIL: `{"status":"completed","rounds":N,"verdict":"FAIL","blockers":[...],"deliverable_path":"..."}`
-   - HALT: `{"status":"halted","rounds":N,"verdict":"HALT","halt_reason":"...","deliverable_path":"..."}`
+8. **Poll engine completion locally** (MetaAgent-owned — Scenario B) — do NOT
+   return to MainOrchestrator yet. MainOrchestrator is not polling; MetaAgent
+   owns the full engine lifecycle within a single Execute Mode Agent() call.
 
-   **Classification table (CONTEXT D-05 — authoritative; reproduced here
-   for executor locality):** Apply the exit-code × last-line-JSON
-   classification table in 03-CONTEXT.md D-05 BEFORE treating the result as
-   either normal or HALT.
+   The 10-min Bash cap requires chunking polls into ≤9.5-min calls. Each
+   inner chunk is a single foreground `Bash(...)` call that returns in ≤570s
+   (19 × 30s). Repeat the call until stdout ends with `done` or `dead`:
 
-   | exit | last-line JSON | classification | `halt_reason` | `watchdog_layer` |
-   |------|----------------|----------------|---------------|------------------|
-   | 0 | verdict: `ACCEPT` / `PASS` / `FAIL` | normal completion | — | — |
-   | 0 | `status: halted`, `halt_reason: sdk_session_hang` | Layer A hit | `sdk_session_hang` | `A` |
-   | 0 | `status: halted`, other `halt_reason` | engine internal HALT | (pass through) | null |
-   | non-zero | valid JSON | engine crash + partial info | (pass through, else `engine_crash`) | `A` or null |
-   | **124 / 137** | (any) | **Layer B SIGTERM/SIGKILL** | **`bash_wrapper_kill`** | **`B`** |
-   | non-zero (other) | JSON absent | engine crash | `engine_crash` | null |
-   | **0** | **JSON absent or parse-fail** | **step-transition hang** | **`step_transition_hang`** | **`B`** |
-
-   For `bash_wrapper_kill` or `step_transition_hang`, the engine did not
-   emit a halted JSON (process was SIGKILLed or exited without reaching
-   the stdout emit). Synthesize a HALT JSON locally:
-
-   ```json
-   {
-     "status": "halted",
-     "verdict": "HALT",
-     "halt_reason": "<bash_wrapper_kill|step_transition_hang>",
-     "watchdog_layer": "B",
-     "wrapper_exit": <exit_code>,
-     "last_heartbeat": <parsed-from-{LOG_DIR}/heartbeat.txt, else null>,
-     "round": <from heartbeat.round_n, else null>,
-     "speaker": <from heartbeat.speaker, else null>,
-     "halted_at": "iteration-{i}/step-{S.id}",
-     "deliverable_path": null
-   }
+   ```
+   Bash({
+     command: "for i in $(seq 1 19); do
+                 test -f \"${LOG_DIR}/engine.done\" && { echo done; exit 0; };
+                 kill -0 \"$ENGINE_PID\" 2>/dev/null || { echo dead; exit 0; };
+                 sleep \"${TAS_POLL_INTERVAL_SEC:-30}\";
+               done; echo pending",
+     run_in_background: false,
+     description: "Poll engine for step {S.id} (<=9.5min)"
+   })
    ```
 
-   Read `{LOG_DIR}/heartbeat.txt` for forensics via:
+   - If stdout trailing line is `done`: engine terminated cleanly (marker
+     exists). Proceed to classify.
+   - If stdout trailing line is `dead`: PID died without writing the marker.
+     Proceed to classify — classification will resolve to
+     `step_transition_hang` per D-TOPO-05.
+   - If stdout trailing line is `pending`: still running. Re-invoke the same
+     `Bash(...)` call in the next turn. The polling call MUST stay foreground
+     (same `run_in_background: false` discipline as the spawn in step 7) —
+     a background-flagged polling call would register a harness-tracked shell
+     reference subject to the same reap policy that triggered Phase 3.1.
+
+   `TAS_POLL_INTERVAL_SEC` env var (default 30s) overrides the interval. Do
+   NOT attach a `timeout:` parameter — each call self-caps at 19 × 30s.
+
+8b. **Classify verdict** — after polling terminates (trailing line `done` or
+   `dead`), read exit and last log line:
+
+   ```
+   Bash({
+     command: "EXIT=\"$(cat ${LOG_DIR}/engine.exit 2>/dev/null || echo lost)\";
+              LAST=\"$(tail -n 1 ${LOG_DIR}/engine.log 2>/dev/null)\";
+              printf '%s\\n%s\\n' \"$EXIT\" \"$LAST\"",
+     run_in_background: false,
+     description: "Read engine exit code + last log line for step {S.id}"
+   })
+   ```
+
+   Apply the Phase 3 D-05 + Phase 3.1 D-TOPO-05 classification
+   (authoritative table: `references/engine-invocation-protocol.md`
+   §Failure classification):
+
+   - `EXIT=0` + LAST valid `status: "completed"` / `"halted"` JSON →
+     pass through: this becomes the step's final return JSON.
+   - `EXIT=124` or `EXIT=137` or `EXIT=143` → synthesize HALT JSON with
+     `"halt_reason": "bash_wrapper_kill"`, `"watchdog_layer": "B"`,
+     `"wrapper_exit": <EXIT>`. (143 = SIGTERM propagated through bash EXIT
+     trap — Plan 02 Test C ordering; shares row with 124/137.)
+   - `EXIT=0` + LAST JSON parse-fail or absent → synthesize HALT JSON with
+     `"halt_reason": "step_transition_hang"`, `"watchdog_layer": "B"`.
+   - `EXIT="lost"` (exit file absent) + `! test -f engine.done` + PID dead →
+     synthesize HALT JSON with `"halt_reason": "step_transition_hang"`,
+     `"watchdog_layer": "B"` (D-TOPO-05 absorbs polling-orphan-death — no
+     new enum).
+   - Other non-zero + JSON absent → synthesize HALT JSON with
+     `"halt_reason": "engine_crash"`.
+
+   **MetaAgent-owned HALT forensics (info-hiding boundary):** for
+   `bash_wrapper_kill` / `step_transition_hang`, fill `last_heartbeat` by
+   reading `heartbeat.txt` — this cat lives inside MetaAgent:
+
    ```
    Bash({
      command: "cat {LOG_DIR}/heartbeat.txt",
      run_in_background: false,
-     description: "Forensics: last heartbeat before Layer B kill"
+     description: "Forensics: last heartbeat before HALT (MetaAgent-owned read)"
    })
    ```
-   File absence → `last_heartbeat: null` (not an error). If `dialectic.py`
-   already emitted a halted JSON with `last_heartbeat` populated, that JSON
-   takes precedence over MetaAgent's local `cat`.
+
+   File absence → `last_heartbeat: null` (not an error). SKILL.md must NEVER
+   read `heartbeat.txt` directly — that would regress the Phase 2 D-07
+   Allowed Read list (Canary #4 guard). If `dialectic.py` already emitted a
+   halted JSON with `last_heartbeat` populated via the Phase 3 outer
+   try/finally path, that JSON takes precedence over MetaAgent's local
+   `cat`.
+
+   The synthesized (or passed-through) JSON is this step's result. It has
+   the existing pre-Phase-3.1 shape — `status: completed` or
+   `status: halted` — so MainOrchestrator's Phase 2 handler in SKILL.md
+   works byte-identical to before. Do NOT emit an intermediate envelope
+   that exposes the MetaAgent-internal spawn metadata (`engine_pid` + path
+   fields) under any status keyword such as the previously-drafted
+   "engine-launched" placeholder — Scenario B keeps that record strictly
+   MetaAgent-internal.
 
 9. **Read deliverable** at `deliverable_path` and append a summary to
    `cumulative_context_this_iter` (so downstream steps within this iteration can reference).
@@ -743,7 +783,7 @@ MetaAgent-level cases:
 | Within-iter retry would overwrite | Existing step output | Append `-retry-{N}` suffix within the same iteration dir |
 | Persistent FAIL on same blockers | `consecutive_fail_count ≥ persistent_failure_halt_after` | HALT iteration, record in lessons.md, break loop |
 | Playwright CLI unavailable (web 테스트) | `npx playwright test` fails or not installed | Fall back to static tests; flag in DELIVERABLE.md |
-| Engine process lost | No completion notification AND liveness probe fails | Return `halt_reason: engine_lost` (see engine-invocation-protocol.md) |
+| Engine process lost | `kill -0 $ENGINE_PID` fails AND `engine.done` absent during MetaAgent polling (step 8) | Synthesize HALT JSON with reason `step_transition_hang`, `watchdog_layer: B` (D-TOPO-05 — the former ad-hoc `engine_lost` label is absorbed; see engine-invocation-protocol.md §Failure classification) |
 
 Engine-internal degeneration (rate-limit, unparseable verdicts, dialogue
 degeneration) is detected by `dialectic.py` and surfaces as a HALT verdict —
