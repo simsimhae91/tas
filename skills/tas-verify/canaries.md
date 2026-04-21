@@ -208,37 +208,89 @@ python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_step_transit
 
 ## Canary #7 — Subagent-spawned orphan survival (VERIFY-TOPO-01)
 
-**Status**: PENDING — Phase 3.1 Plan 06 will populate the pass/fail contract
-once `simulate_subagent_orphan.{py,sh}` (currently stub from Plan 01) is
-implemented.
+**Guards**: `.planning/phases/03.1-engine-invocation-topology-refactor/03.1-CONTEXT.md`
+D-VERIFY-TOPO-01; TOPO-01 (EXIT trap); TOPO-02 (nohup spawn); TOPO-03
+(MetaAgent polling); TOPO-06 (invocation protocol); **Plan Review Issue #1**
+(`exec` keyword suppression of EXIT trap). Catches regressions where
+subagent-spawned `nohup` processes are reaped at subagent return (Claude Code
+harness `bash_id` lifecycle — original halt: FINDINGS §7) **and** regressions
+where `run-dialectic.sh` reintroduces `exec` on the final invocation lines
+(Issue #1 close-out).
 
-**Guards (planned)**: `.planning/phases/03.1-engine-invocation-topology-refactor/03.1-CONTEXT.md`
-D-VERIFY-TOPO-01; TOPO-01 (EXIT trap); TOPO-06 (invocation protocol).
-Catches regressions where subagent-spawned `nohup` processes are reaped at
-subagent return (harness `bash_id` lifecycle).
+**Exercise (two Phases):**
 
-**Exercise (planned)**: subprocess-spawn a bash mock that runs
-`nohup ... & echo $!`, verify PID survives for $T seconds with PPID=1 and
-marker content is written.
+**Phase 1 — orphan survival (synthetic mock):** synthesize a subagent that
+runs `nohup bash -c 'sleep $T; echo survived > $MARKER' > $LOG 2>&1 & echo $!`,
+return the PID, then verify the PID survives for $T seconds with PPID=1
+and the marker file is written. Uses stdlib subprocess — no real Agent()
+harness dependency.
+
+**Phase 2 — real exec chain integration (sed-copy mock injection):** take
+the real `skills/tas/runtime/run-dialectic.sh`, sed-rewrite it so
+`find_python` succeeds without `claude_agent_sdk` and the final Python
+invocation is replaced by a no-op mock script that prints a
+`{"status":"completed","verdict":"ACCEPT"}` JSON and exits 0. Invoke the
+modified script directly with `bash`, then assert `engine.done` exists and
+`engine.exit` contains `0`. Skips (with explicit reason) if the sed-copy
+cannot be built (script structure drift, bash -n failure, etc.) — this
+preserves the signal rather than silently passing. Plan 07 invariant 6
+(static `grep -c '^[[:space:]]*exec ' skills/tas/runtime/run-dialectic.sh`
+equals `0`) backs up Phase 2 when it SKIPs.
 
 ```bash
-# Default CI mode (T=120s)
+# Default CI mode (T=120s; ~135s wall-clock including Phase 2)
 python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_subagent_orphan.py"
 
-# Or via bash wrapper
+# Or via the bash wrapper
 bash "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_subagent_orphan.sh"
+
+# Smoke mode (T=10s; ~40s wall-clock) — for quick regression checks
+TAS_VERIFY_TOPO_DURATION_SEC=10 python3 \
+  "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_subagent_orphan.py"
+
+# Extended manual mode (T=1800s; ~30min wall-clock) — nightly only
+TAS_VERIFY_TOPO_DURATION_SEC=1800 python3 \
+  "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_subagent_orphan.py"
 ```
 
-**Pass criteria (planned — locked in Plan 06)**:
-- Exit 0 with stdout `PASS: canary #7 (subagent orphan survived ${DURATION}s, PPID=1)`
-- Subagent duration < 10s (fire-and-forget contract)
-- PPID == 1 within 2s of spawn (init reparenting)
-- Marker content == "survived"
-- Wall-clock ≈ DURATION + 10s (default 120s → ≤ 130s)
+**Pass criteria (Phase 1 — mandatory):**
+- Mock subagent bash call returns in < 10 seconds (fire-and-forget contract;
+  `nohup` + `&` + `echo $!` all load-bearing)
+- PPID == 1 within 2s of spawn (init reparenting confirms session detach)
+- Marker content == `survived` after $T seconds elapse
 
-**Current behavior (Wave 0 stub)**: exits 0 with `PENDING:` notice so
-Plan 01 Task 2 Nyquist verify succeeds. Plan 06 replaces stub with real
-subagent orphan simulation.
+**Pass criteria (Phase 2 — mandatory if not SKIP):**
+- `engine.done` exists after real-chain invocation (EXIT trap fired)
+- `engine.exit` content equals `0` (mock dialectic exit code recorded)
+- If sed-copy strategy fails for environmental reasons (script structure
+  drift, modified script fails `bash -n`, `run-dialectic.sh` not found),
+  SKIP with explicit reason is acceptable — static fallback guard lives in
+  Plan 07 Task 2 invariant 6.
+
+**PASS stdout:**
+`PASS: canary #7 (subagent orphan survived ${DURATION}s, PPID=1; real-chain integration: <PASS|SKIP (...)>)`
+
+**Fail signals (regression):**
+- `FAIL: Phase 1 mock subagent duration <N>s >= 10s` → one of
+  `nohup` / `&` / `echo $!` removed or substituted; fire-and-forget contract
+  broken (TOPO-02 regression)
+- `FAIL: Phase 1 PID <P> died within 2s of spawn` → harness `bash_id` reap
+  returned (original Phase 3 close blocker reappeared) or SIGHUP
+  propagation broke
+- `FAIL: Phase 1 PPID=<N> for PID <P>, expected 1` → `nohup` detach failed
+  to trigger init reparenting; possible macOS launchd or Linux
+  systemd-user drift
+- `FAIL: Phase 1 marker content = '<X>', expected 'survived'` → orphan ran
+  but wrote wrong payload; bash `-c` argument substitution regression
+- `FAIL: Phase 1 PID <P> did not produce marker within <N>s` → orphan was
+  killed mid-run (partial reap) or bash shell crashed
+- `FAIL: Phase 2 engine.done missing after real-chain exit rc=<N>` → **Plan
+  Review Issue #1 regression — `exec` keyword reintroduced to
+  `run-dialectic.sh`, suppressing EXIT trap firing.** Cross-check with
+  `grep -c "^[[:space:]]*exec " skills/tas/runtime/run-dialectic.sh` (must
+  be `0`).
+- `FAIL: Phase 2 engine.exit = '<X>', expected '0'` → trap fired but
+  captured wrong exit code; trap string or mock script drift
 
 ---
 
