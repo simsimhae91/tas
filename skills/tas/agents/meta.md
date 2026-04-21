@@ -615,9 +615,13 @@ Implement the retry/HALT logic exactly as specified in
   the orchestrator, call `checkpoint.py write` with `status: "halted"` and
   `halt_reason: "<reason>"` (values: `persistent_verify_failure`,
   `persistent_test_failure`, or the engine-emitted `halt_reason` from the last
-  JSON line). `current_step` remains the ID of the failing step, `completed_steps[]`
-  remains the pre-HALT list. `updated_at` is the HALT moment. This write lets
-  Phase 2 resume surface the last known progress and the halt reason.
+  JSON line — including **Phase 3 watchdog values**:
+  `sdk_session_hang` (Layer A asyncio.timeout expired inside dialectic.py),
+  `step_transition_hang` (Layer B exit 0 + last-line JSON absent),
+  `bash_wrapper_kill` (Layer B exit 124/137 via coreutils timeout SIGTERM/SIGKILL)
+  — see 03-CONTEXT.md D-06). `current_step` remains the ID of the failing step,
+  `completed_steps[]` remains the pre-HALT list. `updated_at` is the HALT moment.
+  This write lets Phase 2 resume surface the last known progress and the halt reason.
 
 **Engine HALT** (circular argumentation etc.): stop iteration, proceed to Phase 2e.
 
