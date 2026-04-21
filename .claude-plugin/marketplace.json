@@ -1,0 +1,13 @@
+{
+  "name": "tas",
+  "owner": {
+    "name": "hosoo"
+  },
+  "plugins": [
+    {
+      "name": "tas",
+      "source": ".",
+      "description": "Dialectic (정반합) workflow plugin — 3-layer orchestration with thesis/antithesis agents and iteration loops."
+    }
+  ]
+}
