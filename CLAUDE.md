@@ -119,7 +119,8 @@ Web projects require dynamic testing via Playwright CLI (`npx playwright test` +
 - **Adding implementation details or codebase-reading logic to SKILL.md** — breaks information hiding and scope prohibition
 - **Reading agent files from SKILL.md** — breaks information hiding; Agent() prompt references meta.md by path only
 - **Making convergence depend on round count** — produces shallow consensus
-- **Bypassing dialectic.py** — MetaAgent must never spawn thesis/antithesis via `Agent()` directly; always use `Bash(bash runtime/run-dialectic.sh ...)`
+- **Bypassing dialectic.py** — MetaAgent must never spawn thesis/antithesis via `Agent()` directly; always use `Bash(bash runtime/run-dialectic.sh ...)` per `references/engine-invocation-protocol.md`
+- **Invoking `run-dialectic.sh` in the foreground** — a single dialectic round takes 8–12 minutes; multi-round steps exceed the Bash tool's 10-minute cap (600000ms). ALWAYS use `run_in_background: true` and await the harness completion notification. `timeout: 900000` or any value above 600000 is silently ignored — do not use it as a workaround
 - **Using Bash(`claude -p`) instead of Agent()** — causes timeout, JSON parsing, and empty output failures
 - **Copying agent instructions into `system prompt files`** — MetaAgent writes ONLY step-specific context to system prompt files; agent templates are prepended by `dialectic.py` via step-config.json paths. MetaAgent must NOT copy or summarize agent instructions
 - **Pruning lessons.md between iterations** — it must stay append-only; later iterations need the full history
