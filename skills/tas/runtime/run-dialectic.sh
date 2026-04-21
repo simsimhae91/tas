@@ -32,4 +32,34 @@ if [ -z "$PYTHON" ]; then
   exit 1
 fi
 
-exec "$PYTHON" "$SCRIPT_DIR/dialectic.py" "$@"
+# -- Phase 3 WATCH-03: Layer B watchdog (Bash timeout(1) wrapping) --
+# Default watchdog budget — 20 min per step (CONTEXT D-03 §3.2).
+# Override via environment (see 03-CONTEXT.md "user override path"):
+#   TAS_WATCHDOG_TIMEOUT_SEC     total step budget before SIGTERM
+#   TAS_WATCHDOG_KILL_GRACE_SEC  grace after SIGTERM before SIGKILL
+WATCHDOG_TIMEOUT_SEC="${TAS_WATCHDOG_TIMEOUT_SEC:-1200}"
+WATCHDOG_KILL_GRACE_SEC="${TAS_WATCHDOG_KILL_GRACE_SEC:-30}"
+
+# Detect coreutils `timeout` (GNU default on Linux; `gtimeout` via Homebrew
+# `brew install coreutils` on macOS). Absence → Layer B disabled (graceful
+# degrade; Layer A asyncio.timeout remains active per Phase 3 Success
+# Criterion 3).
+if command -v timeout >/dev/null 2>&1; then
+  TIMEOUT_BIN="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then
+  TIMEOUT_BIN="gtimeout"
+else
+  TIMEOUT_BIN=""
+fi
+
+if [ -n "$TIMEOUT_BIN" ]; then
+  # 2-stage kill: TIMEOUT_SEC → SIGTERM; KILL_GRACE_SEC later → SIGKILL.
+  # Exit codes (coreutils §timeout-invocation): 124 SIGTERM, 137 SIGKILL.
+  exec "$TIMEOUT_BIN" --kill-after="${WATCHDOG_KILL_GRACE_SEC}s" \
+       "${WATCHDOG_TIMEOUT_SEC}s" \
+       "$PYTHON" "$SCRIPT_DIR/dialectic.py" "$@"
+else
+  echo "⚠ tas watchdog: neither 'timeout' nor 'gtimeout' found — Layer B disabled." >&2
+  echo "  Install via 'brew install coreutils' on macOS. Layer A (asyncio.timeout) remains active." >&2
+  exec "$PYTHON" "$SCRIPT_DIR/dialectic.py" "$@"
+fi
