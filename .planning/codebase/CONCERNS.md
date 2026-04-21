@@ -83,6 +83,60 @@ this system. Classical bugs (Python runtime issues) are secondary and well-conta
 
 ## Prompt/Behavioral Fragilities (this project's unique class)
 
+### MetaAgent ↔ Bash tool background-transition gap 🔴 CONFIRMED IN PRODUCTION
+
+- Risk: `agents/meta.md` invokes the engine via
+  `Bash({ command: "bash run-dialectic.sh {step-config}", timeout: 900000 })`
+  (line 426) and `timeout: 300000` (line 142). The Claude Code Bash tool hard-
+  caps foreground timeout at **600,000ms (10 min)**. A single dialectic round
+  takes 8–12 min (thesis → antithesis LLM roundtrip); multi-round steps
+  routinely exceed 10 min. On hitting the cap, the tool silently transitions
+  to background and returns a shell ID — this is NORMAL tool behavior, not a
+  failure. But meta.md contains ZERO protocol for handling it: grep for
+  `run_in_background`, `BashOutput`, `background`, `shell ID`, `poll` returns
+  **0 matches**. Phase 2 step 8 ("Parse result from the last line of stdout",
+  line 430) assumes synchronous completion.
+- Files: `skills/tas/agents/meta.md` lines 142, 422–427, 430
+- Observed failure mode (2026-04-21 session):
+  1. Engine crosses 10-min mark while still healthy (`ps aux | grep
+     dialectic.py` shows live PID)
+  2. Bash tool returns `{bash_id: "shell-N"}` instead of stdout
+  3. MetaAgent has no re-capture instruction → improvises a liveness check,
+     e.g. `pgrep -fl "run-dialectic|dialectic.py|step-config.json"`
+  4. The improvised pattern returns empty (macOS pgrep/argv quirks, OR the
+     pattern is wrong for the exec'd process). The working pattern in
+     `hooks/stop-check.sh` line 63 is not referenced from meta.md
+  5. MetaAgent also spams the harness Monitor tool (multiple overlapping
+     starts on the same file) trying to see output
+  6. All probes return empty → MetaAgent concludes "engine died" → returns
+     `{"status": "halted"}` while the engine is still running and eventually
+     completes to an orphaned log directory
+  7. stop-check.sh's 3-min mtime window sees recent file activity and lets
+     the session exit — the user sees a "timeout" that was never a timeout
+- Current mitigation: None. `timeout: 900000` above the 600,000 cap is a
+  strong tell that the author was unaware of the cap.
+- Root cause: Single design gap — meta.md treats engine invocation as
+  synchronous. The three observable symptoms (bogus pgrep pattern,
+  Monitor spam, false halted JSON) are all emergent improvisations from
+  this one missing protocol.
+- Recommendation:
+  1. Invoke with `run_in_background: true` from the start — never rely on
+     implicit foreground-to-background transition.
+  2. Document a polling loop using `BashOutput(bash_id)` with a stated
+     cadence (e.g., 30s intervals) until the process exits or the final JSON
+     line appears on stdout.
+  3. Canonize the stop-check.sh liveness pattern for MetaAgent's use:
+     `ps -eo args | grep -F "dialectic.py" | grep -qF "/$WS_KEY/"` —
+     never invent ad-hoc pgrep patterns.
+  4. Remove `timeout: 900000` — it is a lie above 600,000.
+  5. Add a "background-transition response" section to meta.md Phase 2,
+     parallel to the existing "Parse result" step.
+- Test: Add a `/tas-verify` canary that drives a multi-round step deliberately
+  designed to exceed 10 min and asserts MetaAgent completes rather than
+  halting. This directly exercises the class of bugs that was fixed twice
+  (`d22de47`, `fb68640`) for dialectic bypass and is now being fixed a third
+  time for the timeout boundary.
+
 ### Scope Prohibition drift in MainOrchestrator
 
 - Risk: The Trivial Gate (`SKILL.md` lines 96–111) tells MainOrchestrator to
@@ -652,6 +706,30 @@ this system. Classical bugs (Python runtime issues) are secondary and well-conta
 - Risk: This is the single highest-leverage missing test. Prompt-lint
   would catch a large fraction of the prompt-level regressions.
 - Priority: High.
+
+### MetaAgent Bash invocation doesn't handle tool-level timeout
+
+- Risk: MetaAgent calls `bash run-dialectic.sh ...` in foreground. A single
+  dialectic round takes 8–12 minutes (thesis + antithesis LLM roundtrip); a
+  multi-round step routinely exceeds the Bash tool's 10-minute foreground
+  limit. The tool then auto-transitions to a background ID — which is NOT a
+  failure — but MetaAgent has no logic to re-capture output via that ID.
+- Current mitigation: None.
+- Recommendation: MetaAgent should invoke run-dialectic.sh with
+  `run_in_background=true` from the start, then poll completion via the
+  returned shell ID.
+
+### MetaAgent liveness pgrep pattern misses the actual process
+
+- Risk: MetaAgent's liveness check uses
+  `pgrep -fl "run-dialectic|dialectic.py|step-config.json"`. None of these
+  tokens appear in the actual engine process command line — the SDK spawns
+  under `claude_agent_sdk`. Result: pgrep always returns empty → false
+  "engine died" verdict → premature halted JSON.
+- Files: agents/meta.md (liveness check location)
+  - Current mitigation: None.
+  - Recommendation: Match against `claude_agent_sdk` AND the workspace path,
+    mirroring the pattern used in stop-check.sh but with the correct token.
 
 ---
 
