@@ -552,6 +552,16 @@ async def run_dialectic(config: dict[str, Any]) -> dict[str, Any]:
         antithesis_prompt, model=model, project_root=project_root, role="antithesis"
     )
 
+    # --- Phase 3 Layer A state trackers (consumed by Plan 04 outer try/except) ---
+    # CONTEXT D-04 halt JSON schema: last_heartbeat / round / speaker /
+    # duration_sec / halted_at are populated from these variables when the
+    # outer except catches asyncio.TimeoutError. Defaults cover the "timeout
+    # before round 1 starts" edge case.
+    run_started_at = datetime.now(timezone.utc)
+    current_round = 0
+    current_speaker = "thesis"
+    halted_json_emitted = False
+
     try:
         # Parallel connect (~12s cold start mitigated)
         print(f"{step_id}: Connecting agents — {step_goal}", flush=True)
@@ -559,11 +569,15 @@ async def run_dialectic(config: dict[str, Any]) -> dict[str, Any]:
 
         # Round 1: Thesis proposes
         print(f"{step_id}: Thesis producing initial position...", flush=True)
+        current_round = 1
+        current_speaker = "thesis"
+        _heartbeat(log_dir, 1, "thesis", "before_query")
         thesis_msg = await query_with_reconnect(
             thesis, config["step_assignment"], "thesis", query_timeout
         )
         write_log(log_dir, 1, "thesis", thesis_msg)
         append_dialogue(log_dir, 1, "thesis", None, thesis_msg)
+        _heartbeat(log_dir, 1, "thesis", "after_response")
 
         round_num = 1
         verdict = "UNKNOWN"
@@ -582,6 +596,9 @@ async def run_dialectic(config: dict[str, Any]) -> dict[str, Any]:
             else:
                 anti_input = f"## Thesis Response (Round {round_num})\n\n{thesis_msg}"
 
+            current_round = round_num
+            current_speaker = "antithesis"
+            _heartbeat(log_dir, round_num, "antithesis", "before_query")
             anti_msg = await query_with_reconnect(
                 antithesis, anti_input, "antithesis", query_timeout
             )
@@ -589,6 +606,7 @@ async def run_dialectic(config: dict[str, Any]) -> dict[str, Any]:
 
             verdict = parse_verdict(anti_msg, convergence_model)
             append_dialogue(log_dir, round_num, "antithesis", verdict, anti_msg)
+            _heartbeat(log_dir, round_num, "antithesis", "after_response")
             print(f"{step_id}: Round {round_num}, {verdict}", flush=True)
 
             if verdict == "ACCEPT":
@@ -600,11 +618,14 @@ async def run_dialectic(config: dict[str, Any]) -> dict[str, Any]:
                     "converged deliverable** incorporating all agreed changes from "
                     "the dialogue."
                 )
+                current_speaker = "final"
+                _heartbeat(log_dir, round_num, "final", "before_query")
                 final_msg = await query_with_reconnect(
                     thesis, final_prompt, "thesis", query_timeout
                 )
                 write_log(log_dir, round_num, "final", final_msg)
                 append_dialogue(log_dir, round_num, "final", "CONVERGED", final_msg)
+                _heartbeat(log_dir, round_num, "final", "after_response")
                 break
 
             # ISSUE-01: In inverted mode, PASS and FAIL are terminal verdicts
@@ -720,12 +741,16 @@ async def run_dialectic(config: dict[str, Any]) -> dict[str, Any]:
             thesis_input = (
                 f"## Antithesis Response (Round {round_num})\n\n{anti_msg}"
             )
+            current_round = round_num + 1
+            current_speaker = "thesis"
+            _heartbeat(log_dir, round_num + 1, "thesis", "before_query")
             thesis_msg = await query_with_reconnect(
                 thesis, thesis_input, "thesis", query_timeout
             )
             round_num += 1
             write_log(log_dir, round_num, "thesis", thesis_msg)
             append_dialogue(log_dir, round_num, "thesis", None, thesis_msg)
+            _heartbeat(log_dir, round_num, "thesis", "after_response")
 
         # Write deliverable
         deliverable_path = log_dir / "deliverable.md"
