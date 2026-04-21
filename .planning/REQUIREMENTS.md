@@ -39,7 +39,7 @@
 - [x] **TOPO-03** — **Scenario B (Plan Review Issue #2 resolution)**: MetaAgent 가 engine lifecycle polling 을 내부에서 소유한다 (`until test -f $DONE_PATH || ! kill -0 $PID` 폴링 루프를 10분 Bash cap-safe 단위 19 × 30s 로 chunk 호출). MainOrchestrator (SKILL.md Phase 2) 는 MetaAgent 가 반환하는 pre-Phase-3.1 계약 `status: completed | halted` JSON 만 소비하며, 엔진 lifecycle 에 직접 관여하지 않는다. Info-hiding 경계 보존 (`dialogue.md` / `round-*.md` / `deliverable.md` / `lessons.md` / `heartbeat.txt` 은 MetaAgent 전용 — SKILL.md 접근 금지).
 - [x] **TOPO-04** — `references/engine-invocation-protocol.md`가 file-marker polling 계약으로 전면 재작성된다 (task-notification 계약 제거, 금지 bullet 3종 추가).
 - [x] **TOPO-05** — `step_transition_hang` enum이 "PID 사망 + engine.done 부재" 경로를 흡수하며, 신규 halt_reason enum 추가 없이 Phase 3 분류표 (03-CONTEXT.md D-05) 가 재사용된다.
-- [ ] **TOPO-06** — Approach B (subagent nohup fire-and-forget) 경로가 end-to-end `/tas` 실행에서 dialectic 첫 round를 정상 완주시킨다 (사후 검증 단계; CLAUDE.md Common Mistakes bullet + engine-invocation-protocol.md 가이드 반영).
+- [x] **TOPO-06** — Approach B (subagent nohup fire-and-forget) 경로가 end-to-end `/tas` 실행에서 dialectic 첫 round를 정상 완주시킨다 (사후 검증 단계; CLAUDE.md Common Mistakes bullet + engine-invocation-protocol.md 가이드 반영). **Documentation-side complete (Plan 03.1-07):** CLAUDE.md Common Mistakes 3 bullets 추가/교체 (Scenario B nohup+& paradigm + 3-element load-bearing 규칙 + exec keyword ban). End-to-end 실측은 `/tas-verify` + 사용자 실행 경로에서 사후 검증.
 - [x] **VERIFY-TOPO-01** — `/tas-verify`에 Canary #7 (subagent orphan survival + real-chain integration) 이 등록되고, 기본 `$T=120` / 확장 `$T=1800` 모드에서 exit 0 반환한다. 2-Phase 구현 (Plan 03.1-06): Phase 1 PASS 조건 (subagent duration < 10s, `$MARKER=survived`, PID PPID=1 로 $T 생존) + Phase 2 PASS 조건 (real `run-dialectic.sh` sed-copy mock injection 후 `engine.done` 존재 + `engine.exit=='0'` — Plan Review Issue #1 regression guard; SKIP allowed with explicit reason, Plan 07 invariant 6 static backstop).
 
 ### D. Chunk Decomposition
@@ -128,7 +128,7 @@
 | TOPO-03 | Phase 3.1 (Engine Invocation Topology Refactor) | Complete (Plan 03.1-04, Scenario B: MetaAgent-owned polling) |
 | TOPO-04 | Phase 3.1 (Engine Invocation Topology Refactor) | Complete |
 | TOPO-05 | Phase 3.1 (Engine Invocation Topology Refactor) | Complete (Plan 03.1-05, SKILL.md Phase 0b halt_reason enum freeze bullet) |
-| TOPO-06 | Phase 3.1 (Engine Invocation Topology Refactor) | Pending |
+| TOPO-06 | Phase 3.1 (Engine Invocation Topology Refactor) | Complete (Plan 03.1-07, CLAUDE.md Common Mistakes 3 bullets + 7-invariant regression suite verified; canonical automated verify block exits 0) |
 | VERIFY-TOPO-01 | Phase 3.1 (Engine Invocation Topology Refactor) | Complete (Plan 03.1-06, 2-Phase canary: orphan survival + real-chain integration via sed-copy mock injection) |
 
 **Coverage:** 35/35 v1 requirements mapped (VERIFY-01 split into 3 canaries: a+b → Phase 3, c → Phase 4; Phase 3.1 adds TOPO-01..06 + VERIFY-TOPO-01 family)
