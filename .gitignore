@@ -10,3 +10,8 @@ tsconfig.json
 
 # python
 __pycache__/
+
+# Phase 3.1 evidence artifacts — 공식 위치 결정 전까지 임시 ignore
+# (결정 시 이 블록 삭제 후 `.planning/research/` 또는 `skills/tas/references/` 로 이동)
+FINDINGS-nohup-bg-pattern.md
+HANDOFF-phase-3.1.md
