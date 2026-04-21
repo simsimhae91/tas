@@ -904,6 +904,13 @@ def main() -> None:
     )
 
     # ISSUE-11: Structured JSON error output on engine crash
+    # Layer A watchdog contract: if run_dialectic hit asyncio.TimeoutError,
+    # its except block already emitted {status:halted, halt_reason:sdk_session_hang, ...}
+    # to stdout and re-raised. Here the re-raised TimeoutError is caught by
+    # the generic `except Exception` below and sys.exit(1) fires — the non-zero
+    # exit is the signal Layer B (run-dialectic.sh) uses to disambiguate
+    # "engine exited cleanly with HALT" (exit 0) from "engine crashed/timed out"
+    # (exit non-zero). D-05 classifier row 4 handles this combo correctly.
     try:
         result = asyncio.run(run_dialectic(config))
     except Exception as exc:
