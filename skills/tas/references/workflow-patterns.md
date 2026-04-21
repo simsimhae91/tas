@@ -157,5 +157,41 @@ FAILs → HALT the iteration).
 
 ## Iteration Support (loop_count > 1)
 
-Focus angle selection, lessons learned extraction, and early-exit logic are defined in
-`meta.md` Phase 2b–2g. Lesson entry schema is in `workspace-convention.md`.
+Lessons learned extraction and early-exit logic are implemented by MetaAgent in
+`meta.md` Phase 2f–2g. Lesson entry schema is in `workspace-convention.md`.
+
+### Focus Angle Selection (Iteration 2+)
+
+For iteration 2+, MetaAgent selects a **focus angle** — the perspective this
+iteration will apply to push beyond the previous iteration's PASS.
+
+**External override**: if `FOCUS_ANGLE` was provided in the input and has not
+already been used (not in `focus_angles_used`), use it as this iteration's
+focus angle and skip the selection logic below. Record it in
+`focus_angles_used` as normal.
+
+**Priority order** (when no external override):
+
+1. **Carry-over from antithesis** — if prior iterations produced
+   `Non-blocking Observations`, pick the most impactful one as this
+   iteration's focus.
+2. **Domain-specific rotation** — for the detected `project_domain`, cycle
+   through angles not yet used (see table below).
+3. **Fallback** — `"general code quality polish"`.
+
+Record the selected angle in `focus_angles_used` so later iterations don't
+repeat it.
+
+### Domain-Specific Rotation Table
+
+| `project_domain` | Rotation (cycle through in order, skip used) |
+|------------------|----------------------------------------------|
+| `web-frontend` | UX polish → accessibility → performance → edge cases → error states |
+| `api` / `web-backend` | error handling → input validation → observability → performance |
+| `cli` | error messages → edge inputs → help clarity → shell compatibility |
+| `library` | API ergonomics → documentation → error types → composability |
+| `monorepo` | cross-package consistency → dependency alignment → build isolation → shared-config drift |
+| `data-pipeline` | idempotency → schema evolution → failure recovery → observability |
+| `iac-infra` | drift detection → blast radius → secret management → rollback safety |
+| `mobile` | responsiveness → offline states → deep-link coverage → performance |
+| other / `unknown` | correctness depth → readability → simplification → naming |
