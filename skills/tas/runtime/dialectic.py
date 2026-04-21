@@ -434,6 +434,53 @@ def _read_last_heartbeat(log_dir: Path) -> dict[str, Any] | None:
 
 
 # ---------------------------------------------------------------------------
+# Halt JSON builder — stdout-last-line contract defense (D-04 + Pitfall 6)
+# ---------------------------------------------------------------------------
+
+
+def _build_halt_payload(
+    *,
+    reason: str,
+    layer: str | None,
+    log_dir: Path,
+    round_n: int,
+    speaker: str,
+    run_started_at: datetime,
+    step_id: str,
+    workspace: str,
+    deliverable_path: str | None = None,
+) -> dict[str, Any]:
+    """Build the halt JSON dict for stdout emission (CONTEXT D-04 schema).
+
+    Existing {status, rounds, verdict, halt_reason, deliverable_path} fields
+    are preserved; new fields (watchdog_layer, last_heartbeat, round,
+    speaker, duration_sec, halted_at, workspace) are nullable extensions.
+    Parsers without these keys still work (backward compatibility).
+
+    The `last_heartbeat` nested object is best-effort read from
+    {log_dir}/heartbeat.txt so Layer B consumers (MetaAgent, /tas-verify)
+    can synthesize the same forensic context when dialectic.py itself is
+    SIGKILLed before it can emit this payload.
+    """
+    now = datetime.now(timezone.utc)
+    duration = (now - run_started_at).total_seconds()
+    return {
+        "status": "halted",
+        "rounds": round_n,
+        "verdict": "HALT",
+        "halt_reason": reason,
+        "watchdog_layer": layer,
+        "last_heartbeat": _read_last_heartbeat(log_dir),
+        "round": round_n,
+        "speaker": speaker,
+        "duration_sec": round(duration, 3),
+        "halted_at": f"run-dialectic/step-{step_id}",
+        "workspace": workspace,
+        "deliverable_path": deliverable_path,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Client factory
 # ---------------------------------------------------------------------------
 
