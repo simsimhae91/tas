@@ -81,6 +81,8 @@ pattern is the only one validated across macOS and Linux.
 | Engine crashed | Notification `status: completed` with non-zero exit, no valid JSON line | Log stderr from output file, return `halt_reason: engine_crash` |
 | Engine still running after long wait | No notification, liveness probe exit 0 | Continue waiting — do not HALT |
 | Engine stuck / zombied | No notification, liveness probe exit 1 | Return `halt_reason: engine_lost` with `output_file` path for forensics |
+| Bash wrapper killed engine | Notification exit 124 or 137 | Return `halt_reason: bash_wrapper_kill`, `watchdog_layer: B`, `wrapper_exit: <code>`; read `{LOG_DIR}/heartbeat.txt` for `last_heartbeat` |
+| Engine exit 0 + last line not JSON | Notification exit 0, no parseable JSON tail | Return `halt_reason: step_transition_hang`, `watchdog_layer: B`; read `{LOG_DIR}/heartbeat.txt` for `last_heartbeat` |
 
 ## What NOT to do
 
