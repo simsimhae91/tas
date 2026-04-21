@@ -191,6 +191,68 @@ mkdir -p {WORKSPACE}
 touch {WORKSPACE}/lessons.md  # if not exists
 ```
 
+#### Initial checkpoint write (CHKPT-03 + CHKPT-01)
+
+**Only on the first entry into Execute Mode for this workspace.** If `{WORKSPACE}/plan.json` already exists, skip this entire block (Phase 2 resume path — implemented in next phase).
+
+1. **Persist plan.json** (canonical JSON, immutable after this write):
+
+   Compose the plan dict from the Classify output: `request`, `request_type`,
+   `complexity`, `steps`, `loop_count`, `loop_policy`, `implementation_chunks: null`
+   (Phase 4 reserved slot — always `null` in Phase 1), `project_domain`,
+   `focus_angle: null`, `approved_at: <ISO 8601 UTC>`.
+
+   ```
+   Bash({
+     command: "python3 {SKILL_DIR}/runtime/checkpoint.py write-plan {WORKSPACE} --json '<compact JSON of plan dict>'",
+     run_in_background: false,
+     description: "Persist approved plan (CHKPT-03)"
+   })
+   ```
+
+   Exit 3 (plan.json already exists) MUST be treated as "resume path" — re-read existing plan.json and skip step 2+3 below.
+
+2. **Compute plan_hash** (CONTEXT D-02):
+
+   ```
+   Bash({
+     command: "python3 {SKILL_DIR}/runtime/checkpoint.py hash {WORKSPACE}/plan.json",
+     run_in_background: false,
+     description: "Compute plan_hash"
+   })
+   ```
+
+   Capture stdout (single line, 64-char hex) as `{PLAN_HASH}`. Store in in-memory
+   binding for this Execute invocation; **do not cache across processes** (read
+   back via `hash` CLI if needed).
+
+3. **Initial checkpoint.json** (CHKPT-01 · `status: running` · `completed_steps: []`):
+
+   Build payload with all 9 required fields:
+   - `schema_version`: `1` (integer — CONTEXT D-03)
+   - `workspace`: `"{WORKSPACE}"` (absolute path)
+   - `plan_hash`: `"{PLAN_HASH}"`
+   - `current_step`: ID of the first step to execute (from `PLAN.steps[0].id`)
+   - `completed_steps`: `[]`
+   - `current_chunk`: `null` (Phase 4 reserved slot — CONTEXT D-03)
+   - `completed_chunks`: `[]` (Phase 4 reserved slot — CONTEXT D-03)
+   - `status`: `"running"`
+   - `updated_at`: `<ISO 8601 UTC, microsecond precision, +00:00 suffix>`
+
+   ```
+   Bash({
+     command: "python3 {SKILL_DIR}/runtime/checkpoint.py write {WORKSPACE} --json '<compact JSON of payload>'",
+     run_in_background: false,
+     description: "Initial checkpoint write (CHKPT-01)"
+   })
+   ```
+
+**Info-hiding invariant**: Only MetaAgent writes these files. `SKILL.md` has no
+awareness of `checkpoint.json` or `plan.json` in Phase 1 (readers arrive in
+Phase 2 Resume Gate). **Classify Mode workspaces** (`_workspace/quick/classify-*/`)
+MUST NOT receive a checkpoint — this block applies to Execute Mode only
+(Pitfall P1-07).
+
 Read once:
 - `{SKILL_DIR}/agents/thesis.md`, `{SKILL_DIR}/agents/antithesis.md`
 - `{SKILL_DIR}/references/engine-invocation-protocol.md` — how to invoke `run-dialectic.sh` (run_in_background, liveness, completion handling). You MUST follow this protocol.
@@ -395,6 +457,38 @@ For each step, build the config the Python engine consumes.
 9. **Read deliverable** at `deliverable_path` and append a summary to
    `cumulative_context_this_iter` (so downstream steps within this iteration can reference).
 
+9.5. **Update checkpoint.json** (CHKPT-01): after appending the step's deliverable
+     summary to `cumulative_context_this_iter`, atomically update the workspace
+     checkpoint.
+
+     Build the payload for the **completed step** `{S.id}`:
+     - `schema_version`: `1`
+     - `workspace`: `"{WORKSPACE}"`
+     - `plan_hash`: `"{PLAN_HASH}"` (carry forward unchanged from Phase 1 Initialize)
+     - `current_step`: ID of the next step in this iteration's subset, or `null`
+       if `{S.id}` was the last step of the final iteration
+     - `completed_steps`: `<prior completed_steps[]> + ["{S.id}"]`
+     - `current_chunk`: `null` (Phase 1 always `null`)
+     - `completed_chunks`: `[]` (Phase 1 always `[]`)
+     - `status`: `"running"` (use `"halted"` + `halt_reason` on the HALT path —
+       see Within-Iteration FAIL Handling below; `"finalized"` is set by Phase 3
+       Final Aggregate)
+     - `updated_at`: `<ISO 8601 UTC now>`
+
+     Invoke:
+     ```
+     Bash({
+       command: "python3 {SKILL_DIR}/runtime/checkpoint.py write {WORKSPACE} --json '<compact JSON of payload>'",
+       run_in_background: false,
+       description: "Update checkpoint after step {S.id}"
+     })
+     ```
+
+     This call is synchronous, sub-second, and stdlib-only.
+     **Do NOT cache the payload in memory across steps** — re-derive from
+     `plan.json` + the running `completed_steps[]` on every call. (In-memory
+     state promotion is forbidden — see CLAUDE.md Common Mistakes.)
+
 #### Within-Iteration FAIL Handling
 
 Implement the retry/HALT logic exactly as specified in
@@ -408,6 +502,13 @@ Implement the retry/HALT logic exactly as specified in
   `persistent_verify_failure` or `persistent_test_failure`
 - Otherwise: build retry context, jump back to 구현 (re-run 검증 first on
   테스트 FAIL if in plan). Retries live in sibling `-retry-{N}/` dirs
+- **Write halt checkpoint** (CHKPT-01 halted): before returning the HALT JSON to
+  the orchestrator, call `checkpoint.py write` with `status: "halted"` and
+  `halt_reason: "<reason>"` (values: `persistent_verify_failure`,
+  `persistent_test_failure`, or the engine-emitted `halt_reason` from the last
+  JSON line). `current_step` remains the ID of the failing step, `completed_steps[]`
+  remains the pre-HALT list. `updated_at` is the HALT moment. This write lets
+  Phase 2 resume surface the last known progress and the halt reason.
 
 **Engine HALT** (circular argumentation etc.): stop iteration, proceed to Phase 2e.
 
