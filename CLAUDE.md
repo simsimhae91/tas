@@ -124,5 +124,5 @@ Web projects require dynamic testing via Playwright CLI (`npx playwright test` +
 - **Using Bash(`claude -p`) instead of Agent()** — causes timeout, JSON parsing, and empty output failures
 - **Copying agent instructions into `system prompt files`** — MetaAgent writes ONLY step-specific context to system prompt files; agent templates are prepended by `dialectic.py` via step-config.json paths. MetaAgent must NOT copy or summarize agent instructions
 - **Pruning lessons.md between iterations** — it must stay append-only; later iterations need the full history
-- **Adding resume/pipeline mechanisms or hardcoding `loop_count`** — this repo is quick-only; `loop_count` is user-specified, MetaAgent only proposes a default
+- **Adding auto-resume daemons, background retry loops, or hardcoding `loop_count`** — `loop_count` is user-specified; MetaAgent only proposes a default. Manual `/tas --resume` is the single permitted opt-in resume path (Phase 2); auto-retry pipelines, background daemons, `--force-resume` flags, and round/iteration-boundary checkpoints remain forbidden.
 - **Adding a fixed retry cap or overwriting retry log dirs** — within-iter retries are unbounded (HALT by `persistent_failure_halt_after`); each retry gets its own `step-{id}-{slug}-retry-{N}/` dir
