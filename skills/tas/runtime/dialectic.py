@@ -28,6 +28,8 @@ from typing import Any, AsyncIterator, Awaitable, TypeVar
 
 logger = logging.getLogger("tas.dialectic")
 
+T = TypeVar("T")
+
 # ---------------------------------------------------------------------------
 # Degeneration detection constants
 # ---------------------------------------------------------------------------
@@ -125,6 +127,30 @@ async def collect_response(client: Any) -> str:
     return "".join(text_parts) if text_parts else result_text
 
 
+# ---------------------------------------------------------------------------
+# Layer A watchdog — asyncio.timeout (3.11+) / wait_for fallback (3.10)
+# ---------------------------------------------------------------------------
+# Research §3.1 Option B: awaitable wrapper rather than context manager.
+# CONTEXT D-01 "async context manager" surface is relaxed per Research §3.1
+# REVISION NOTE — asyncio.wait_for wraps coroutines, not CM bodies, so a
+# faithful CM form cannot be provided for the 3.10 fallback. Semantics
+# (TimeoutError on expiry) are identical to D-01's original intent.
+
+
+async def _sdk_timeout(coro: Awaitable[T], timeout: float) -> T:
+    """SDK query timeout wrapper.
+
+    Python 3.11+: delegates to asyncio.timeout(timeout).
+    Python 3.10:  delegates to asyncio.wait_for(coro, timeout=timeout).
+    Both raise asyncio.TimeoutError on expiry (TimeoutError is propagated
+    outside this helper so run_dialectic's outer try/except (Plan 04) owns it).
+    """
+    if sys.version_info >= (3, 11):
+        async with asyncio.timeout(timeout):
+            return await coro
+    return await asyncio.wait_for(coro, timeout=timeout)
+
+
 async def query_and_collect(
     client: Any, prompt: str, timeout: int = 600
 ) -> str:
@@ -134,7 +160,7 @@ async def query_and_collect(
         await client.query(prompt)
         return await collect_response(client)
 
-    return await asyncio.wait_for(_raw(), timeout=timeout)
+    return await _sdk_timeout(_raw(), timeout)
 
 
 # ---------------------------------------------------------------------------
