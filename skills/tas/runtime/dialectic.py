@@ -183,6 +183,13 @@ async def query_with_reconnect(
     timeout: int = 600,
 ) -> str:
     """Query with one reconnect attempt on CLI death."""
+    # CONTEXT D-01 / Research §4.2 validation:
+    # _is_cli_dead(TimeoutError) returns False (only CLIConnectionError is
+    # treated as CLI death). The `if not _is_cli_dead(exc): raise` path
+    # therefore forwards asyncio.TimeoutError straight to run_dialectic's
+    # outer try/except (Plan 04, Research §3.4). Do not add an explicit
+    # TimeoutError catch here — double-handling breaks the Layer-A halt
+    # emit contract (D-04).
     try:
         return await query_and_collect(client, prompt, timeout)
     except Exception as exc:
