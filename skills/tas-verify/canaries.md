@@ -294,6 +294,44 @@ TAS_VERIFY_TOPO_DURATION_SEC=1800 python3 \
 
 ---
 
+## Canary #8 — 2-chunk merge + integrated verify (VERIFY-01 c) [PENDING]
+
+**STATUS:** Wave 0 scaffolding. Wave 5 (Plan `04-07`) replaces the `[PENDING — Wave 5 fills this]` markers below with the full assertion catalogue. The invocation path already routes to `skills/tas/runtime/tests/simulate_chunk_integration.py`, which currently exits 0 with a PENDING label so `/tas-verify` wiring is functional from Wave 0.
+
+**Guards**: `.planning/phases/04-chunk-decomposition/04-CONTEXT.md` D-09; CHUNK-03 (worktree orphan prevention); CHUNK-05 (cherry-pick + apply fallback + HALT); CHUNK-06 (integrated verify synthesis); CHUNK-07 (within-chunk failure handling); **Pitfall 15** (integrated verify missing regression at chunk boundary). Catches regressions where: chunk sub-loop leaves orphan worktrees, cherry-pick failure path skips `git reset --hard PRE_MERGE_SHA`, verify step_assignment loses Synthesis Context injection, or chunk 1 FAIL path triggers a forbidden re-classify.
+
+**Exercise (two Phases):**
+
+**Phase 1 — 2-chunk happy path (synthetic mock, CI-default, ~30s):** construct a minimal PROJECT_ROOT fixture in `tempfile.mkdtemp`, build a 2-chunk `plan.json`, replay the meta.md Phase 2d.5 worktree-add + mock-dialectic + MetaAgent-commit + cherry-pick + worktree-remove sequence. Assertions: [PENDING — Wave 5 fills this: worktree_add × 2 succeeds, each chunk has 1 commit with `chunk-{N}:` prefix, cherry-pick × 2 succeeds, verify step_assignment contains Synthesis Context block, post-cleanup `git worktree list --porcelain` has no `chunks/chunk-*` entries].
+
+**Phase 2 — chunk 1 regression detection (opt-in, `TAS_VERIFY_CHUNK_MODE=full`, ~300s):** same fixture with chunk 1's deliverable embedding a signature mismatch that chunk 2 assumes differently; mock integrated verify emits FAIL with "synthesis boundary" keyword. Assertions: [PENDING — Wave 5 fills this: Phase 1 assertions all hold, integrated verify verdict == FAIL, FAIL reason matches `/synthesis|boundary|regression|chunk.1/i`, no second Classify Agent() invocation in trace].
+
+```bash
+# Default CI mode (fast, ~30s; currently PENDING exit 0 until Wave 5 lands)
+python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_chunk_integration.py"
+
+# Explicit fast mode
+TAS_VERIFY_CHUNK_MODE=fast python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_chunk_integration.py"
+
+# Extended mode (full, ~300s; regression sub-canary)
+TAS_VERIFY_CHUNK_MODE=full python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_chunk_integration.py"
+```
+
+**Pass criteria (Phase 1 — mandatory, filled by Wave 5):**
+[PENDING — Wave 5 fills this with the 5 Phase 1 assertions from D-09]
+
+**Pass criteria (Phase 2 — mandatory if `MODE=full`, filled by Wave 5):**
+[PENDING — Wave 5 fills this with the 4 Phase 2 assertions from D-09]
+
+**PASS stdout (Wave 5 contract):** `PASS: canary #8 (2-chunk merge + integrated verify; Phase 2: <PASS|SKIP (fast mode)>)`
+
+**Wave 0 stub stdout (current):** `PENDING: canary #8 (Wave 5 will fill body)` or `PENDING: canary #8 (Wave 5 will fill body; full mode)` — both exit 0.
+
+**Fail signals (regression, Wave 5 populates):**
+[PENDING — Wave 5 fills this with concrete FAIL-prefix-to-regression mapping: e.g., `FAIL: Phase 1 chunk-1 worktree missing` → D-03 regression; `FAIL: Phase 2 re-chunking path triggered` → D-10 regression; `FAIL: Phase 1 Synthesis Context missing` → D-07 regression]
+
+---
+
 ## When to add a new canary
 
 Add one whenever:
