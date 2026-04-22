@@ -61,7 +61,7 @@
 
 ### F. Verification
 
-- [~] **VERIFY-01** — `/tas-verify`에 M1 전용 canary를 추가한다: [x] (a) 의도적 stdout-stall을 유발하는 mock SDK로 Layer A watchdog 트립 검증 (Plan 03-07), [x] (b) MetaAgent step-transition hang 시뮬레이션으로 Layer B 트립 검증 (Plan 03-07), [ ] (c) 2-chunk 시나리오의 머지+통합 verify 성공 검증 (Phase 4 pending)
+- [~] **VERIFY-01** — `/tas-verify`에 M1 전용 canary를 추가한다: [x] (a) 의도적 stdout-stall을 유발하는 mock SDK로 Layer A watchdog 트립 검증 (Plan 03-07), [x] (b) MetaAgent step-transition hang 시뮬레이션으로 Layer B 트립 검증 (Plan 03-07), [~] (c) 2-chunk 시나리오의 머지+통합 verify 성공 검증 (Wave 0 PENDING stub landed Plan 04-01; Wave 5 body lands Plan 04-07)
 - [ ] **VERIFY-02** — `python3 dialectic.py --self-test`에 `checkpoint.json` 스키마 호환성 회귀 테스트를 추가한다
 
 ---
@@ -121,7 +121,7 @@
 | SLIM-04 | Phase 5 (Prompt Slim) | Pending |
 | VERIFY-01 (a) | Phase 3 (2-Layer Hang Watchdog) | Complete (Plan 03-07) |
 | VERIFY-01 (b) | Phase 3 (2-Layer Hang Watchdog) | Complete (Plan 03-07) |
-| VERIFY-01 (c) | Phase 4 (Chunk Decomposition) | Pending |
+| VERIFY-01 (c) | Phase 4 (Chunk Decomposition) | In Progress (Plan 04-01 Wave 0 stub + canaries.md placeholder; Wave 5 Plan 04-07 fills body) |
 | VERIFY-02 | Phase 1 (Checkpoint Foundation) | Pending |
 | TOPO-01 | Phase 3.1 (Engine Invocation Topology Refactor) | Complete |
 | TOPO-02 | Phase 3.1 (Engine Invocation Topology Refactor) | Complete (Plan 03.1-04) |

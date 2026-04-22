@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Phase 3.1 Plan 07 complete — Phase 3.1 CLOSED (CLAUDE.md Common Mistakes 3 bullets + 7-invariant regression suite; TOPO-06 doc-side closed; canonical automated <verify> block exits 0; ready for /gsd-verify-work 3.1)"
-last_updated: "2026-04-21T16:10:39Z"
-last_activity: 2026-04-21 -- Phase 3.1 Plan 07 complete (2 tasks, 2m57s) — Phase 3.1 CLOSED
+stopped_at: Phase 4 Plan 01 completed — Canary #8 Wave 0 scaffolding landed
+last_updated: "2026-04-22T01:13:36Z"
+last_activity: 2026-04-22 -- Phase 4 Plan 01 complete (Canary #8 PENDING stub + canaries.md §Canary #8 placeholder)
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 25
-  completed_plans: 18
-  percent: 72
+  completed_plans: 19
+  percent: 76
 ---
 
 # Project State
@@ -21,25 +21,25 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** 변증법적 품질 게이트 — 단일 에이전트가 놓치는 결함을 두 관점의 구조적 반복으로 드러낸다
-**Current focus:** Phase null
+**Current focus:** Phase 4 — Chunk Decomposition
 **Milestone:** TAS-M1 (실행 안정성 + 컨텍스트 효율성 + 프롬프트 군살제거)
 
 ## Current Position
 
-Phase: 3.1 — COMPLETE (Engine Invocation Topology Refactor)
-Plan: 7/7 complete (Plan 07 done — CLAUDE.md Common Mistakes 3 bullets updated/added + Phase 3.1 7-invariant regression suite verified green; canonical automated verify block exits 0; TOPO-06 closed documentation-side)
-Status: Wave 5 complete — Phase 3.1 closed. CLAUDE.md Common Mistakes section now documents Scenario B paradigm at project instructions layer: (1) replaced `Invoking run-dialectic.sh in the foreground` bullet with full Phase 3.1 paradigm (nohup fire-and-forget + MetaAgent-owned local polling + MainOrchestrator non-polling); (2) new `Omitting nohup/&/echo $!` bullet (3 load-bearing elements + Canary #7 Phase 1 regression guard reference); (3) new `Using exec inside run-dialectic.sh` bullet (Plan Review Issue #1 close-out + static grep backstop). 7-invariant set all green (info-hiding 9-baseline + cross-file halt_reason enum freeze 0 + canary suite 5/5 exit 0 + run-dialectic.sh exec count 0 + meta.md polling block presence 5/5); Scenario A residue check 0; protocol.md task-notification 0 / run_in_background:false 3; REQUIREMENTS.md traceability 15 rows. Invariant 2 (read-target guard) pre-existing 3-line baseline documented as non-regression. Ready for `/gsd-verify-work 3.1`.
-Last activity: 2026-04-21 -- Phase 3.1 Plan 07 complete (2 tasks, 2m57s) — Phase 3.1 CLOSED
+Phase: 4 (Chunk Decomposition) — EXECUTING
+Plan: 2 of 7 (next: 04-02 meta.md Classify Phase 2c Chunk Sizing)
+Status: Executing Phase 4
+Last activity: 2026-04-22 -- Phase 4 Plan 01 complete (Canary #8 Wave 0 scaffolding)
 
-Progress: [████████░░] 72% (18/25 plans — Phase 3.1 Plan 07 complete, Phase 3.1 CLOSED)
+Progress: [████████░░] 76% (19/25 plans — Phase 4 Plan 01 complete, Canary #8 PENDING stub + canaries.md §Canary #8 placeholder landed)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 18
+- Total plans completed: 19
 - Average duration: -
-- Total execution time: 2m57s (this plan)
+- Total execution time: 2m46s (this plan)
 
 **By Phase:**
 
@@ -48,11 +48,12 @@ Progress: [████████░░] 72% (18/25 plans — Phase 3.1 Plan 0
 | 02    | 2     | -          | -        |
 | 03    | 7     | ~26.0 min  | ~3.7 min |
 | 03.1  | 7     | ~24.4 min  | ~3.5 min |
+| 04    | 1     | 2m46s      | 2m46s    |
 
 **Recent Trend:**
 
-- Last 5 plans: 03.1-07 (CLAUDE.md Common Mistakes 3 bullets + Phase 3.1 7-invariant regression suite — TOPO-06 doc-side close; 1 CLAUDE.md file edit + Task 2 read-only verify; canonical automated `<verify>` block exits 0; invariant 2 pre-existing 3-line baseline documented as non-regression; 9th Rule 3 plan-verbatim-vs-reality auto-fix in Phase 3.1; 2m57s, 2 tasks, 1 file + SUMMARY) → 03.1-06 (Canary #7 2-Phase regression guard — Phase 1 synthetic orphan survival + Phase 2 real-chain integration via sed-copy mock injection on run-dialectic.sh; stdlib-only Python harness 291 net line-additions + bash wrapper header refresh + canaries.md §Canary #7 full PASS/FAIL contract; Plan Review §"관측 1" integration gap closed — Issue #1 `exec` regression would now FAIL Phase 2 immediately; SKIP path explicit + Plan 07 invariant 6 static backstop; smoke T=10s end-to-end 10.4s wall-clock; 1 Rule 3 auto-fix for forbidden-imports grep matching string literal in sed-copy target; VERIFY-TOPO-01 closed, 5m11s, 2 tasks, 3 files + SUMMARY) → 03.1-05 (SKILL.md Phase 0b halt_reason enum freeze bullet — 1-line insertion inside HTML prohibition comment block; Scenario B invariants preserved; 1 Rule 3 auto-fix for awk range pattern; TOPO-05 closed, ~1m, 1 task, 1 file) → 03.1-04 (meta.md Scenario B rewrite — step 7 nohup spawn + step 8/8b local polling + classify + final JSON synthesis; TOPO-02 + TOPO-03 complete; 5 Rule 3 auto-fixes documented, 5m6s, 1 file, 2 commits) → 03.1-03 (engine-invocation-protocol.md rewrite — Scenario B ownership + Issue #1 exec-forbidden bullet + 143 row; 8-section 247-line doc; 1 Rule 3 auto-fix for plan-verbatim-vs-grep contradiction, 3m37s, 1 file)
-- Trend: 03.1-07 CLOSES Phase 3.1. CLAUDE.md Common Mistakes section is the 4th and final layer of the Phase 3.1 guardrail stack: (1) doc layer — engine-invocation-protocol.md Scenario B + Issue #1 exec prohibition (Plan 03); (2) code-prompt layer — meta.md step 7/8/8b nohup+polling (Plan 04); (3) orchestrator-guardrail layer — SKILL.md Phase 0b halt_reason enum freeze (Plan 05); (4) project-instructions layer — CLAUDE.md Common Mistakes 3 bullets (Plan 07). 4-layer means any single-layer drift is caught by at least 2 others. The 7-invariant regression suite (info-hiding baseline + cross-file enum freeze + canary × 5 + exec count 0 + bash -n OK + meta.md polling block × 5 asserts) validates all 4 layers simultaneously via a single chained `test ... && ... && ...` automated verify expression that exits 0. Plan Review Issue #1 (exec vs EXIT trap) and Issue #2 (ownership contradiction) both close STRUCTURALLY: #1 via static grep `^exec == 0` + CLAUDE.md bullet 3 + Canary #7 Phase 2 integration; #2 via `engine_launched == 0` in both SKILL.md and meta.md + `Return early with engine metadata == 0` in meta.md + `run_in_background: true == 0` in both files. Scenario A residue check passes cleanly. Invariant 2 pre-existing 3-line baseline (SKILL.md L120/L307 info-hiding prohibition comments + L578 legit HALT lessons.md read) documented as non-Phase-3.1 regression — canonical `<verify>` automated block correctly omits this grep. 9th Rule 3 plan-verbatim-vs-reality auto-fix (Phase 3.1 running pattern: 03:1x + 04:5x + 05:1x + 06:1x + 07:1x = 9 total). TOPO-06 documentation-side closed; end-to-end `/tas` real-execution verification moves to `/gsd-verify-work 3.1` + downstream user execution path. Phase 3.1 CLOSED. Next: `/gsd-verify-work 3.1` → `/ship` to Phase 4 (Chunk Decomposition) which builds on Scenario B topology.
+- Last 5 plans: 04-01 (Canary #8 Wave 0 scaffolding — `simulate_chunk_integration.py` PENDING stub exit 0 in both MODE=fast and MODE=full with distinct stdout tags + `canaries.md` §Canary #8 4-part D-09 skeleton with 4 `[PENDING — Wave 5 fills this]` markers; pure insertion +38 lines in canaries.md, Canary #1-#7 sections byte-identical; stdlib-only invariant enforced via forbidden-imports grep = 0; Wave 5 Plan 04-07 inherits imports + REPO_ROOT + MODE env var pre-wired; 2m46s, 2 tasks, 2 files + SUMMARY; 0 Rule 1-3 auto-fixes, 1 plan-verbatim-vs-grep observation documented but non-actionable — 10th total across Phase 3.1 + Phase 4) → 03.1-07 (CLAUDE.md Common Mistakes 3 bullets + Phase 3.1 7-invariant regression suite — TOPO-06 doc-side close; 1 CLAUDE.md file edit + Task 2 read-only verify; canonical automated `<verify>` block exits 0; invariant 2 pre-existing 3-line baseline documented as non-regression; 9th Rule 3 plan-verbatim-vs-reality auto-fix in Phase 3.1; 2m57s, 2 tasks, 1 file + SUMMARY) → 03.1-06 (Canary #7 2-Phase regression guard — Phase 1 synthetic orphan survival + Phase 2 real-chain integration via sed-copy mock injection on run-dialectic.sh; stdlib-only Python harness 291 net line-additions + bash wrapper header refresh + canaries.md §Canary #7 full PASS/FAIL contract; Plan Review §"관측 1" integration gap closed — Issue #1 `exec` regression would now FAIL Phase 2 immediately; SKIP path explicit + Plan 07 invariant 6 static backstop; smoke T=10s end-to-end 10.4s wall-clock; 1 Rule 3 auto-fix for forbidden-imports grep matching string literal in sed-copy target; VERIFY-TOPO-01 closed, 5m11s, 2 tasks, 3 files + SUMMARY) → 03.1-05 (SKILL.md Phase 0b halt_reason enum freeze bullet — 1-line insertion inside HTML prohibition comment block; Scenario B invariants preserved; 1 Rule 3 auto-fix for awk range pattern; TOPO-05 closed, ~1m, 1 task, 1 file) → 03.1-04 (meta.md Scenario B rewrite — step 7 nohup spawn + step 8/8b local polling + classify + final JSON synthesis; TOPO-02 + TOPO-03 complete; 5 Rule 3 auto-fixes documented, 5m6s, 1 file, 2 commits)
+- Trend: 04-01 kicks off Phase 4 (Chunk Decomposition) with the same Wave 0 PENDING-stub scaffolding pattern Phase 3.1 Plan 01 established. Rationale: if Plans 02-06 include `python3 skills/tas/runtime/tests/simulate_chunk_integration.py` in their `<verify>` blocks while the canary body is still being built, ENOENT failures would block execute-plan agents. Exit-0 PENDING stubs preserve the happy path at zero cost; Wave 5 (Plan 04-07) inherits a pre-wired skeleton (imports, REPO_ROOT, MODE env var, canaries.md 4-part structure, 3 invocation lines) and only replaces `main()` body + 4 `[PENDING — Wave 5 fills this]` markers. Stdlib-only invariant enforced by acceptance grep `^(import|from)(claude_agent_sdk|pytest|psutil|requests|yaml) == 0`; any Wave 5 dependency drift would fail the invariant. Canary #1-#7 bytes unchanged (git diff `--stat` on canaries.md = +38/-0 insertions only). Next: 04-02 (meta.md Classify Phase 2c Chunk Sizing) + 04-03 (SKILL.md Display Plan chunks UX) can now safely reference Canary #8 by path.
 
 *Updated after each plan completion*
 | Phase 03 P02 | 2m46s | 3 tasks | 1 files |
@@ -68,6 +69,7 @@ Progress: [████████░░] 72% (18/25 plans — Phase 3.1 Plan 0
 | Phase 03.1 P05 | ~1m | 1 task | 1 file (SKILL.md Phase 0b halt_reason enum freeze bullet; 1 Rule 3 auto-fix for plan awk range pattern line-break mismatch) |
 | Phase 03.1 P06 | 5m11s | 2 tasks | 3 files (simulate_subagent_orphan.py full 2-Phase body + simulate_subagent_orphan.sh header refresh + canaries.md §Canary #7 PASS/FAIL contract; 1 Rule 3 auto-fix for forbidden-imports grep matching sed-copy string literal) |
 | Phase 03.1 P07 | 2m57s | 2 tasks | 1 file (CLAUDE.md Common Mistakes 3 bullets — 1 replaced + 2 new: Scenario B paradigm / 3-element nohup / exec ban; Task 2 read-only 7-invariant regression suite — canonical automated `<verify>` block exits 0; 1 Rule 3 auto-fix for invariant 2 pre-existing SKILL.md 3-line baseline documented as non-regression — 9th Phase 3.1 plan-verbatim-vs-reality auto-fix; TOPO-06 doc-side closed; Phase 3.1 CLOSED) |
+| Phase 04 P01 | 2m46s | 2 tasks | 2 files (simulate_chunk_integration.py PENDING stub stdlib-only exit 0 both MODE=fast/full + canaries.md §Canary #8 4-part D-09 skeleton; pure insertion +38 lines in canaries.md, Canary #1-#7 byte-identical; stdlib-only invariant forbidden-imports grep = 0; Wave 5 Plan 04-07 skeleton pre-wired; 0 Rule 1-3 auto-fixes, 1 plan-verbatim-vs-grep observation documented; VERIFY-01 c Wave 0 half delivered) |
 
 ## Accumulated Context
 
@@ -153,6 +155,11 @@ Recent decisions affecting current work (TAS-M1 kickoff):
 - [Phase 3.1]: Plan 07 invariant 2 (SKILL.md read-target guard) pre-existing 3-line baseline NOT altered — Plan 07 scope is `<files>CLAUDE.md</files>` only; altering SKILL.md would violate Plan 05 SUMMARY's "byte-identical Phase 2 handler" invariant. The 3 hits (L120/L307 info-hiding prohibition comments + L578 legit HALT `Read {workspace}/lessons.md`) predate Phase 3.1 and are NOT a regression. The canonical `<verify>` automated block correctly omits this grep. Documented as Rule 3 Deviation §1 for forensic trail. 9th Phase 3.1 plan-verbatim-vs-reality auto-fix (03:1x + 04:5x + 05:1x + 06:1x + 07:1x = 9 total). (07)
 - [Phase 3.1]: Plan 07 Task 2 is read-only verify (no file modifications) — matches plan's explicit `<files>CLAUDE.md</files>` + `<action>` "this Task is read-only" contract. No per-task commit for Task 2; the final metadata commit captures invariant verification as evidence. 7-invariant set + Scenario A residue check + protocol smoke + REQUIREMENTS.md traceability aggregates to 25+ pass/fail assertions; all green except invariant 2 (pre-existing non-regression baseline). (07)
 - [Phase 3.1]: Phase 3.1 CLOSED with 4-layer guardrail stack fully assembled: (1) doc (Plan 03 — engine-invocation-protocol.md Scenario B + Issue #1 exec prohibition), (2) code-prompt (Plan 04 — meta.md step 7/8/8b nohup+polling), (3) orchestrator-guardrail (Plan 05 — SKILL.md Phase 0b halt_reason enum freeze), (4) project-instructions (Plan 07 — CLAUDE.md Common Mistakes 3 bullets). 4-layer means any one layer's drift is caught by at least 2 others. Scenario A residue check clean: `engine_launched` in both SKILL.md and meta.md = 0; `Return early with engine metadata` in meta.md = 0. Scenario B ownership enforced at all 4 layers. TOPO-06 doc-side closed; end-to-end real-execution verification moves to `/gsd-verify-work 3.1` + downstream user execution path. (07)
+- [Phase 4]: Plan 01 Wave 0 scaffolding reuses Phase 3.1 Plan 01's exit-0 PENDING stub pattern — `simulate_chunk_integration.py` prints `PENDING: canary #8 (Wave 5 will fill body)` (fast) or `PENDING: canary #8 (Wave 5 will fill body; full mode)` (full), both exit 0. Distinct stdout tags (fast vs full) let Wave 5 distinguish MODE branches without re-wiring. PENDING prefix (not SKIP) so /tas-verify aggregator distinguishes 'body not yet written' from 'test skipped by env/host'. (04-01)
+- [Phase 4]: Plan 01 TAS_VERIFY_CHUNK_MODE env var name locked at Wave 0 — `MODE = os.environ.get('TAS_VERIFY_CHUNK_MODE', 'fast')` read at module top. Wave 5 inherits the invariant; can't rename MODE without breaking downstream plan verify commands. (04-01)
+- [Phase 4]: Plan 01 Canary #8 section placed immediately after Canary #7, before 'When to add a new canary' anchor — preserves numerical section ordering (#1 → #2 → … → #7 → #8 → meta). Plan 04-07 Task 2 will replace 4 `[PENDING — Wave 5 fills this]` markers in-place. Pure insertion (git diff --stat = +38/-0 on canaries.md) leaves Canary #1-#7 bytes unchanged. (04-01)
+- [Phase 4]: Plan 01 stdlib-only invariant enforced via acceptance grep `^(import|from)(claude_agent_sdk|pytest|psutil|requests|yaml) == 0` — Wave 5 inherits this invariant from Plan 01; if Wave 5 needs subprocess/tempfile/shutil/json they are all stdlib and pass the grep. Prevents Wave 5 dependency drift regression. (04-01 T-04-01 mitigation)
+- [Phase 4]: Plan 01 10th plan-verbatim-vs-grep observation (Phase 3.1: 9 + Phase 4 Plan 01: 1) — acceptance grep `grep -cE "TAS_VERIFY_CHUNK_MODE" ... returns 1` vs. actual file count = 3 (docstring Phase 1 env-var mention + docstring Phase 2 env-var mention + os.environ.get call). Plan's `<behavior>` and `<done>` criteria both describe this as "env var already wired for Wave 5" (≥1 is the true invariant). Plan's `<automated>` verify block does NOT test this particular grep. No Rule 3 auto-fix applied — the plan's verbatim code is the authoritative source; observation is in the acceptance-grep specification only, documented as SUMMARY §Deviations for forensic trail. (04-01)
 
 ### Pending Todos
 
@@ -178,6 +185,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-21T16:10:39Z
-Stopped at: Phase 3.1 Plan 07 complete — Phase 3.1 CLOSED (CLAUDE.md Common Mistakes 3 bullets + Phase 3.1 7-invariant regression suite). Task 1: 1 CLAUDE.md bullet replaced (Invoking run-dialectic.sh in the foreground → full Phase 3.1 Scenario B paradigm with harness bash_id reap explanation + nohup+& spawn pattern + 19×30s chunked polling + MetaAgent-owned ownership) + 2 new bullets (3-element load-bearing rule with Canary #7 Phase 1 reference; exec keyword ban with empirical proof-of-failure + static grep backstop, Plan Review Issue #1 close-out). Task 2: read-only 7-invariant regression suite — canonical `<verify>` automated block (10 chained assertions) exits 0. Invariant 1 (info-hiding 9-baseline) PASS, Invariant 3 (halt_reason enum freeze across 5 files) 0/0/0/0/0 PASS, Invariant 4 (canary suite) 5/5 exit 0 (Canary #5 PASS + #6 PART A SKIP no-coreutils + #6 PART B 16 tests OK + #7 smoke PASS with real-chain integration PASS + test_exit_trap.sh 5 cases PASS+SKIP), Invariant 6 (exec count 0 + bash -n OK) PASS, Invariant 7 (meta.md polling presence 5/5 greps) PASS. Scenario A residue check clean (engine_launched=0 SKILL+meta, "Return early with engine metadata"=0 meta). Protocol smoke: task-notification=0, run_in_background:false=3 in protocol; meta.md nohup paradigm present, run_in_background:true=0 both SKILL+meta. REQUIREMENTS.md TOPO/VERIFY-TOPO traceability=15. Invariant 2 (read-target guard) pre-existing 3-line baseline (SKILL.md L120/L307 prohibition comments + L578 legit HALT lessons.md read) documented as non-regression — Plan 07 does not modify SKILL.md (scope=CLAUDE.md only); canonical automated verify block correctly omits this grep. 9th Phase 3.1 Rule 3 auto-fix (03:1x + 04:5x + 05:1x + 06:1x + 07:1x = 9 total). TOPO-06 closed documentation-side. 4-layer guardrail stack assembled (doc + code-prompt + orchestrator-guardrail + project-instructions). 2m57s, 2 tasks, 1 file: 85b1054 (docs, Task 1) + final metadata commit (to follow). Ready for `/gsd-verify-work 3.1`.
-Resume file: none (Phase 3.1 complete)
+Last session: 2026-04-22T01:13:36Z
+Stopped at: Phase 4 Plan 01 complete — Canary #8 Wave 0 scaffolding landed; next plan 04-02 (meta.md Classify Phase 2c Chunk Sizing)
+Resume file: .planning/phases/04-chunk-decomposition/04-02-PLAN.md

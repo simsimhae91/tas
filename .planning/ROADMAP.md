@@ -100,7 +100,7 @@ Plans:
 **Plans**: 7 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Canary #8 Wave 0 scaffolding (PENDING stub + canaries.md placeholder) (VERIFY-01 c)
+- [x] 04-01-PLAN.md — Canary #8 Wave 0 scaffolding (PENDING stub + canaries.md placeholder) (VERIFY-01 c)
 - [ ] 04-02-PLAN.md — meta.md Classify Phase 2c Chunk Sizing + Phase 4 Output implementation_chunks (CHUNK-01, CHUNK-02)
 - [ ] 04-03-PLAN.md — SKILL.md Display Plan chunks UX + Handle User Response Adjust chunks row (CHUNK-02 UX)
 - [ ] 04-04-PLAN.md — meta.md Execute Phase 2d.5 Chunk Sub-loop + step 9.5 chunk payload + Within-Iter FAIL chunk branch (CHUNK-03, CHUNK-04, CHUNK-05, CHUNK-06, CHUNK-07)
@@ -131,5 +131,5 @@ Phase 1 → (Phase 2 ∥ Phase 3 병행 가능) → Phase 3.1 (Phase 3 완료 �
 | 2. Resume Entry | 0/TBD | Not started | - |
 | 3. 2-Layer Hang Watchdog | 7/7 | Complete | 2026-04-21 |
 | 3.1 Engine Invocation Topology Refactor | 7/7 | Complete | 2026-04-21 |
-| 4. Chunk Decomposition | 0/7 | Not started | - |
+| 4. Chunk Decomposition | 1/7 | In progress | - |
 | 5. Prompt Slim | 0/TBD | Not started | - |
