@@ -2,8 +2,8 @@
 phase: 5
 slug: prompt-slim
 status: draft
-nyquist_compliant: false
-wave_0_complete: false
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-04-22
 ---
 
@@ -89,11 +89,11 @@ created: 2026-04-22
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references (scripts/, fixtures/, canary stub, lint stub)
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 2s fast mode / < 15s full mode
-- [ ] `nyquist_compliant: true` set in frontmatter after Wave 0 complete and Per-Task map rows validated
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (scripts/, fixtures/, canary stub, lint stub)
+- [x] No watch-mode flags
+- [x] Feedback latency < 2s fast mode / < 15s full mode
+- [x] `nyquist_compliant: true` set in frontmatter after Wave 0 complete and Per-Task map rows validated
 
-**Approval:** pending
+**Approval:** approved 2026-04-22
