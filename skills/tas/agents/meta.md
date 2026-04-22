@@ -276,9 +276,13 @@ touch {WORKSPACE}/lessons.md  # if not exists
 1. **Persist plan.json** (canonical JSON, immutable after this write):
 
    Compose the plan dict from the Classify output: `request`, `request_type`,
-   `complexity`, `steps`, `loop_count`, `loop_policy`, `implementation_chunks: null`
-   (Phase 4 reserved slot — always `null` in Phase 1), `project_domain`,
-   `focus_angle: null`, `approved_at: <ISO 8601 UTC>`.
+   `complexity`, `steps`, `loop_count`, `loop_policy`, `implementation_chunks`
+   (value as produced by Classify Phase 2c — either `null` when no decomposition
+   was triggered, OR the 6-field array `[{id, title, scope, pass_criteria,
+   dependencies_from_prev_chunks, expected_files}]` when a complex
+   implement/refactor request produced vertical-layer decomposition — see
+   Classify Phase 2c above), `project_domain`, `focus_angle: null`,
+   `approved_at: <ISO 8601 UTC>`.
 
    ```
    Bash({
@@ -312,8 +316,12 @@ touch {WORKSPACE}/lessons.md  # if not exists
    - `plan_hash`: `"{PLAN_HASH}"`
    - `current_step`: ID of the first step to execute (from `PLAN.steps[0].id`)
    - `completed_steps`: `[]`
-   - `current_chunk`: `null` (Phase 4 reserved slot — CONTEXT D-03)
-   - `completed_chunks`: `[]` (Phase 4 reserved slot — CONTEXT D-03)
+   - `current_chunk`: `null` (initial write — no chunk has started; populated by
+     Phase 2d.5 Chunk Sub-loop during chunked-step execution; resets to `null`
+     when that step completes)
+   - `completed_chunks`: `[]` (initial write — empty; populated by Phase 2d.5
+     as each chunk cherry-pick merge succeeds; resets to `[]` when the step
+     completes — iteration-scoped per CONTEXT D-08)
    - `status`: `"running"`
    - `updated_at`: `<ISO 8601 UTC, microsecond precision, +00:00 suffix>`
 
@@ -685,8 +693,16 @@ For each step, build the config the Python engine consumes.
      - `current_step`: ID of the next step in this iteration's subset, or `null`
        if `{S.id}` was the last step of the final iteration
      - `completed_steps`: `<prior completed_steps[]> + ["{S.id}"]`
-     - `current_chunk`: `null` (Phase 1 always `null`)
-     - `completed_chunks`: `[]` (Phase 1 always `[]`)
+     - `current_chunk`: within a chunked 구현 step, set to the in-progress
+       chunk id (string); otherwise `null` (at step boundaries — when the step
+       itself completes, reset to `null` because all chunks have merged).
+       See Phase 2d.5 Chunk Sub-loop for chunk-aware writes during step execution.
+     - `completed_chunks`: within a chunked 구현 step, the ordered list of
+       successfully-merged chunk ids (e.g. `["1","2"]` when chunk 3 is in progress);
+       otherwise `[]` (reset on step boundary and at new iteration start per
+       CONTEXT D-08). Chunk-field values are advisory/forensic — they are
+       NOT a resume trust source (Phase 2 D-06 `chunk_resume_not_supported_in_m1`
+       HALT gates mid-chunk resume).
      - `status`: `"running"` (use `"halted"` + `halt_reason` on the HALT path —
        see Within-Iteration FAIL Handling below; `"finalized"` is set by Phase 3
        Final Aggregate)
