@@ -1,0 +1,15 @@
+{
+  "_meta": {
+    "sub_canary": "a",
+    "description": "Trivial classify structural baseline (pre-slim meta.md)",
+    "captured_at": "2026-04-22",
+    "captured_from": "skills/tas/agents/meta.md @2f3ad87e46deeecb29ec240b4bdad7eaacc4e235"
+  },
+  "fixture_request": "fix typo 'conts' → 'const' on line 5 of src/foo.ts",
+  "structural_fields": {
+    "complexity": "simple",
+    "steps_count": 1,
+    "steps_names_ordered": ["구현"],
+    "implementation_chunks_is_null": true
+  }
+}

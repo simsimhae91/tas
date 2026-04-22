@@ -1,0 +1,17 @@
+{
+  "_meta": {
+    "sub_canary": "c",
+    "description": "Full execute structural baseline (pre-slim meta.md, deterministic mock ACCEPT path, 1-step plan)",
+    "captured_at": "2026-04-22",
+    "captured_from": "skills/tas/agents/meta.md @2f3ad87e46deeecb29ec240b4bdad7eaacc4e235"
+  },
+  "fixture_request": "execute a pre-generated 1-step plan with a deterministic mock dialectic reaching ACCEPT on round 1",
+  "structural_fields": {
+    "status": "completed",
+    "iterations": 1,
+    "rounds_total": 1,
+    "engine_invocations": 1,
+    "execution_mode": "pingpong",
+    "references_read_structure": []
+  }
+}
