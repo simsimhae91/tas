@@ -75,6 +75,17 @@ removes `exec` from both Layer B branches; Phase 3.1 Plan 07 installs a static
 regression guard (`grep -c "^[[:space:]]*exec " skills/tas/runtime/run-dialectic.sh`
 must output `0`).
 
+## Sub-loop invocations (Phase 4)
+
+The Standard invocation pattern above applies **unchanged** when MetaAgent Execute Phase 2d.5 (chunk sub-loop) invokes the engine per chunk. For each chunk `c` in the chunked 구현 step, MetaAgent substitutes the following variables and reuses the spawn + poll + classify contract verbatim:
+
+- `LOG_DIR` → `${CHUNK_LOG_DIR}` (e.g., `iteration-{N}/logs/step-{S.id}-implement-chunk-{c.id}/`)
+- `step-config.json.project_root` → `${CHUNK_PATH}` (the detached worktree path, `$(cd ${WORKSPACE} && pwd)/chunks/chunk-{c.id}`)
+- `description:` field → mention the chunk id, e.g., `"Spawn dialectic engine for step ${S.id} chunk ${c.id}"`
+- `step_id` attestation label → `${S.id}-chunk-${c.id}` (uniqueness for the final `engine_invocations` total)
+
+All three load-bearing elements (`nohup` + `&` + `echo $!`) + `run_in_background: false` + EXIT-trap invariant (no `exec` in `run-dialectic.sh`) remain non-negotiable PER chunk invocation — the per-chunk call is the same Scenario B contract, not a lighter-weight variant. Each chunk counts toward `engine_invocations` in the final attestation JSON independently (meta.md Phase 5 synthesis). The dialectic engine itself is chunk-agnostic — it only sees `project_root` (= CHUNK_PATH) and treats the chunk worktree like any other project root. Failure classification (§Failure classification below) applies per chunk; see `agents/meta.md` Phase 2d.5 for chunk-level HALT propagation (including the two Phase 4 halt_reason enums `chunk_merge_conflict` and `worktree_backlog` — these are MetaAgent-synthesized post-dialectic and are NOT engine-emitted, so they do not appear in the classification table below).
+
 ## Return metadata schema
 
 ### Internal envelope (MetaAgent-owned, not exposed to MainOrchestrator)
