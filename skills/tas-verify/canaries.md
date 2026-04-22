@@ -360,24 +360,78 @@ TAS_VERIFY_CHUNK_MODE=full python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/
 
 ## Canary #9 — Prompt Slim Behavioral Diff (SLIM-04)
 
-**STATUS:** Wave 0 scaffolding — PENDING full contract in Plan 05-05 (Wave 4). Harness: `skills/tas/runtime/tests/simulate_prompt_slim_diff.py` (stdlib-only stub, exits 0 with skip message).
+**STATUS:** Wave 4 complete — Phase 5 shipped. Harness: `skills/tas/runtime/tests/simulate_prompt_slim_diff.py` (stdlib-only, 3 sub-canary, deterministic mock).
 
-**Guards:** [PENDING Wave 4] — `.planning/phases/05-prompt-slim/05-CONTEXT.md` D-05 locks the 3-sub-canary contract (trivial classify / chunked classify / full execute); baselines committed in `skills/tas-verify/fixtures/canary-9-baseline-{a,b,c}.json`.
+**Guards:** `.planning/phases/05-prompt-slim/05-CONTEXT.md` D-05; SLIM-04; meta.md → meta-classify.md / meta-execute.md split behavioral invariance. Catches regressions where:
+- Classify Mode Phase 2 heuristic (complexity / steps / step names) drifts after split (sub-canary a)
+- Classify Mode Phase 2c `implementation_chunks[]` 6-field schema or dependency structure drifts after split (sub-canary b)
+- Execute Mode Phase 3 Final Aggregate (iterations / rounds_total / engine_invocations) or Phase 5 JSON Response (status / execution_mode / references_read) drifts after split (sub-canary c)
+- Mode-bound Reference Load (added in Plan 05-03) fails to populate `references_read` at Read-time (sub-canary c Assertion 6, Pitfall 5)
+- Baseline fixtures are deleted or corrupted (Assertion 9)
 
-**Exercise:** [PENDING Wave 4]
+**Exercise:** Three independent sub-canaries each diff a deterministic pure-Python mock MetaAgent output against a committed baseline JSON in `skills/tas-verify/fixtures/canary-9-baseline-{a,b,c}.json`. Baselines were captured pre-slim in Plan 05-02 against the unsplit meta.md (see each baseline's `_meta.captured_from` for the pre-split git SHA). Baselines are **immutable references** — do not regenerate unless intentionally changing the behavioral contract (reviewed in PR).
 
 ```bash
+# Default fast mode (~1s; all 3 sub-canaries, shallow + Assertion 6 references_read check)
 python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_prompt_slim_diff.py"
+
+# Explicit fast mode
 TAS_VERIFY_SLIM_MODE=fast python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_prompt_slim_diff.py"
+
+# Full mode (~2-3s; fast-mode assertions + deeper aggregate check on sub-canary c)
 TAS_VERIFY_SLIM_MODE=full python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_prompt_slim_diff.py"
 ```
 
-**Pass criteria:** [PENDING Wave 4]
+**Pass criteria (sub-canary a — trivial classify, fixture: typo fix):**
+- **Assertion 1**: `complexity` matches baseline-a (expected `"simple"`)
+- **Assertion 2**: `len(steps)` matches baseline-a `steps_count` (expected `1`)
+- **Assertion 3**: `[s["name"] for s in steps]` matches baseline-a `steps_names_ordered` (expected `["구현"]`)
+- **Assertion 4**: `implementation_chunks is None` matches baseline-a `implementation_chunks_is_null` (expected `True`)
 
-**Fail signals:** [PENDING Wave 4]
+**Pass criteria (sub-canary b — chunked classify, fixture: 3-layer auth):**
+- **Assertion 1**: `complexity` matches baseline-b (expected `"complex"`)
+- **Assertion 2**: `len(implementation_chunks)` matches baseline-b `implementation_chunks_count` (expected `3`)
+- **Assertion 3**: `[c["id"] for c in chunks]` matches baseline-b `implementation_chunks_ids_ordered` (expected `["1", "2", "3"]`)
+- **Assertion 4**: `[c["dependencies_from_prev_chunks"] for c in chunks]` matches baseline-b `implementation_chunks_deps_structure` (expected `[[], ["1"], ["1", "2"]]`)
+
+**Pass criteria (sub-canary c — full execute, fixture: 1-step deterministic ACCEPT):**
+- **Assertion 1**: `status` matches baseline-c (expected `"completed"`)
+- **Assertion 2**: `iterations` matches baseline-c (expected `1`)
+- **Assertion 3**: `rounds_total` matches baseline-c (expected `1`)
+- **Assertion 4**: `engine_invocations` matches baseline-c (expected `1`)
+- **Assertion 5**: `execution_mode` matches baseline-c (expected `"pingpong"`)
+- **Assertion 6**: post-slim `references_read` contains a path ending with `/meta-execute.md` (baseline-c was captured pre-slim with `references_read_structure: []`; post-slim must populate per Pitfall 5 Read-time append rule — this is the asymmetric check per D-05)
+
+**Pass criteria (fail-loud on missing baseline):**
+- **Assertion 9**: Removing `skills/tas-verify/fixtures/canary-9-baseline-{a,b,c}.json` causes exit 1 with stderr `FAIL: baseline missing — <path>` and guidance on how to recover
+
+**PASS stdout:**
+- Fast mode: `PASS: canary #9 (prompt slim behavioral diff; a=PASS, b=PASS, c=PASS; mode=fast; PASS)`
+- Full mode: `PASS: canary #9 (prompt slim behavioral diff; a=PASS, b=PASS, c=PASS; mode=full; PASS+PASS)`
+
+**Fail signals:**
+
+| FAIL prefix | Regression class | Fix pointer |
+|-------------|------------------|-------------|
+| `FAIL: sub-canary a complexity:` | Classify Mode Phase 2 Complexity Heuristic drifted | meta-classify.md §Phase 2 Classification — restore complexity rule for "fix" request_type |
+| `FAIL: sub-canary a steps_names_ordered:` | Phase 2 Step Template Selection produces different names | meta-classify.md §Phase 2 — restore 구현 / 기획 labels |
+| `FAIL: sub-canary a implementation_chunks_is_null:` | Trivial request produces non-null chunks (over-chunking regression) | meta-classify.md §Phase 2c — verify chunk sizing trigger heuristic |
+| `FAIL: sub-canary b implementation_chunks_count:` | Phase 2c chunk count wrong for 3-layer fixture | meta-classify.md §Phase 2c — restore vertical-layer slicing |
+| `FAIL: sub-canary b implementation_chunks_ids_ordered:` | chunk id sequencing changed | meta-classify.md §Phase 2c CHUNK-02 6-field schema |
+| `FAIL: sub-canary b implementation_chunks_deps_structure:` | sequential relay dependency rule drifted (CHUNK-04) | meta-classify.md §Phase 2c — restore deps: chunk_N depends on chunks_1..N-1 |
+| `FAIL: sub-canary c engine_invocations:` | Execute Mode engine counting changed (SSOT-1 surface regression detectable via behavioral diff before SSOT-1 grep fires) | meta.md §Final JSON Contract + meta-execute.md §Phase 5 JSON Response |
+| `FAIL: sub-canary c iterations:` / `rounds_total:` | Phase 3 Final Aggregate tally rule changed | meta-execute.md §Phase 3 Final Aggregate |
+| `FAIL: sub-canary c references_read:` / `post-slim array is empty` | Mode-bound Reference Load (meta.md Plan 05-03) not populating references_read at Read-time | meta.md §Mode-bound Reference Load + meta-{classify,execute}.md Phase 1 Attestation first step |
+| `FAIL: baseline missing` | Baseline JSON deleted / moved | `git checkout HEAD -- skills/tas-verify/fixtures/canary-9-baseline-*.json` |
 
 **Integration with other canaries:**
-- Canary #7/#8 guard topology + chunk sub-loop; Canary #9 guards prompt slim behavioral invariance. Failure of #9 does NOT imply #7/#8 are compromised — they exercise different invariants.
+- Canary #4 guards info-hiding (SKILL.md does not read agent/dialectic artifact files). Preserved across Phase 5 (Plan 05-03 SKILL.md edit did not leak filenames into Agent() prompts).
+- Canary #5/#6 guard watchdog topology (Phase 3 Layer A / B). Unaffected by Phase 5 (runtime code unchanged per D-08).
+- Canary #7 guards subagent orphan survival + real-chain integration (Phase 3.1 Scenario B). Unaffected by Phase 5 (run-dialectic.sh + meta-execute.md Phase 2d nohup spawn preserved).
+- Canary #8 guards chunk sub-loop wiring (Phase 4 CHUNK-01..07). Unaffected by Phase 5 (meta-execute.md Phase 2d.5 preserved byte-identical across Wave 1 split).
+- **Canary #9 guards prompt slim behavioral invariance** (this canary) — Phase 5 extract faithfulness across split.
+- **SSOT-1/2/3 lint** (co-located in this file §SSOT Invariants) guards structural single-source of engine_invocations / convergence verdict / references_read normative definitions.
+- Canary #9 + SSOT lint are complementary: #9 catches behavior drift regardless of where sentences live; SSOT lint catches duplication regardless of whether behavior is preserved. Both must pass for Phase 5 close.
 
 ---
 
