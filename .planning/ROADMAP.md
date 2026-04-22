@@ -105,7 +105,7 @@ Plans:
 - [x] 04-03-PLAN.md — SKILL.md Display Plan chunks UX + Handle User Response Adjust chunks row (CHUNK-02 UX)
 - [x] 04-04-PLAN.md — meta.md Execute Phase 2d.5 Chunk Sub-loop + step 9.5 chunk payload + Within-Iter FAIL chunk branch (CHUNK-03, CHUNK-04, CHUNK-05, CHUNK-06, CHUNK-07)
 - [x] 04-05-PLAN.md — meta.md Synthesis Context injection + SKILL.md halt_reason tables chunk_merge_conflict + worktree_backlog rows (CHUNK-06, CHUNK-05, CHUNK-07)
-- [ ] 04-06-PLAN.md — workspace-convention.md chunks/ + Chunk Merge Workflow + engine-invocation-protocol.md Sub-loop invocations + CLAUDE.md 2 Phase 4 bullets (CHUNK-03, CHUNK-04, CHUNK-05, CHUNK-06, CHUNK-07)
+- [x] 04-06-PLAN.md — workspace-convention.md chunks/ + Chunk Merge Workflow + engine-invocation-protocol.md Sub-loop invocations + CLAUDE.md 2 Phase 4 bullets (CHUNK-03, CHUNK-04, CHUNK-05, CHUNK-06, CHUNK-07)
 - [ ] 04-07-PLAN.md — Canary #8 full 2-Phase implementation + canaries.md contract + 14-invariant regression suite (VERIFY-01 c)
 
 ### Phase 5: Prompt Slim
@@ -131,5 +131,5 @@ Phase 1 → (Phase 2 ∥ Phase 3 병행 가능) → Phase 3.1 (Phase 3 완료 �
 | 2. Resume Entry | 0/TBD | Not started | - |
 | 3. 2-Layer Hang Watchdog | 7/7 | Complete | 2026-04-21 |
 | 3.1 Engine Invocation Topology Refactor | 7/7 | Complete | 2026-04-21 |
-| 4. Chunk Decomposition | 4/7 | In progress | - |
+| 4. Chunk Decomposition | 6/7 | In progress | - |
 | 5. Prompt Slim | 0/TBD | Not started | - |
