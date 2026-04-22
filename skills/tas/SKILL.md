@@ -613,6 +613,8 @@ Extract `{timestamp}` from the workspace path (`YYYYmmdd_HHMMSS`).
 | `sdk_session_hang`     | SDK session hang (SDK 세션 무응답) |
 | `step_transition_hang` | Step transition hang (스텝 전환 중 무응답) |
 | `bash_wrapper_kill`    | Watchdog forced termination (워치독 강제 종료) |
+| `chunk_merge_conflict` | Chunk merge conflict (Chunk 머지 충돌) |
+| `worktree_backlog`     | Worktree backlog (worktree 누적 — 환경 정리 필요) |
 | (other) | Use `halt_reason` as-is |
 
 #### HALT Display
@@ -647,6 +649,8 @@ Blockers (from lessons.md):
 | `sdk_session_hang`     | "SDK 응답이 없어 엔진이 중단됐습니다. `/tas --resume`으로 재시도하거나, 긴 step이면 `TAS_WATCHDOG_TIMEOUT_SEC`을 늘리세요." |
 | `step_transition_hang` | "엔진이 결과 없이 종료됐습니다. `/tas --resume`으로 재시도하세요. 반복되면 `/tas-workspace`로 로그를 확인하세요." |
 | `bash_wrapper_kill`    | "Watchdog이 설정된 시간 내 응답 부재로 프로세스를 종료했습니다. 긴 step이면 `TAS_WATCHDOG_TIMEOUT_SEC`을 늘린 후 `/tas --resume`으로 재시도하세요." |
+| `chunk_merge_conflict` | "Chunk 머지 충돌: cherry-pick + git apply 모두 실패했습니다. 공유 파일을 여러 chunk가 동시에 수정했을 가능성이 큽니다. `plan.json`의 `implementation_chunks`를 재검토하거나 `chunks: 1` 로 override하여 `/tas`로 새로 시작하세요. `merge.log`는 `{workspace}/iteration-*/logs/step-*-implement-chunk-*/merge.log` 에서 확인. 이 경로에서는 `/tas --resume`이 지원되지 않습니다 (mid-chunk resume은 M1 범위 외)." |
+| `worktree_backlog`     | "git worktree 엔트리가 10개 이상 누적되어 sub-loop 진입이 차단됐습니다. `git worktree prune` 으로 stale 메타데이터를 정리하거나, `/tas-workspace clean` 으로 workspace 정리 후 다시 시도하세요. 이 halt는 환경 정리 신호일 뿐 chunk 실행 실패가 아닙니다." |
 | (other) | "Check lessons.md for details." |
 
 All HALT messages end with:
