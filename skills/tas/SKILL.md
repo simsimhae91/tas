@@ -377,11 +377,17 @@ Or for trivial requests that reached Classify:
   if loop_count > 1:
     "· Each pass refines from a different angle · Reentry: from {reentry_point} · Lessons carry forward"
   "· Auto-stop: halts if same issue recurs {persistent_failure_halt_after} consecutive times\n\n{reasoning}"
+  if implementation_chunks != null AND len(implementation_chunks) > 0:
+    "\n\n**구현은 {len(implementation_chunks)}개 chunk로 순차 실행됩니다:**\n"
+    for c in implementation_chunks:
+      "  [{c.id}] {c.title}" + (" (의존: " + ", ".join(c.dependencies_from_prev_chunks) + ")" if non-empty else "") + "\n"
+    "\n  override: `chunks: 1` (단일 실행) / `chunks: 2` (병합) / `chunks: N` (다른 개수로 재분해)"
 }
 
 Approve or modify (승인 또는 수정). Examples:
   "approve" / "3 iterations" / "skip 테스트" / "reenter from 기획"
   "focus on performance" / "add security check after 검증" / "modify 검증 criteria"
+  "chunks: 1" (chunks 분해 취소) / "chunks: 2" (chunks 병합)
 
 > Tip: `/tas-review` (standalone review), `/tas-explain` (inspect past runs), `/tas-workspace` (manage workspaces)
 ```
@@ -399,6 +405,7 @@ For any modification, show changelog (`{field}: {old} → {new}`) then re-displa
 | **Remove step** | "skip 테스트", "기획 생략" | Remove step, re-number IDs |
 | **Add step** | "add security check after 검증" | Insert after anchor step; ask for pass criteria (default: `["Goal achieved"]`) |
 | **Set focus** | "focus on performance", "보안 중심으로" | Add `focus_angle` to plan root |
+| **Adjust chunks** | `"chunks: 1"`, `"chunks: 2"`, `"chunks 분해 취소"`, `"chunk 분할 없이"` | Update `plan.implementation_chunks` in-place (integer → MetaAgent re-reasons N-chunk split; `1` or "분해 취소" → set to `null`). Re-hash `plan_hash` via existing plan-adjust routing. If override conflicts with D-01 trigger (e.g., user requests `chunks: 7` > cap 5), show changelog noting cap enforcement. |
 | **Multiple mods** | (several at once) | Apply all, re-display once |
 | **Major restructure** | (fundamental plan change) | Re-invoke Classify with hint |
 | **Reject** | "no", "cancel", "거부" | Done |
