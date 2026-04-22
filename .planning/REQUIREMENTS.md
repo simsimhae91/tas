@@ -112,9 +112,9 @@
 | CHUNK-02 | Phase 4 (Chunk Decomposition) | Complete (Plan 04-02 schema + Plan 04-03 SKILL.md chunks UX + Adjust chunks override) |
 | CHUNK-03 | Phase 4 (Chunk Decomposition) | Complete (Plan 04-04 Phase 2d.5 worktree add --detach + chunk-ID path resolution + pre-flight prune ritual) |
 | CHUNK-04 | Phase 4 (Chunk Decomposition) | Complete (Plan 04-04 cumulative_chunk_context sequential relay + prior-chunk-summary injection into next chunk's step_assignment) |
-| CHUNK-05 | Phase 4 (Chunk Decomposition) | Complete (Plan 04-04 cherry-pick primary + git apply --index --binary fallback + PRE_MERGE_SHA rollback + chunk_merge_conflict HALT) |
-| CHUNK-06 | Phase 4 (Chunk Decomposition) | Complete (Plan 04-04 verify/test remain single-dialectic outside Phase 2d.5; sub-loop activates only for S.name == 구현 with implementation_chunks non-null) |
-| CHUNK-07 | Phase 4 (Chunk Decomposition) | Complete (Plan 04-04 Phase 2d.5 FAIL branch inline cleanup + HALT propagate + checkpoint write with current_chunk/completed_chunks forensic fields + NO re-chunking / NO within-iter retry) |
+| CHUNK-05 | Phase 4 (Chunk Decomposition) | Complete (Plan 04-04 cherry-pick primary + git apply --index --binary fallback + PRE_MERGE_SHA rollback + chunk_merge_conflict HALT execution layer; Plan 04-05 SKILL.md Labels row + Recovery Guidance Korean message with D-08 `/tas --resume` prohibition + merge.log forensic path + plan.json re-review/chunks:1 override UX layer) |
+| CHUNK-06 | Phase 4 (Chunk Decomposition) | Complete (Plan 04-04 verify/test remain single-dialectic outside Phase 2d.5; sub-loop activates only for S.name == 구현 with implementation_chunks non-null; Plan 04-05 meta.md Prepare Dialectic Config step 4 Synthesis Context injection with 4 focus items [Public API / Shared file / Value flow / Regression] + Not to be re-audited boundary — antithesis.md UNCHANGED per D-07 Phase 5 slim protection) |
+| CHUNK-07 | Phase 4 (Chunk Decomposition) | Complete (Plan 04-04 Phase 2d.5 FAIL branch inline cleanup + HALT propagate + checkpoint write with current_chunk/completed_chunks forensic fields + NO re-chunking / NO within-iter retry execution layer; Plan 04-05 SKILL.md worktree_backlog Labels row + Recovery Guidance Korean message routing `git worktree prune` + `/tas-workspace clean` with environment-cleanup-signal clarification UX layer) |
 | SLIM-01 | Phase 5 (Prompt Slim) | Pending |
 | SLIM-02 | Phase 5 (Prompt Slim) | Pending |
 | SLIM-03 | Phase 5 (Prompt Slim) | Pending |
