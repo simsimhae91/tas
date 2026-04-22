@@ -513,6 +513,46 @@ For each step, build the config the Python engine consumes.
    {blockers/failures from the previous failed check, otherwise omit}
    ```
 
+   **Synthesis Context injection (Phase 4 — integrated verify/test after chunked 구현)**
+
+   When `S.name in {"검증", "테스트"}` AND `cumulative_chunk_context` is non-empty (implying the prior 구현 step was chunked and relayed per Phase 2d.5), **prepend** the following Synthesis Context section to `step_assignment` BEFORE the standard step goal / pass_criteria content. This ensures the integrated verify/test dialectic evaluates the **merged PROJECT_ROOT state** as a whole — not as chunk-N-biased — and surfaces synthesis-boundary regressions that chunk-level verify would miss (Pitfall 15).
+
+   Template (build the chunk plan + deliverable-path list from `plan.implementation_chunks`):
+
+   ```
+   ## Synthesis Context (구현 step was chunked — 본 검증은 머지된 통합 상태 대상)
+
+   **Chunk plan**:
+     [{c1.id}] {c1.title}
+     [{c2.id}] {c2.title} (depends on: {c2.dependencies_from_prev_chunks})
+     ...
+     [{cN.id}] {cN.title} (depends on: {cN.dependencies_from_prev_chunks})
+
+   **Each chunk deliverable** (Read if needed — not inlined here to preserve context budget):
+     - {ITER_DIR}/logs/step-{S_impl.id}-implement-chunk-{c1.id}/deliverable.md
+     - {ITER_DIR}/logs/step-{S_impl.id}-implement-chunk-{c2.id}/deliverable.md
+     - ...
+     - {ITER_DIR}/logs/step-{S_impl.id}-implement-chunk-{cN.id}/deliverable.md
+
+   **Synthesis focus** (이 verify/test 는 다음 4가지를 중점 검증):
+     1. Public API / contracts at chunk boundaries — chunk N과 chunk N+1 간 시그니처 일치 여부
+     2. Shared file final state — 여러 chunk가 건드린 파일의 최종 상태가 각 chunk 의도와 합치하는지
+     3. Value flow integrity — 데이터가 chunk 1 → chunk 2 → … → chunk N을 거쳐 흐를 때 경계에서 변질되지 않았는지
+     4. Regression — 후속 chunk가 초기 chunk의 기능을 깨뜨리지 않았는지 (chunk 1 초기 의도 vs 최종 상태 대조)
+
+   **Not to be re-audited** (이미 chunk별 dialectic으로 검증 완료 — 중복 검증 금지):
+     - 각 chunk 내부 구현 품질 (chunk 1 thesis의 로컬 로직, chunk 2 thesis의 변수 명명 등)
+     - chunk별 내부 코드 스타일 · 컨벤션 일관성
+   ```
+
+   **Ownership + scope**:
+   - `agents/antithesis.md` template is **UNCHANGED** — Synthesis focus is delivered via `step_context` (per-step injection), not via template edits. This preserves the Phase 5 Prompt Slim objective (meta-file token budget < 5,500).
+   - `cumulative_chunk_context` itself (the ≤ 50KB in-memory relay from Phase 2d.5) is appended separately AFTER the Synthesis Context block if present, so the verify/test dialectic sees the structured focus first, then the per-chunk summary content.
+   - When 구현 step was NOT chunked (`plan.implementation_chunks == null` OR the step was never chunked in this iteration), the Synthesis Context block is NOT injected — verify/test runs exactly as before Phase 4.
+   - For `S.name == "테스트"` on web-frontend domain, the existing Playwright CLI directive (if present in the current file) remains in effect; Synthesis Context prepends it.
+
+   **Injection happens once per integrated verify/test step** — subsequent retries within the same iteration reuse the same Synthesis Context (it does not change between retry-0 and retry-N of the same step).
+
 5. **Testing-specific context injection** (테스트 step only):
 
    If `project_domain` in `["web-frontend"]`:
