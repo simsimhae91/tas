@@ -16,6 +16,12 @@ any steps — it produces a plan that MainOrchestrator presents to the user for 
 
 ## Phase 1: Project Context Scan (lightweight)
 
+**Attestation first step (SLIM-02):** If you have not already appended
+`"${SKILL_DIR}/references/meta-classify.md"` to your in-memory `references_read` list
+(per `${SKILL_DIR}/agents/meta.md` §Mode-bound Reference Load), do so now. This is the
+first actionable step of Classify Mode; attestation must be self-enforced at Read-time
+so it is populated even if execution halts before Phase 4 Output.
+
 If `PROJECT_ROOT` is provided, briefly scan for project indicators — do NOT deep-dive:
 
 - Package files: `package.json`, `Cargo.toml`, `go.mod`, `pyproject.toml`, `Gemfile`

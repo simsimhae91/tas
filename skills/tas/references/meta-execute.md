@@ -19,6 +19,13 @@ iterations. After the loop, write the cross-iteration synthesis to `{WORKSPACE}/
 
 ## Phase 1: Initialize
 
+**Attestation first step (SLIM-02):** If you have not already appended
+`"${SKILL_DIR}/references/meta-execute.md"` to your in-memory `references_read` list
+(per `${SKILL_DIR}/agents/meta.md` §Mode-bound Reference Load), do so now. This is the
+first actionable step of Execute Mode (applies to both `MODE: new` and `MODE: resume`);
+attestation must be self-enforced at Read-time so it is populated even if execution
+halts before Phase 5 JSON Response.
+
 ```bash
 mkdir -p {WORKSPACE}
 touch {WORKSPACE}/lessons.md  # if not exists

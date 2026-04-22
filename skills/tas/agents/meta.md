@@ -93,6 +93,22 @@ You receive your assignment as the Agent prompt. Parse these fields:
 - **`COMMAND` absent AND `MODE` absent** → Execute Mode, new run (requires WORKSPACE, PLAN)
 - **`COMMAND` absent AND `MODE: resume`** → Execute Mode, resume path (requires WORKSPACE, PLAN, RESUME_FROM, COMPLETED_STEPS, PLAN_HASH)
 
+### Mode-bound Reference Load
+
+After determining MODE (above), load the mode-specific instructions and record the load in your in-memory `references_read` list (which is emitted in the Final JSON Contract below).
+
+**If `MODE == classify`:**
+1. `Read("${SKILL_DIR}/references/meta-classify.md")`
+2. Append `"${SKILL_DIR}/references/meta-classify.md"` to your in-memory `references_read` list.
+3. Follow the instructions in that file end-to-end.
+
+**If `MODE == execute` (new run or resume):**
+1. `Read("${SKILL_DIR}/references/meta-execute.md")`
+2. Append `"${SKILL_DIR}/references/meta-execute.md"` to your in-memory `references_read` list.
+3. Follow the instructions in that file end-to-end.
+
+The append in step 2 MUST happen at Read-time (immediately after the Read() call completes), not at Final JSON emission. This guarantees the attestation is populated even on halted paths.
+
 ---
 
 ## Convergence Model
@@ -132,4 +148,71 @@ MetaAgent-level cases:
 Engine-internal degeneration (rate-limit, unparseable verdicts, dialogue
 degeneration) is detected by `dialectic.py` and surfaces as a HALT verdict —
 record as `halted` and proceed to Phase 2e.
+
+---
+
+## Final JSON Contract
+
+Every MetaAgent response — Classify Mode or Execute Mode, completed or halted — is a single JSON line on stdout. This section is the **canonical schema** for those responses. Fields defined here MUST NOT be redefined in `references/meta-classify.md` or `references/meta-execute.md`; those files MAY reference this section but MAY NOT restate field semantics.
+
+### Classify Mode response
+
+```json
+{
+  "command": "classify",
+  "mode": "quick",
+  "request_type": "...",
+  "complexity": "simple|medium|complex",
+  "steps": [...],
+  "implementation_chunks": [...] | null,
+  "loop_count": N,
+  "loop_policy": {...},
+  "workspace": "...",
+  "reasoning": "...",
+  "project_domain": "...",
+  "references_read": ["${SKILL_DIR}/references/meta-classify.md"]
+}
+```
+
+### Execute Mode response — `status: completed`
+
+```json
+{
+  "status": "completed",
+  "workspace": "{WORKSPACE}",
+  "summary": "{1-2 sentence}",
+  "iterations": N,
+  "early_exit": bool,
+  "rounds_total": N,
+  "engine_invocations": N,
+  "execution_mode": "pingpong",
+  "references_read": ["${SKILL_DIR}/references/meta-execute.md"]
+}
+```
+
+### Execute Mode response — `status: halted`
+
+```json
+{
+  "status": "halted",
+  "workspace": "{WORKSPACE}",
+  "summary": "{1-2 sentence, user-facing failure summary}",
+  "halt_reason": "<enum>",
+  "halted_at": "<ISO 8601 timestamp>",
+  "iterations": N,
+  "rounds_total": N,
+  "execution_mode": "pingpong",
+  "references_read": ["${SKILL_DIR}/references/meta-execute.md"]
+}
+```
+
+### Field definitions
+
+- The canonical **SSOT-1 normative sentence** (MUST appear verbatim in `${SKILL_DIR}/agents/meta.md` §Final JSON Contract §Field definitions and nowhere else in `skills/` — Plan 05-04 SSOT-1 lint enforces this):
+
+  > "engine_invocations" counts `bash run-dialectic.sh` calls made during this run (plan validation + per-step execution + within-iter retries + per-chunk invocations if Phase 2d.5 fired). For an M-step plan over K iterations with no retries and no chunks, the minimum value is M × K. A response with status: completed and engine_invocations: 0 signals a protocol violation — MainOrchestrator warns the user (see `${SKILL_DIR}/SKILL.md` §Phase 3 Validate Attestation).
+- `references_read: ["${SKILL_DIR}/references/meta-…"]` — array of reference file paths read via §Mode-bound Reference Load above. MetaAgent self-reports this at Read-time. MainOrchestrator (SKILL.md Phase 3) validates that the array contains a path suffix matching the invoked Mode (`/meta-classify.md` for classify calls, `/meta-execute.md` for execute calls). Mismatch or empty array → user-facing warning only (never a halt — the engine's actual work is authoritative; this field is prompt-slim drift detection, not an execution invariant).
+- `execution_mode` is the literal constant `"pingpong"` — no other values.
+- `halt_reason` values are drawn from the enum frozen in Phase 3.1 D-TOPO-05 + Phase 4 D-08. Phase 5 introduces NO new values (attestation failure is warning-only, not a halt enum).
+- `iterations` / `rounds_total` / `early_exit` / `loop_count` / `loop_policy` — see `${SKILL_DIR}/references/meta-execute.md` §Phase 3 Final Aggregate for their aggregation rules.
 
