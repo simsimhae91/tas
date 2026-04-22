@@ -61,7 +61,7 @@
 
 ### F. Verification
 
-- [~] **VERIFY-01** — `/tas-verify`에 M1 전용 canary를 추가한다: [x] (a) 의도적 stdout-stall을 유발하는 mock SDK로 Layer A watchdog 트립 검증 (Plan 03-07), [x] (b) MetaAgent step-transition hang 시뮬레이션으로 Layer B 트립 검증 (Plan 03-07), [~] (c) 2-chunk 시나리오의 머지+통합 verify 성공 검증 (Wave 0 PENDING stub landed Plan 04-01; Wave 5 body lands Plan 04-07)
+- [x] **VERIFY-01** — `/tas-verify`에 M1 전용 canary를 추가한다: [x] (a) 의도적 stdout-stall을 유발하는 mock SDK로 Layer A watchdog 트립 검증 (Plan 03-07), [x] (b) MetaAgent step-transition hang 시뮬레이션으로 Layer B 트립 검증 (Plan 03-07), [x] (c) 2-chunk 시나리오의 머지+통합 verify 성공 검증 — Canary #8 full 2-Phase body (5 Phase 1 + 4 Phase 2 assertions, stdlib-only) + canaries.md contract + 14-invariant regression suite (Plan 04-07)
 - [ ] **VERIFY-02** — `python3 dialectic.py --self-test`에 `checkpoint.json` 스키마 호환성 회귀 테스트를 추가한다
 
 ---
@@ -121,7 +121,7 @@
 | SLIM-04 | Phase 5 (Prompt Slim) | Pending |
 | VERIFY-01 (a) | Phase 3 (2-Layer Hang Watchdog) | Complete (Plan 03-07) |
 | VERIFY-01 (b) | Phase 3 (2-Layer Hang Watchdog) | Complete (Plan 03-07) |
-| VERIFY-01 (c) | Phase 4 (Chunk Decomposition) | In Progress (Plan 04-01 Wave 0 stub + canaries.md placeholder; Wave 5 Plan 04-07 fills body) |
+| VERIFY-01 (c) | Phase 4 (Chunk Decomposition) | Complete (Plan 04-07, Canary #8 full 2-Phase body 502 LOC stdlib-only: Phase 1 happy path 5 assertions [worktree add x 2 / chunk-N commits / cherry-pick x 2 / Synthesis Context injection / post-cleanup clean] + Phase 2 regression 4 assertions [Phase 1 under regression fixture / integrated verify FAIL / FAIL keyword regex / re-Classify structural guard]; canaries.md §Canary #8 header [PENDING] suffix removed + 4 PENDING markers replaced with 9-Assertion contract + 9-row Fail signals FAIL→regression mapping; 14-invariant Phase 4 regression suite 12/14 clean + 2 pre-existing-baseline observations documented; fast ~0.24s full ~0.35s both exit 0 with exact stdout match) |
 | VERIFY-02 | Phase 1 (Checkpoint Foundation) | Pending |
 | TOPO-01 | Phase 3.1 (Engine Invocation Topology Refactor) | Complete |
 | TOPO-02 | Phase 3.1 (Engine Invocation Topology Refactor) | Complete (Plan 03.1-04) |
