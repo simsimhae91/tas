@@ -383,11 +383,58 @@ TAS_VERIFY_SLIM_MODE=full python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/t
 
 ## SSOT Invariants (SLIM-03)
 
-**STATUS:** Wave 0 scaffolding — PENDING full implementation in Plan 05-04 (Wave 3). These 3 invariants ensure load-bearing normative sentences for `engine_invocations` schema / convergence verdict / `references_read` schema each appear in exactly 1 file — preventing drift between `meta.md` (dispatcher/SSOT) and `references/meta-*.md` (procedural bodies).
+**STATUS:** Wave 3 complete — Phase 5 shipped. These 3 bash grep invariants guarantee that each load-bearing normative sentence appears in exactly 1 file. Failure of any invariant indicates drift: a definition was copied into a reference file instead of being anchored in its single source-of-truth location.
 
-**Exercise:** [PENDING Wave 3] — bash grep block invoked by `/tas-verify`; each invariant `grep -rF` counts matches in `skills/` (excluding `_workspace/`) and fails non-zero if count != 1.
+**Guards:** `.planning/phases/05-prompt-slim/05-CONTEXT.md` D-03; Phase 4 D-12 14-invariant lint precedent extended for Phase 5 SSOT-1/2/3.
 
-**Pass criteria:** [PENDING Wave 3] — SSOT-1 (`engine_invocations` schema definition) + SSOT-2 (convergence verdict normative) + SSOT-3 (`references_read` attestation schema) each match exactly 1 file.
+**Exercise:** Run the following bash block from repo root. `/tas-verify` invokes it as part of the post-canary lint sweep.
+
+```bash
+# === SSOT Invariants (SLIM-03) — each pattern must match in exactly 1 file ===
+
+# SSOT-1: engine_invocations JSON schema definition (anchor in meta.md §Final JSON Contract)
+PATTERN_1='"engine_invocations" counts `bash run-dialectic.sh` calls'
+COUNT_1=$(grep -rFln -- "$PATTERN_1" skills/tas/ 2>/dev/null | grep -v "_workspace/" | wc -l | tr -d ' ')
+if [ "$COUNT_1" != "1" ]; then
+  echo "SSOT-1 FAIL: engine_invocations schema sentence matched in $COUNT_1 files (expected 1)" >&2
+  grep -rFln -- "$PATTERN_1" skills/tas/ 2>/dev/null | grep -v "_workspace/" >&2
+  exit 1
+fi
+
+# SSOT-2: convergence verdict normative definition (anchor in meta.md §Convergence Model OR meta-execute.md — SSOT chosen per D-03)
+PATTERN_2='^- `검증` uses \*\*inverted model\*\*'
+COUNT_2=$(grep -rn -E -- "$PATTERN_2" skills/tas/ 2>/dev/null | grep -v "_workspace/" | wc -l | tr -d ' ')
+if [ "$COUNT_2" != "1" ]; then
+  echo "SSOT-2 FAIL: convergence verdict normative sentence matched in $COUNT_2 places (expected 1)" >&2
+  grep -rn -E -- "$PATTERN_2" skills/tas/ 2>/dev/null | grep -v "_workspace/" >&2
+  exit 1
+fi
+
+# SSOT-3: references_read attestation schema (anchor in meta.md §Final JSON Contract)
+PATTERN_3='references_read: ["${SKILL_DIR}/references/meta-'
+COUNT_3=$(grep -rFln -- "$PATTERN_3" skills/tas/ 2>/dev/null | grep -v "_workspace/" | wc -l | tr -d ' ')
+if [ "$COUNT_3" != "1" ]; then
+  echo "SSOT-3 FAIL: references_read schema fragment matched in $COUNT_3 files (expected 1)" >&2
+  grep -rFln -- "$PATTERN_3" skills/tas/ 2>/dev/null | grep -v "_workspace/" >&2
+  exit 1
+fi
+
+echo "SSOT-1/2/3 PASS: all load-bearing contracts are single-source"
+```
+
+**Pass criteria (each invariant independently mandatory):**
+- **SSOT-1**: `grep -rFln` count of the engine_invocations schema sentence == 1 (anchor: `skills/tas/agents/meta.md` §Final JSON Contract)
+- **SSOT-2**: `grep -rn -E` count of the convergence verdict regex == 1 (anchor: single file, currently `skills/tas/references/meta-execute.md` per Wave 1 split; D-03 accepts either meta.md or meta-execute.md as the single location)
+- **SSOT-3**: `grep -rFln` count of the references_read schema fragment == 1 (anchor: `skills/tas/agents/meta.md` §Final JSON Contract)
+- All 3 PASS → block echoes `SSOT-1/2/3 PASS: all load-bearing contracts are single-source` with exit 0
+
+**Fail signals:**
+- **SSOT-1 FAIL** → `engine_invocations` definition was copied into `meta-classify.md` or `meta-execute.md` or SKILL.md. Remove the duplicate; replace with a pointer like "(See `${SKILL_DIR}/agents/meta.md` §Final JSON Contract.)"
+- **SSOT-2 FAIL** → `검증` inverted-model sentence was copied out of its single location (into meta.md or a second references file, for example). Return the sentence to a single anchor location; reword downstream usages as pointers.
+- **SSOT-3 FAIL** → `references_read: ["${SKILL_DIR}/references/meta-` JSON literal appears in a references file or SKILL.md. SKILL.md may mention the field conceptually but must NOT use this exact fragment (use a different quoting style — e.g., single-line inline JSON that does NOT match the literal pattern). References files must use prose pointers, never this JSON literal.
+
+**Integration with other canaries:**
+- Canary #9 guards behavioral invariance across the split; SSOT-1/2/3 guard structural uniqueness of load-bearing definitions — complementary. A split that changes Classify/Execute behavior but keeps single-source definitions passes Canary #9 (structural diff) but might still be a conceptual regression elsewhere; a split that keeps behavior identical but duplicates definitions passes Canary #9 but fails SSOT lint. Both must pass for Phase 5 close.
 
 ---
 
