@@ -358,6 +358,39 @@ TAS_VERIFY_CHUNK_MODE=full python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/
 
 ---
 
+## Canary #9 — Prompt Slim Behavioral Diff (SLIM-04)
+
+**STATUS:** Wave 0 scaffolding — PENDING full contract in Plan 05-05 (Wave 4). Harness: `skills/tas/runtime/tests/simulate_prompt_slim_diff.py` (stdlib-only stub, exits 0 with skip message).
+
+**Guards:** [PENDING Wave 4] — `.planning/phases/05-prompt-slim/05-CONTEXT.md` D-05 locks the 3-sub-canary contract (trivial classify / chunked classify / full execute); baselines committed in `skills/tas-verify/fixtures/canary-9-baseline-{a,b,c}.json`.
+
+**Exercise:** [PENDING Wave 4]
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_prompt_slim_diff.py"
+TAS_VERIFY_SLIM_MODE=fast python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_prompt_slim_diff.py"
+TAS_VERIFY_SLIM_MODE=full python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_prompt_slim_diff.py"
+```
+
+**Pass criteria:** [PENDING Wave 4]
+
+**Fail signals:** [PENDING Wave 4]
+
+**Integration with other canaries:**
+- Canary #7/#8 guard topology + chunk sub-loop; Canary #9 guards prompt slim behavioral invariance. Failure of #9 does NOT imply #7/#8 are compromised — they exercise different invariants.
+
+---
+
+## SSOT Invariants (SLIM-03)
+
+**STATUS:** Wave 0 scaffolding — PENDING full implementation in Plan 05-04 (Wave 3). These 3 invariants ensure load-bearing normative sentences for `engine_invocations` schema / convergence verdict / `references_read` schema each appear in exactly 1 file — preventing drift between `meta.md` (dispatcher/SSOT) and `references/meta-*.md` (procedural bodies).
+
+**Exercise:** [PENDING Wave 3] — bash grep block invoked by `/tas-verify`; each invariant `grep -rF` counts matches in `skills/` (excluding `_workspace/`) and fails non-zero if count != 1.
+
+**Pass criteria:** [PENDING Wave 3] — SSOT-1 (`engine_invocations` schema definition) + SSOT-2 (convergence verdict normative) + SSOT-3 (`references_read` attestation schema) each match exactly 1 file.
+
+---
+
 ## When to add a new canary
 
 Add one whenever:
