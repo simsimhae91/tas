@@ -17,6 +17,10 @@ _workspace/
       checkpoint.json                           ← step-boundary progress (atomic write, updated after each step)
       DELIVERABLE.md                            ← final cross-iteration synthesis
       lessons.md                                ← lessons learned, appended per iteration
+      chunks/                                   ← chunk worktrees (Phase 4; transient — git worktree-tracked, removed after merge)
+        chunk-1/                                ← detached HEAD worktree for chunk 1
+        chunk-2/
+        chunk-3/
       iteration-1/
         DELIVERABLE.md                          ← this iteration's synthesized output
         logs/
@@ -32,6 +36,15 @@ _workspace/
           step-1-plan-retry-1/                  ← within-iteration FAIL retry
             ...
           step-2-implement/
+          step-2-implement-chunk-1/             ← Phase 4: chunk-level dialectic log dir
+            thesis-system-prompt.md
+            antithesis-system-prompt.md
+            step-config.json                    ← project_root = {WORKSPACE}/chunks/chunk-1
+            round-*.md
+            deliverable.md                      ← chunk-level deliverable (feeds cumulative_chunk_context)
+            merge.log                           ← merge forensics (cherry-pick stderr + apply stderr on HALT)
+          step-2-implement-chunk-2/
+          step-2-implement-chunk-3/
           step-3-verify/
           step-4-test/
       iteration-2/                              ← only if loop_count > 1
@@ -62,6 +75,8 @@ Every run is timestamp-isolated. A run may be **resumed** via `/tas --resume` (P
 | Per-iteration deliverable | `iteration-{N}/DELIVERABLE.md` | (always exact) |
 | Lessons log | `lessons.md` | (always exact, at workspace root) |
 | Original request | `REQUEST.md` | (always exact) |
+| Chunk worktree | `{WORKSPACE}/chunks/chunk-{c.id}/` | `.../chunks/chunk-1/` |
+| Chunk log dir | `iteration-{N}/logs/step-{S.id}-implement-chunk-{c.id}/` | `iteration-1/logs/step-2-implement-chunk-3/` |
 
 - Iteration `N`: 1-indexed, incremented per full plan pass
 - Step `id`: as assigned in the classify plan (1-indexed)
@@ -255,8 +270,8 @@ This workspace persists two state files: `plan.json` (the approved Classify outp
 | `plan_hash` | string | yes | no | SHA-256 hex (64 chars) of canonical `plan.json` at Classify approval time |
 | `current_step` | string \| null | yes | **yes** | ID of the **next** step to execute; `null` only when `status == "finalized"` |
 | `completed_steps` | string[] | yes | no | Ordered list of step IDs already completed; `[]` at initial write |
-| `current_chunk` | string \| null | yes | **yes** | Phase 4 reserved slot. In Phase 1: always `null` |
-| `completed_chunks` | string[] | yes | no | Phase 4 reserved slot. In Phase 1: always `[]` |
+| `current_chunk` | string \| null | yes | **yes** | ID of chunk currently in progress within a chunked 구현 step (Phase 4). `null` when the current step is not chunked, or when all chunks of a chunked step have merged. Resets to `null` at step boundary. |
+| `completed_chunks` | string[] | yes | no | Ordered list of chunk IDs already cherry-pick merged within the current 구현 step (Phase 4). `[]` outside chunked-step execution and at initial write. Resets to `[]` at step boundary (iteration-scoped per 04-CONTEXT.md D-08). |
 | `status` | string | yes | no | Enum: `"running"` \| `"halted"` \| `"finalized"` |
 | `updated_at` | string | yes | no | ISO 8601 UTC timestamp (e.g., `"2026-04-21T12:34:56.789012+00:00"`); regenerated on each write |
 | `halt_reason` | string \| null | no (optional) | yes | Present only when `status == "halted"` |
@@ -293,6 +308,39 @@ This workspace persists two state files: `plan.json` (the approved Classify outp
 }
 ```
 
+### Example — mid-chunk progress (구현 step chunked, chunk 2 in progress)
+
+```json
+{
+  "schema_version": 1,
+  "workspace": "/Users/name/project/_workspace/quick/20260422_100000",
+  "plan_hash": "7c9e6679f1a3f83e1d2a4b2c5e3d7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e",
+  "current_step": "2",
+  "completed_steps": ["1"],
+  "current_chunk": "2",
+  "completed_chunks": ["1"],
+  "status": "running",
+  "updated_at": "2026-04-22T10:12:34.567890+00:00"
+}
+```
+
+### Example — halted mid-chunk (chunk 2 merge conflict)
+
+```json
+{
+  "schema_version": 1,
+  "workspace": "/Users/name/project/_workspace/quick/20260422_100000",
+  "plan_hash": "7c9e6679f1a3f83e1d2a4b2c5e3d7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e",
+  "current_step": "2",
+  "completed_steps": ["1"],
+  "current_chunk": "2",
+  "completed_chunks": ["1"],
+  "status": "halted",
+  "halt_reason": "chunk_merge_conflict",
+  "updated_at": "2026-04-22T10:15:01.000000+00:00"
+}
+```
+
 ### Example — halted mid-run (persistent verify failure on step 3)
 
 ```json
@@ -314,7 +362,7 @@ This workspace persists two state files: `plan.json` (the approved Classify outp
 
 - `plan.json` is written **once**, at Execute Mode Phase 1 Initialize (immediately after Classify approval), via `python3 runtime/checkpoint.py write-plan`. The write CLI enforces "already exists → exit 3"; **plan.json is mtime-immutable after approval**.
 - `plan.json` uses canonical JSON serialization (`sort_keys=True`, `separators=(",",":")`, `ensure_ascii=False`) so that re-formatting by tools like `jq` does not invalidate `plan_hash`.
-- The plan dict preserves a Phase 4 reserved slot: `implementation_chunks: null` (not omitted) so downstream schema migration is forward-compatible.
+- The plan dict includes an `implementation_chunks` field: `null` when Classify Phase 2c did not trigger vertical-layer decomposition, or a 6-field array `[{id, title, scope, pass_criteria, dependencies_from_prev_chunks, expected_files}]` when the 구현 step runs as a sub-loop (Phase 4). The field is in canonical JSON and therefore covered by `plan_hash`.
 
 ### plan_hash algorithm
 
@@ -323,6 +371,46 @@ Canonical JSON (`sort_keys=True, separators=(",", ":"), ensure_ascii=False`) →
 ### Atomic write invariant
 
 Both `plan.json` and `checkpoint.json` writes follow the tempfile + `fsync` + `os.replace` pattern implemented in `skills/tas/runtime/checkpoint.py::_atomic_write_json`. After any call (or exception), the target file either reflects the pre-call state or the full new payload — never a torn write.
+
+---
+
+## Chunk Merge Workflow (Phase 4)
+
+When `plan.implementation_chunks` is non-null + non-empty, the 구현 step runs as a sub-loop of chunks (MetaAgent Execute Phase 2d.5). This section documents the workspace-side workflow — the orchestration sequence itself lives in `agents/meta.md` Phase 2d.5, and the per-chunk engine invocation contract lives in `references/engine-invocation-protocol.md` §Standard invocation pattern + §Sub-loop invocations.
+
+### Pre-flight (once per sub-loop entry)
+
+- `mkdir -p {WORKSPACE}/chunks`
+- `git -C {PROJECT_ROOT} worktree prune --expire=1.hour.ago` (reaps stale metadata)
+- Discover stale `{WORKSPACE}/chunks/chunk-*` entries via `git worktree list --porcelain` + `awk`, and `worktree remove --force` each (`|| true` so cleanup failure does not block progress; the next run's prune catches residue)
+- Worktree count guard: if `git worktree list --porcelain | awk '$1=="worktree"' | wc -l >= 10`, HALT with `halt_reason: worktree_backlog` and route user to `/tas-workspace clean` + `git worktree prune` (see SKILL.md Phase 3 Recovery Guidance for the full Korean message).
+
+### Per-chunk cycle (repeats in order for each chunk in `plan.implementation_chunks`)
+
+1. **Worktree add**: `git -C {PROJECT_ROOT} worktree add --detach {CHUNK_PATH} HEAD` where `CHUNK_PATH = $(cd {WORKSPACE} && pwd)/chunks/chunk-{c.id}` (absolute path via POSIX `cd && pwd` — do not rely on `realpath` which is not always installed on macOS).
+2. **Log dir + step-config.json**: `mkdir -p {CHUNK_LOG_DIR}` where `CHUNK_LOG_DIR = iteration-{N}/logs/step-{S.id}-implement-chunk-{c.id}`. The step-config.json's `project_root` is set to `{CHUNK_PATH}` (not the main project root) — this is the only chunk-aware wiring the dialectic engine sees.
+3. **Engine invocation**: per `references/engine-invocation-protocol.md` §Standard invocation pattern, with `LOG_DIR → CHUNK_LOG_DIR` substitution. Polling + classification inherit unchanged.
+4. **MetaAgent commit** (on verdict ACCEPT/PASS): `git -C {CHUNK_PATH} add -A && git -C {CHUNK_PATH} commit -m "chunk-{c.id}: {c.title}" -m "dialectic verdict: {VERDICT}" -m "rounds: {ROUNDS}"`. Empty diff (`git status --porcelain` empty) → skip commit + skip merge, mark chunk as completed anyway.
+5. **Summary generation**: MetaAgent composes a ≤5KB summary per 04-CONTEXT.md D-04 template and appends to an in-memory `cumulative_chunk_context` (iteration-scoped; NOT persisted).
+6. **Merge**: `git -C {PROJECT_ROOT} cherry-pick {CHUNK_SHA}` as primary path; on failure, `git cherry-pick --abort` then `git diff HEAD~..HEAD --binary | git -C {PROJECT_ROOT} apply --index --binary` + commit as fallback. Capture `PRE_MERGE_SHA` as the first action so both-paths-failed → `git reset --hard {PRE_MERGE_SHA}` + `git clean -fd` + HALT `chunk_merge_conflict` is a safe rollback. `merge.log` inside the chunk log dir receives stderr from both cherry-pick and apply attempts (forensics).
+7. **Worktree remove**: `git -C {PROJECT_ROOT} worktree remove --force {CHUNK_PATH} 2>/dev/null || true` (post-merge cleanup).
+8. **Checkpoint write**: step 9.5 atomic write with `current_chunk` + `completed_chunks` populated. At the final chunk's merge, `current_chunk` resets to `null` and `completed_chunks` resets to `[]` because the step itself completes (step-boundary semantics per 04-CONTEXT.md D-08).
+
+### FAIL / HALT path
+
+Any chunk's dialectic FAIL / engine HALT / merge conflict triggers:
+- inline worktree remove (per failure branch — no Bash trap)
+- `git worktree prune` (defensive)
+- `checkpoint.py write` with `status: "halted"`, forensic `current_chunk` + `completed_chunks`, and a halt_reason from the Phase 4 branch table (`persistent_dialectic_fail` / engine-emitted enum / `chunk_merge_conflict` / `worktree_backlog`)
+- HALT JSON emission back to the outer Execute Phase 2d loop
+- No within-iter chunk retry. No re-Classify. User recovery = fresh `/tas` invocation (optionally with `chunks: 1` override).
+
+### SSOT boundary (Pitfall 12 cross-file drift prevention)
+
+- **This file** (`workspace-convention.md`) owns: directory layout, checkpoint schema fields/examples, merge workflow outline.
+- **`agents/meta.md` Phase 2d.5** owns: orchestration sequence (for-each-chunk + summary composition + commit/merge call site + checkpoint write timing).
+- **`references/engine-invocation-protocol.md`** owns: spawn + poll + classify contract (Standard invocation pattern + Sub-loop invocations addendum).
+- No file copies the authoritative body of another; cross-references are always 1-paragraph delegations ("see §X in Y for the substitution table").
 
 ---
 
