@@ -102,7 +102,7 @@ Plans:
 Plans:
 - [x] 04-01-PLAN.md — Canary #8 Wave 0 scaffolding (PENDING stub + canaries.md placeholder) (VERIFY-01 c)
 - [x] 04-02-PLAN.md — meta.md Classify Phase 2c Chunk Sizing + Phase 4 Output implementation_chunks (CHUNK-01, CHUNK-02)
-- [ ] 04-03-PLAN.md — SKILL.md Display Plan chunks UX + Handle User Response Adjust chunks row (CHUNK-02 UX)
+- [x] 04-03-PLAN.md — SKILL.md Display Plan chunks UX + Handle User Response Adjust chunks row (CHUNK-02 UX)
 - [ ] 04-04-PLAN.md — meta.md Execute Phase 2d.5 Chunk Sub-loop + step 9.5 chunk payload + Within-Iter FAIL chunk branch (CHUNK-03, CHUNK-04, CHUNK-05, CHUNK-06, CHUNK-07)
 - [ ] 04-05-PLAN.md — meta.md Synthesis Context injection + SKILL.md halt_reason tables chunk_merge_conflict + worktree_backlog rows (CHUNK-06, CHUNK-05, CHUNK-07)
 - [ ] 04-06-PLAN.md — workspace-convention.md chunks/ + Chunk Merge Workflow + engine-invocation-protocol.md Sub-loop invocations + CLAUDE.md 2 Phase 4 bullets (CHUNK-03, CHUNK-04, CHUNK-05, CHUNK-06, CHUNK-07)

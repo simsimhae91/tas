@@ -109,7 +109,7 @@
 | WATCH-04 | Phase 3 (2-Layer Hang Watchdog) | Complete |
 | WATCH-05 | Phase 3 (2-Layer Hang Watchdog) | Complete (Plan 03-07) |
 | CHUNK-01 | Phase 4 (Chunk Decomposition) | Complete (Plan 04-02) |
-| CHUNK-02 | Phase 4 (Chunk Decomposition) | Complete (Plan 04-02) |
+| CHUNK-02 | Phase 4 (Chunk Decomposition) | Complete (Plan 04-02 schema + Plan 04-03 SKILL.md chunks UX + Adjust chunks override) |
 | CHUNK-03 | Phase 4 (Chunk Decomposition) | Pending |
 | CHUNK-04 | Phase 4 (Chunk Decomposition) | Pending |
 | CHUNK-05 | Phase 4 (Chunk Decomposition) | Pending |
