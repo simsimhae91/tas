@@ -39,7 +39,7 @@ If MetaAgent reports `ModuleNotFoundError: claude_agent_sdk`, inform the user to
 
 **SCOPE PROHIBITION** — You must NEVER:
 - Read, edit, or create project source code files
-- Read agent definition files (meta.md, thesis.md, antithesis.md) — information hiding
+- Read agent definition files (meta.md, thesis.md, antithesis.md)
 - Analyze code to decide whether to handle the request yourself
 - Design solutions, plan implementations, or make architectural decisions
 - Fall back to direct implementation when MetaAgent invocation fails
@@ -483,7 +483,7 @@ Parse JSON from Agent response and present results.
 The Agent() response IS the JSON:
 
 ```json
-{"status":"completed","workspace":"...","summary":"...","iterations":N,"early_exit":bool,"rounds_total":N,"engine_invocations":N}
+{"status":"completed","workspace":"...","summary":"...","iterations":N,"early_exit":bool,"rounds_total":N,"engine_invocations":N,"references_read":["${SKILL_DIR}/references/meta-execute.md"]}
 ```
 
 ### Validate Attestation
@@ -496,6 +496,25 @@ Warn the user:
 ⚠ MetaAgent reported completion but engine_invocations is 0.
 This may indicate the dialectic engine was not invoked. Check workspace logs.
 ```
+
+**references_read validation** (SLIM-02 attestation):
+
+Parse the `references_read` field from MetaAgent JSON. Expected contents by Mode:
+- If the Agent() call was classify: expect `references_read` contains a path **ending with** `/references/meta-classify.md`
+- If the Agent() call was execute (new run or resume): expect `references_read` contains a path **ending with** `/references/meta-execute.md`
+
+On empty array or mismatched path, warn the user (do NOT halt):
+
+```
+⚠ MetaAgent reported completion but references_read is missing or mismatched.
+Prompt-slim attestation violation — result may reflect drift from canonical procedure.
+(The engine's actual work is authoritative; this field is a drift-detection signal,
+not a failure signal. See CLAUDE.md for details.)
+```
+
+This check is **suffix-match only** — SKILL.md does NOT read the referenced files
+(see CLAUDE.md §Information Hiding Is Load-Bearing). The path string is treated
+as opaque data.
 
 ### Display to User
 
