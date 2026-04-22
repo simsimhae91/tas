@@ -46,11 +46,11 @@
 
 - [x] **CHUNK-01** — MetaAgent Classify Phase 2c에서 구현 작업의 규모(추정 파일 수/스코프 범위) 기반으로 chunk 분해 필요성을 판단한다
 - [x] **CHUNK-02** — chunk 분해 시 `plan.json`의 `implementation_chunks[]` 배열에 각 chunk의 `id`, `scope`, `pass_criteria`를 기록한다
-- [ ] **CHUNK-03** — MetaAgent Execute Phase 2d.5 Chunk Sub-loop가 각 chunk를 `{WORKSPACE}/chunks/chunk-{c}/` 경로의 git worktree에서 독립 dialectic으로 실행한다 (`project_root`를 해당 worktree로 설정)
-- [ ] **CHUNK-04** — chunk_N의 deliverable 요약이 chunk_N+1의 `step_context`로 전달된다 (순차 릴레이)
-- [ ] **CHUNK-05** — 모든 chunk 완료 후 MetaAgent가 chunk worktree 커밋을 원본 `project_root`에 cherry-pick으로 머지한다 (충돌 시 `git apply` fallback, 둘 다 실패 시 HALT)
-- [ ] **CHUNK-06** — 머지 완료 후 `verify`/`test` 스텝은 통합된 결과물에 대해 **단일 dialectic**로 실행한다 (chunk별 verify 금지)
-- [ ] **CHUNK-07** — chunk 실행이 FAIL/HALT로 끝나면 해당 chunk worktree와 체크포인트를 정리하고 상위 에러 경로로 전파한다 (orphan worktree 방지)
+- [x] **CHUNK-03** — MetaAgent Execute Phase 2d.5 Chunk Sub-loop가 각 chunk를 `{WORKSPACE}/chunks/chunk-{c}/` 경로의 git worktree에서 독립 dialectic으로 실행한다 (`project_root`를 해당 worktree로 설정)
+- [x] **CHUNK-04** — chunk_N의 deliverable 요약이 chunk_N+1의 `step_context`로 전달된다 (순차 릴레이)
+- [x] **CHUNK-05** — 모든 chunk 완료 후 MetaAgent가 chunk worktree 커밋을 원본 `project_root`에 cherry-pick으로 머지한다 (충돌 시 `git apply` fallback, 둘 다 실패 시 HALT)
+- [x] **CHUNK-06** — 머지 완료 후 `verify`/`test` 스텝은 통합된 결과물에 대해 **단일 dialectic**로 실행한다 (chunk별 verify 금지)
+- [x] **CHUNK-07** — chunk 실행이 FAIL/HALT로 끝나면 해당 chunk worktree와 체크포인트를 정리하고 상위 에러 경로로 전파한다 (orphan worktree 방지)
 
 ### E. Prompt Slim
 
@@ -110,11 +110,11 @@
 | WATCH-05 | Phase 3 (2-Layer Hang Watchdog) | Complete (Plan 03-07) |
 | CHUNK-01 | Phase 4 (Chunk Decomposition) | Complete (Plan 04-02) |
 | CHUNK-02 | Phase 4 (Chunk Decomposition) | Complete (Plan 04-02 schema + Plan 04-03 SKILL.md chunks UX + Adjust chunks override) |
-| CHUNK-03 | Phase 4 (Chunk Decomposition) | Pending |
-| CHUNK-04 | Phase 4 (Chunk Decomposition) | Pending |
-| CHUNK-05 | Phase 4 (Chunk Decomposition) | Pending |
-| CHUNK-06 | Phase 4 (Chunk Decomposition) | Pending |
-| CHUNK-07 | Phase 4 (Chunk Decomposition) | Pending |
+| CHUNK-03 | Phase 4 (Chunk Decomposition) | Complete (Plan 04-04 Phase 2d.5 worktree add --detach + chunk-ID path resolution + pre-flight prune ritual) |
+| CHUNK-04 | Phase 4 (Chunk Decomposition) | Complete (Plan 04-04 cumulative_chunk_context sequential relay + prior-chunk-summary injection into next chunk's step_assignment) |
+| CHUNK-05 | Phase 4 (Chunk Decomposition) | Complete (Plan 04-04 cherry-pick primary + git apply --index --binary fallback + PRE_MERGE_SHA rollback + chunk_merge_conflict HALT) |
+| CHUNK-06 | Phase 4 (Chunk Decomposition) | Complete (Plan 04-04 verify/test remain single-dialectic outside Phase 2d.5; sub-loop activates only for S.name == 구현 with implementation_chunks non-null) |
+| CHUNK-07 | Phase 4 (Chunk Decomposition) | Complete (Plan 04-04 Phase 2d.5 FAIL branch inline cleanup + HALT propagate + checkpoint write with current_chunk/completed_chunks forensic fields + NO re-chunking / NO within-iter retry) |
 | SLIM-01 | Phase 5 (Prompt Slim) | Pending |
 | SLIM-02 | Phase 5 (Prompt Slim) | Pending |
 | SLIM-03 | Phase 5 (Prompt Slim) | Pending |
