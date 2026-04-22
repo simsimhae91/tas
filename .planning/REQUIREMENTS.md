@@ -44,8 +44,8 @@
 
 ### D. Chunk Decomposition
 
-- [ ] **CHUNK-01** — MetaAgent Classify Phase 2c에서 구현 작업의 규모(추정 파일 수/스코프 범위) 기반으로 chunk 분해 필요성을 판단한다
-- [ ] **CHUNK-02** — chunk 분해 시 `plan.json`의 `implementation_chunks[]` 배열에 각 chunk의 `id`, `scope`, `pass_criteria`를 기록한다
+- [x] **CHUNK-01** — MetaAgent Classify Phase 2c에서 구현 작업의 규모(추정 파일 수/스코프 범위) 기반으로 chunk 분해 필요성을 판단한다
+- [x] **CHUNK-02** — chunk 분해 시 `plan.json`의 `implementation_chunks[]` 배열에 각 chunk의 `id`, `scope`, `pass_criteria`를 기록한다
 - [ ] **CHUNK-03** — MetaAgent Execute Phase 2d.5 Chunk Sub-loop가 각 chunk를 `{WORKSPACE}/chunks/chunk-{c}/` 경로의 git worktree에서 독립 dialectic으로 실행한다 (`project_root`를 해당 worktree로 설정)
 - [ ] **CHUNK-04** — chunk_N의 deliverable 요약이 chunk_N+1의 `step_context`로 전달된다 (순차 릴레이)
 - [ ] **CHUNK-05** — 모든 chunk 완료 후 MetaAgent가 chunk worktree 커밋을 원본 `project_root`에 cherry-pick으로 머지한다 (충돌 시 `git apply` fallback, 둘 다 실패 시 HALT)
@@ -108,8 +108,8 @@
 | WATCH-03 | Phase 3 (2-Layer Hang Watchdog) | Complete |
 | WATCH-04 | Phase 3 (2-Layer Hang Watchdog) | Complete |
 | WATCH-05 | Phase 3 (2-Layer Hang Watchdog) | Complete (Plan 03-07) |
-| CHUNK-01 | Phase 4 (Chunk Decomposition) | Pending |
-| CHUNK-02 | Phase 4 (Chunk Decomposition) | Pending |
+| CHUNK-01 | Phase 4 (Chunk Decomposition) | Complete (Plan 04-02) |
+| CHUNK-02 | Phase 4 (Chunk Decomposition) | Complete (Plan 04-02) |
 | CHUNK-03 | Phase 4 (Chunk Decomposition) | Pending |
 | CHUNK-04 | Phase 4 (Chunk Decomposition) | Pending |
 | CHUNK-05 | Phase 4 (Chunk Decomposition) | Pending |

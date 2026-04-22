@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 4 Plan 01 completed — Canary #8 Wave 0 scaffolding landed
-last_updated: "2026-04-22T01:13:36Z"
-last_activity: 2026-04-22 -- Phase 4 Plan 01 complete (Canary #8 PENDING stub + canaries.md §Canary #8 placeholder)
+stopped_at: Phase 4 Plan 02 completed — meta.md Classify Phase 2c Chunk Sizing + Phase 4 Output implementation_chunks:null slot landed
+last_updated: "2026-04-22T01:23:22Z"
+last_activity: 2026-04-22 -- Phase 4 Plan 02 complete (Classify Phase 2c + implementation_chunks[] schema — CHUNK-01 + CHUNK-02 satisfied)
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 25
-  completed_plans: 19
-  percent: 76
+  completed_plans: 20
+  percent: 80
 ---
 
 # Project State
@@ -27,19 +27,19 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 4 (Chunk Decomposition) — EXECUTING
-Plan: 2 of 7 (next: 04-02 meta.md Classify Phase 2c Chunk Sizing)
+Plan: 3 of 7 (next: 04-03 SKILL.md Display Plan chunks UX + Handle User Response Adjust chunks row)
 Status: Executing Phase 4
-Last activity: 2026-04-22 -- Phase 4 Plan 01 complete (Canary #8 Wave 0 scaffolding)
+Last activity: 2026-04-22 -- Phase 4 Plan 02 complete (meta.md Classify Phase 2c Chunk Sizing + Phase 4 Output implementation_chunks)
 
-Progress: [████████░░] 76% (19/25 plans — Phase 4 Plan 01 complete, Canary #8 PENDING stub + canaries.md §Canary #8 placeholder landed)
+Progress: [████████░░] 80% (20/25 plans — Phase 4 Plan 02 complete, Classify Phase 2c section + 6-field implementation_chunks[] schema + Quick-mode JSON slot landed; CHUNK-01 + CHUNK-02 closed)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 19
+- Total plans completed: 20
 - Average duration: -
-- Total execution time: 2m46s (this plan)
+- Total execution time: ~10min (this plan)
 
 **By Phase:**
 
@@ -48,12 +48,12 @@ Progress: [████████░░] 76% (19/25 plans — Phase 4 Plan 01 
 | 02    | 2     | -          | -        |
 | 03    | 7     | ~26.0 min  | ~3.7 min |
 | 03.1  | 7     | ~24.4 min  | ~3.5 min |
-| 04    | 1     | 2m46s      | 2m46s    |
+| 04    | 2     | ~13 min    | ~6.5 min |
 
 **Recent Trend:**
 
-- Last 5 plans: 04-01 (Canary #8 Wave 0 scaffolding — `simulate_chunk_integration.py` PENDING stub exit 0 in both MODE=fast and MODE=full with distinct stdout tags + `canaries.md` §Canary #8 4-part D-09 skeleton with 4 `[PENDING — Wave 5 fills this]` markers; pure insertion +38 lines in canaries.md, Canary #1-#7 sections byte-identical; stdlib-only invariant enforced via forbidden-imports grep = 0; Wave 5 Plan 04-07 inherits imports + REPO_ROOT + MODE env var pre-wired; 2m46s, 2 tasks, 2 files + SUMMARY; 0 Rule 1-3 auto-fixes, 1 plan-verbatim-vs-grep observation documented but non-actionable — 10th total across Phase 3.1 + Phase 4) → 03.1-07 (CLAUDE.md Common Mistakes 3 bullets + Phase 3.1 7-invariant regression suite — TOPO-06 doc-side close; 1 CLAUDE.md file edit + Task 2 read-only verify; canonical automated `<verify>` block exits 0; invariant 2 pre-existing 3-line baseline documented as non-regression; 9th Rule 3 plan-verbatim-vs-reality auto-fix in Phase 3.1; 2m57s, 2 tasks, 1 file + SUMMARY) → 03.1-06 (Canary #7 2-Phase regression guard — Phase 1 synthetic orphan survival + Phase 2 real-chain integration via sed-copy mock injection on run-dialectic.sh; stdlib-only Python harness 291 net line-additions + bash wrapper header refresh + canaries.md §Canary #7 full PASS/FAIL contract; Plan Review §"관측 1" integration gap closed — Issue #1 `exec` regression would now FAIL Phase 2 immediately; SKIP path explicit + Plan 07 invariant 6 static backstop; smoke T=10s end-to-end 10.4s wall-clock; 1 Rule 3 auto-fix for forbidden-imports grep matching string literal in sed-copy target; VERIFY-TOPO-01 closed, 5m11s, 2 tasks, 3 files + SUMMARY) → 03.1-05 (SKILL.md Phase 0b halt_reason enum freeze bullet — 1-line insertion inside HTML prohibition comment block; Scenario B invariants preserved; 1 Rule 3 auto-fix for awk range pattern; TOPO-05 closed, ~1m, 1 task, 1 file) → 03.1-04 (meta.md Scenario B rewrite — step 7 nohup spawn + step 8/8b local polling + classify + final JSON synthesis; TOPO-02 + TOPO-03 complete; 5 Rule 3 auto-fixes documented, 5m6s, 1 file, 2 commits)
-- Trend: 04-01 kicks off Phase 4 (Chunk Decomposition) with the same Wave 0 PENDING-stub scaffolding pattern Phase 3.1 Plan 01 established. Rationale: if Plans 02-06 include `python3 skills/tas/runtime/tests/simulate_chunk_integration.py` in their `<verify>` blocks while the canary body is still being built, ENOENT failures would block execute-plan agents. Exit-0 PENDING stubs preserve the happy path at zero cost; Wave 5 (Plan 04-07) inherits a pre-wired skeleton (imports, REPO_ROOT, MODE env var, canaries.md 4-part structure, 3 invocation lines) and only replaces `main()` body + 4 `[PENDING — Wave 5 fills this]` markers. Stdlib-only invariant enforced by acceptance grep `^(import|from)(claude_agent_sdk|pytest|psutil|requests|yaml) == 0`; any Wave 5 dependency drift would fail the invariant. Canary #1-#7 bytes unchanged (git diff `--stat` on canaries.md = +38/-0 insertions only). Next: 04-02 (meta.md Classify Phase 2c Chunk Sizing) + 04-03 (SKILL.md Display Plan chunks UX) can now safely reference Canary #8 by path.
+- Last 5 plans: 04-02 (meta.md Classify Phase 2c Chunk Sizing — 52-line section insertion between Step Template Selection L136 and Phase 3 Plan Validation L190; D-01 6-row trigger heuristic verbatim + D-02 6-field implementation_chunks[] schema verbatim + Expected_files Disjointness Check T-04-01 opaque-string mitigation + Plan Hash Invariant anchor citing Phase 1 D-02 HALT + Approval UX forward-reference to SKILL.md Phase 1; Phase 4 Output Quick-mode JSON gains `"implementation_chunks":null` slot between loop_policy and workspace + explanatory paragraph; Direct response template byte-identical; pure +55/-1 diff where -1 is original Quick-mode JSON line replaced; 13/13 acceptance criteria greps PASS on first commit — zero plan-verbatim-vs-grep contradictions (notable break from Phase 3.1 trend of 9 such Rule 3 auto-fixes across Plans 03-07 — suggests successful adoption of pre-commit screening); ~10min, 1 task, 1 file + SUMMARY; CHUNK-01 + CHUNK-02 closed; downstream Plan 03 (SKILL.md chunks UX) + Plan 04 (Execute Phase 2d.5 sub-loop) unblocked) → 04-01 (Canary #8 Wave 0 scaffolding — `simulate_chunk_integration.py` PENDING stub exit 0 in both MODE=fast and MODE=full with distinct stdout tags + `canaries.md` §Canary #8 4-part D-09 skeleton with 4 `[PENDING — Wave 5 fills this]` markers; pure insertion +38 lines in canaries.md, Canary #1-#7 sections byte-identical; stdlib-only invariant enforced via forbidden-imports grep = 0; Wave 5 Plan 04-07 inherits imports + REPO_ROOT + MODE env var pre-wired; 2m46s, 2 tasks, 2 files + SUMMARY; 0 Rule 1-3 auto-fixes, 1 plan-verbatim-vs-grep observation documented but non-actionable — 10th total across Phase 3.1 + Phase 4) → 03.1-07 (CLAUDE.md Common Mistakes 3 bullets + Phase 3.1 7-invariant regression suite — TOPO-06 doc-side close; 1 CLAUDE.md file edit + Task 2 read-only verify; canonical automated `<verify>` block exits 0; invariant 2 pre-existing 3-line baseline documented as non-regression; 9th Rule 3 plan-verbatim-vs-reality auto-fix in Phase 3.1; 2m57s, 2 tasks, 1 file + SUMMARY) → 03.1-06 (Canary #7 2-Phase regression guard — Phase 1 synthetic orphan survival + Phase 2 real-chain integration via sed-copy mock injection on run-dialectic.sh; stdlib-only Python harness 291 net line-additions + bash wrapper header refresh + canaries.md §Canary #7 full PASS/FAIL contract; Plan Review §"관측 1" integration gap closed — Issue #1 `exec` regression would now FAIL Phase 2 immediately; SKIP path explicit + Plan 07 invariant 6 static backstop; smoke T=10s end-to-end 10.4s wall-clock; 1 Rule 3 auto-fix for forbidden-imports grep matching string literal in sed-copy target; VERIFY-TOPO-01 closed, 5m11s, 2 tasks, 3 files + SUMMARY) → 03.1-05 (SKILL.md Phase 0b halt_reason enum freeze bullet — 1-line insertion inside HTML prohibition comment block; Scenario B invariants preserved; 1 Rule 3 auto-fix for awk range pattern; TOPO-05 closed, ~1m, 1 task, 1 file)
+- Trend: 04-02 delivers the Wave-1 foundation for Phase 4 chunk flow. Classify Phase 2c trigger heuristic (6-row table, 상한 5) + 6-field `implementation_chunks[]` schema land in `meta.md` as sibling-to-Phase-2 section; Phase 4 Output Quick-mode JSON template gets the `"implementation_chunks":null` default slot. Info-hiding invariant preserved via forward-reference pattern — meta.md cites "SKILL.md Phase 1 Display Plan" by file + phase anchor without reading SKILL.md content. T-04-01 mitigation explicit (opaque-string fnmatch, never shell-expanded). Plan 02's zero-contradiction acceptance grep PASS rate (13/13 first-commit) is a notable break from Phase 3.1's 9-contradiction Rule-3 trend (Plans 03:1x, 04:5x, 05:1x, 06:1x, 07:1x), suggesting the "screen verbatim text against acceptance greps pre-commit" maturity pattern has been adopted. Next: 04-03 (SKILL.md Display Plan chunks UX — consumes Plan 02's `implementation_chunks` field) + 04-04 (Execute Phase 2d.5 sub-loop — branches on `implementation_chunks != null`). Plan 02's §Approval UX forward-reference + "(see below)" note on Execute Phase 2d.5 make the Wave 2 boundary explicit.
 
 *Updated after each plan completion*
 | Phase 03 P02 | 2m46s | 3 tasks | 1 files |
@@ -70,6 +70,7 @@ Progress: [████████░░] 76% (19/25 plans — Phase 4 Plan 01 
 | Phase 03.1 P06 | 5m11s | 2 tasks | 3 files (simulate_subagent_orphan.py full 2-Phase body + simulate_subagent_orphan.sh header refresh + canaries.md §Canary #7 PASS/FAIL contract; 1 Rule 3 auto-fix for forbidden-imports grep matching sed-copy string literal) |
 | Phase 03.1 P07 | 2m57s | 2 tasks | 1 file (CLAUDE.md Common Mistakes 3 bullets — 1 replaced + 2 new: Scenario B paradigm / 3-element nohup / exec ban; Task 2 read-only 7-invariant regression suite — canonical automated `<verify>` block exits 0; 1 Rule 3 auto-fix for invariant 2 pre-existing SKILL.md 3-line baseline documented as non-regression — 9th Phase 3.1 plan-verbatim-vs-reality auto-fix; TOPO-06 doc-side closed; Phase 3.1 CLOSED) |
 | Phase 04 P01 | 2m46s | 2 tasks | 2 files (simulate_chunk_integration.py PENDING stub stdlib-only exit 0 both MODE=fast/full + canaries.md §Canary #8 4-part D-09 skeleton; pure insertion +38 lines in canaries.md, Canary #1-#7 byte-identical; stdlib-only invariant forbidden-imports grep = 0; Wave 5 Plan 04-07 skeleton pre-wired; 0 Rule 1-3 auto-fixes, 1 plan-verbatim-vs-grep observation documented; VERIFY-01 c Wave 0 half delivered) |
+| Phase 04 P02 | ~10min | 1 task | 1 file (meta.md Classify Phase 2c 52-line section insertion L138-L188: Trigger Heuristic D-01 verbatim + 6-field implementation_chunks[] schema D-02 verbatim + Expected_files Disjointness Check T-04-01 opaque-string + Plan Hash Invariant Phase 1 D-02 anchor + Approval UX forward-ref to SKILL.md Phase 1; Phase 4 Output Quick-mode JSON gains "implementation_chunks":null slot L212 + explanatory paragraph L214; Direct response template byte-identical; +55/-1 diff; 13/13 acceptance greps PASS first commit; 0 Rule 1-3 auto-fixes, 0 plan-verbatim-vs-grep contradictions — notable break from Phase 3.1 9-contradiction trend; CHUNK-01 + CHUNK-02 closed) |
 
 ## Accumulated Context
 
@@ -160,6 +161,14 @@ Recent decisions affecting current work (TAS-M1 kickoff):
 - [Phase 4]: Plan 01 Canary #8 section placed immediately after Canary #7, before 'When to add a new canary' anchor — preserves numerical section ordering (#1 → #2 → … → #7 → #8 → meta). Plan 04-07 Task 2 will replace 4 `[PENDING — Wave 5 fills this]` markers in-place. Pure insertion (git diff --stat = +38/-0 on canaries.md) leaves Canary #1-#7 bytes unchanged. (04-01)
 - [Phase 4]: Plan 01 stdlib-only invariant enforced via acceptance grep `^(import|from)(claude_agent_sdk|pytest|psutil|requests|yaml) == 0` — Wave 5 inherits this invariant from Plan 01; if Wave 5 needs subprocess/tempfile/shutil/json they are all stdlib and pass the grep. Prevents Wave 5 dependency drift regression. (04-01 T-04-01 mitigation)
 - [Phase 4]: Plan 01 10th plan-verbatim-vs-grep observation (Phase 3.1: 9 + Phase 4 Plan 01: 1) — acceptance grep `grep -cE "TAS_VERIFY_CHUNK_MODE" ... returns 1` vs. actual file count = 3 (docstring Phase 1 env-var mention + docstring Phase 2 env-var mention + os.environ.get call). Plan's `<behavior>` and `<done>` criteria both describe this as "env var already wired for Wave 5" (≥1 is the true invariant). Plan's `<automated>` verify block does NOT test this particular grep. No Rule 3 auto-fix applied — the plan's verbatim code is the authoritative source; observation is in the acceptance-grep specification only, documented as SUMMARY §Deviations for forensic trail. (04-01)
+- [Phase 4]: Plan 02 Phase 2c placement is sibling-to-Phase-2 (not sub-heading of Phase 2) between Step Template Selection (L136) and Phase 3 Plan Validation (L190). Matches PATTERNS.md analog L114-138 sibling-section format. The "(implement|refactor complex only)" parenthetical in the header signals conditional applicability (vs Phase 2 which applies to every request). Phase 2c section spans L138-L188 (52 lines); pre-existing Complexity Heuristic / Step Template Selection / Phase 3 / Phase 4 Direct response blocks byte-identical. (04-02)
+- [Phase 4]: Plan 02 D-01 6-row trigger heuristic preserved verbatim with column-header prose normalization only — original table uses Korean column header "chunk 수 제안" (= "chunk count suggestion"); meta.md uses `implementation_chunks` value for JSON-field legibility. Row bodies preserved verbatim including Hard cap 5 degrade reasoning string `"이 요청은 여러 /tas run으로 나누라 권장"` (Korean preserved). Vertical layer principle + range limitation (project-code read prohibition) paragraphs map 1:1 to D-01 §Rationale + §범위 금지 재확인. (04-02)
+- [Phase 4]: Plan 02 D-02 6-field schema mapped from JSON-object shape to 4-column table (Field/Type/Constraint/Description) for meta.md readability — semantic content identical, format change is presentation-only. Constraints column captures the critical invariants: `title ≤ 60 chars`, `scope ≤ 300 chars, prose`, `pass_criteria ≥ 1 item`, `dependencies_from_prev_chunks: chunk 1 MUST be []`, `expected_files: glob patterns, advisory only`. (04-02)
+- [Phase 4]: Plan 02 Expected_files Disjointness Check §T-04-01 opaque-string discipline — fnmatch-style matching only, never shell-expanded. Explicit phrase "treated as opaque strings for comparison (shell-safe — never pass to a shell for expansion; use `fnmatch`-style matching only)" plus "mitigates user-influenced metacharacter injection (T-04-01)" anchor. Downstream Plan 04 (Execute Phase 2d.5 merge conflict detection) inherits this discipline. (04-02 T-04-01 mitigation)
+- [Phase 4]: Plan 02 Plan Hash Invariant subsection reuses Phase 1 D-02 `plan_hash_mismatch` HALT (no new enum) — `implementation_chunks` feeds canonical-JSON plan_hash; post-approval edits blocked by existing HALT path. User `chunks:1`/`chunks:N` override during Phase 1 Display Plan MUST re-hash via existing plan-adjust routing (SKILL.md Phase 1 Handle User Response) BEFORE plan.json persist. Zero new halt_reason enum (respects Phase 3.1 enum freeze). (04-02)
+- [Phase 4]: Plan 02 Approval UX forward-reference (not re-specification) — meta.md cites "SKILL.md Phase 1 Display Plan" by file+phase anchor without reading SKILL.md content, preserving info-hiding invariant (4-layer boundary). Plan 03 implements the rendering side with chunks:1/chunks:N override hint grammar. (04-02)
+- [Phase 4]: Plan 02 Phase 4 Output Quick-mode JSON template gains `"implementation_chunks":null` slot between `loop_policy` and `workspace` — Direct response template byte-identical (no chunks concept for trivial-request path). Explanatory paragraph immediately after JSON block describes default null + non-null 6-field array after Phase 2c decomposition + plan_hash invariant immutability. (04-02)
+- [Phase 4]: Plan 02 ZERO plan-verbatim-vs-grep contradictions on 13/13 acceptance criteria greps — notable break from Phase 3.1's 9-contradiction trend across Plans 03-07 (03:1x, 04:5x, 05:1x, 06:1x, 07:1x). All acceptance greps were satisfied by verbatim insertion text without modification. Suggests the "screen verbatim text against acceptance greps pre-commit" maturity pattern (first articulated in Phase 3.1 Plan 04 SUMMARY) has been successfully adopted in Phase 4 plan authoring. First Wave-1 plan to achieve this. (04-02)
 
 ### Pending Todos
 
@@ -185,6 +194,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-22T01:13:36Z
-Stopped at: Phase 4 Plan 01 complete — Canary #8 Wave 0 scaffolding landed; next plan 04-02 (meta.md Classify Phase 2c Chunk Sizing)
-Resume file: .planning/phases/04-chunk-decomposition/04-02-PLAN.md
+Last session: 2026-04-22T01:23:22Z
+Stopped at: Phase 4 Plan 02 complete — meta.md Classify Phase 2c Chunk Sizing (Trigger Heuristic D-01 + implementation_chunks[] schema D-02 + Disjointness Check + Plan Hash Invariant + Approval UX forward-ref) + Phase 4 Output Quick-mode JSON `"implementation_chunks":null` slot landed; CHUNK-01 + CHUNK-02 closed; next plan 04-03 (SKILL.md Display Plan chunks UX + Handle User Response Adjust chunks row)
+Resume file: .planning/phases/04-chunk-decomposition/04-03-PLAN.md
