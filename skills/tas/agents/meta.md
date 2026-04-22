@@ -722,6 +722,220 @@ For each step, build the config the Python engine consumes.
      `plan.json` + the running `completed_steps[]` on every call. (In-memory
      state promotion is forbidden — see CLAUDE.md Common Mistakes.)
 
+#### Phase 2d.5: Chunk Sub-loop (when S.name == 구현 AND implementation_chunks non-null + non-empty)
+
+When the current step is 구현 AND `plan.implementation_chunks` is a non-null, non-empty array, the step executes as a **sub-loop of chunks** instead of a single dialectic. Each chunk runs in a detached git worktree, uses the Scenario B invocation contract verbatim (per chunk), and merges into `PROJECT_ROOT` via cherry-pick before the next chunk starts (sequential relay — M1 has NO parallel execution).
+
+**Entry condition check** (place at the top of step 7, before engine spawn):
+
+```
+if S.name == "구현" and isinstance(plan.implementation_chunks, list) and len(plan.implementation_chunks) > 0:
+    # enter Phase 2d.5 (this section) — SKIP the standard single-dialectic steps 7/8/8b/9 below
+    # (step 9.5 checkpoint update still runs, but with chunk-aware payload; see Merge + Checkpoint below)
+else:
+    # fall through to standard single-dialectic path (existing steps 7/8/8b/9/9.5)
+```
+
+**Sub-loop pre-flight** — runs ONCE before iterating over chunks (CONTEXT D-03 + Bash Sketch 1). Execute via a single Bash() call:
+
+```
+Bash({
+  command: "mkdir -p \"${WORKSPACE}/chunks\" && \
+git -C \"${PROJECT_ROOT}\" worktree prune --expire=1.hour.ago && \
+STALE=\"$(git -C \"${PROJECT_ROOT}\" worktree list --porcelain 2>/dev/null | awk -v ws=\"${WORKSPACE}/chunks/chunk-\" '$1==\"worktree\" && index($2,ws)==1 {print $2}')\" && \
+for stale in ${STALE}; do git -C \"${PROJECT_ROOT}\" worktree remove --force \"${stale}\" 2>/dev/null || true; done && \
+WT_COUNT=\"$(git -C \"${PROJECT_ROOT}\" worktree list --porcelain 2>/dev/null | awk '$1==\"worktree\"' | wc -l | tr -d ' ')\" && \
+echo \"WT_COUNT=${WT_COUNT}\"",
+  run_in_background: false,
+  description: "Phase 2d.5 pre-flight: prune + stale cleanup + count"
+})
+```
+
+If the returned `WT_COUNT >= 10`, emit HALT JSON with `halt_reason: worktree_backlog` (NEW enum, D-03 — environment pollution domain, justified exception to Phase 3.1 D-TOPO-05 watchdog/hang enum freeze). Also write the halt checkpoint via `checkpoint.py write` (see FAIL/HALT Cleanup sketch below) and return to the orchestrator.
+
+Initialize sub-loop locals:
+- `cumulative_chunk_context = ""` (in-memory only — iteration-scoped; NO file persistence per CONTEXT D-04)
+- `completed_chunks = []` (ordered list of successfully-merged chunk ids; mirrors the checkpoint payload field)
+
+**For each chunk c in plan.implementation_chunks (in order — sequential relay):**
+
+1. **Resolve chunk paths**:
+   ```
+   CHUNK_PATH="$(cd \"${WORKSPACE}\" && pwd)/chunks/chunk-${c.id}"
+   CHUNK_LOG_DIR="${ITER_DIR}/logs/step-${S.id}-implement-chunk-${c.id}"
+   mkdir -p "${CHUNK_LOG_DIR}"
+   ```
+   Absolute-path enforcement via `$(cd … && pwd)` (POSIX-safer than `realpath` on macOS; mitigates T-04-02 symlink redirection — the resolved path MUST start with `${PROJECT_ROOT}/_workspace/quick/` before any worktree operation).
+
+2. **Create worktree**:
+   ```
+   git -C "${PROJECT_ROOT}" worktree add --detach "${CHUNK_PATH}" HEAD
+   ```
+   `--detach` is MANDATORY (no branch pollution). `HEAD` = current PROJECT_ROOT HEAD, which already reflects prior chunks' merges (sequential stacking per D-03).
+
+3. **Build step-config.json** for this chunk. Key differences from standard step config:
+   - `project_root = ${CHUNK_PATH}` (the detached worktree — the dialectic engine sees this as its project root; engine is chunk-agnostic)
+   - `log_dir = ${CHUNK_LOG_DIR}`
+   - `step_id` label = `${S.id}-chunk-${c.id}` (for engine_invocations attestation uniqueness)
+   - `step_assignment` includes: `c.scope` + `c.pass_criteria` + `cumulative_chunk_context` (prior chunks' summaries, if any). If `c.dependencies_from_prev_chunks` is non-empty, `cumulative_chunk_context` MUST already contain summaries for all referenced chunk ids (this is guaranteed by sequential order).
+   - Thesis/antithesis system prompts built from the same `#### Prepare Dialectic Config` rules above — S.name is still `구현`, so use the `구현` Step Roles row (Implementer/Reviewer).
+
+4. **Spawn engine for this chunk** — follow `references/engine-invocation-protocol.md` §Standard invocation pattern VERBATIM with variable substitution. Do NOT copy the spawn bash inline (Pitfall 12 cross-file drift prevention). Substitutions:
+   - `LOG_DIR` → `${CHUNK_LOG_DIR}`
+   - `step-config.json` → `${CHUNK_LOG_DIR}/step-config.json`
+   - `description` → `"Spawn dialectic engine for step ${S.id} chunk ${c.id}"`
+   - All three load-bearing elements (`nohup` + `&` + `echo $!`) + `run_in_background: false` + EXIT-trap contract (no `exec` in run-dialectic.sh) remain non-negotiable per chunk invocation.
+
+5. **Poll engine.done / engine.exit** — same 19×30s polling-loop Bash pattern as §Standard invocation pattern § Liveness probe, with `${CHUNK_LOG_DIR}` substituted throughout. Each chunk counts toward `engine_invocations` attestation independently.
+
+6. **Classify verdict** — apply the Phase 3 D-05 + Phase 3.1 D-TOPO-05 classification table verbatim (authoritative copy in `references/engine-invocation-protocol.md` §Failure classification). NO new halt_reason enum from the watchdog family per chunk.
+
+7. **Verdict branch** — ACCEPT/PASS path:
+
+   (7a) **Read chunk deliverable**:
+   ```
+   Bash({
+     command: "cat \"${CHUNK_LOG_DIR}/deliverable.md\"",
+     run_in_background: false,
+     description: "Read chunk ${c.id} deliverable"
+   })
+   ```
+
+   (7b) **MetaAgent commit** (CONTEXT D-06 — MetaAgent owns, NOT thesis):
+   ```
+   Bash({
+     command: "if [ -n \"$(git -C \\\"${CHUNK_PATH}\\\" status --porcelain)\" ]; then \
+  git -C \"${CHUNK_PATH}\" add -A && \
+  git -C \"${CHUNK_PATH}\" commit -m \"chunk-${c.id}: ${c.title}\" -m \"dialectic verdict: ${VERDICT}\" -m \"rounds: ${ROUNDS}\"; \
+  echo \"COMMIT_OK\"; \
+else \
+  echo \"COMMIT_EMPTY\"; \
+fi",
+     run_in_background: false,
+     description: "MetaAgent commit chunk ${c.id}"
+   })
+   ```
+   If stdout == `COMMIT_EMPTY`, this chunk had no file changes — skip the cherry-pick merge step below, skip summary generation (no diff to summarize), mark chunk c as completed (add to `completed_chunks`), continue to next chunk.
+
+   (7c) **Compose chunk summary** (CONTEXT D-04 — Bash Sketch 3 adaptation; MetaAgent composes the summary from the template in D-04 using `cat deliverable.md` + `git diff HEAD~..HEAD --name-only` + `git log HEAD~..HEAD --format='%s%n%b'`). The template (verbatim from D-04):
+   ```
+   ## Chunk {c.id}: {c.title}
+   **Scope**: {c.scope}
+   **Files changed** (from chunk worktree `git diff HEAD~..HEAD --name-only`):
+   - {path 1}
+   - {path 2}
+
+   **Public API / contracts surfaced** (parsed from thesis deliverable):
+   - `{signature or contract}` — {1-line description}
+
+   **Contracts assumed by next chunks**:
+   - {what next chunk can assume is done}
+
+   **Open issues carried forward** (if any):
+   - {unresolved decision that chunk N+1 must handle}
+   ```
+
+   Enforce 5KB per-entry cap: if `wc -c` of summary > 5120 bytes, compress "Files changed" / "Public API" sections or append `... (truncated; see ${CHUNK_LOG_DIR}/deliverable.md)` — the deliverable.md stays as single-source-of-truth; the next chunk's thesis MAY Read it if needed.
+
+   Append to `cumulative_chunk_context` in-memory. Enforce 50KB cumulative hard cap (5 chunks × 10KB headroom over 5KB per-entry) — if exceeded, compress earliest-chunk summaries to `... (N chunks summarized, see iteration-{N}/logs/step-{S.id}-implement-chunk-{k}/deliverable.md)`.
+
+   (7d) **Merge chunk into PROJECT_ROOT** (CONTEXT D-05 — Bash Sketch 2 verbatim):
+   ```
+   Bash({
+     command: "CHUNK_SHA=\"$(git -C \\\"${CHUNK_PATH}\\\" rev-parse HEAD)\"; \
+PRE_MERGE_SHA=\"$(git -C \\\"${PROJECT_ROOT}\\\" rev-parse HEAD)\"; \
+MERGE_LOG=\"${CHUNK_LOG_DIR}/merge.log\"; \
+touch \"${MERGE_LOG}\"; \
+if git -C \"${PROJECT_ROOT}\" cherry-pick \"${CHUNK_SHA}\" 2> >(tee -a \"${MERGE_LOG}\" >&2); then \
+  echo 'MERGE_MODE=cherry-pick'; \
+else \
+  git -C \"${PROJECT_ROOT}\" cherry-pick --abort 2>/dev/null || true; \
+  if git -C \"${CHUNK_PATH}\" diff HEAD~..HEAD --binary 2>> \"${MERGE_LOG}\" | git -C \"${PROJECT_ROOT}\" apply --index --binary 2>> \"${MERGE_LOG}\"; then \
+    if git -C \"${PROJECT_ROOT}\" commit -m \"chunk-${c.id}: ${c.title}\" 2>> \"${MERGE_LOG}\"; then \
+      echo 'MERGE_MODE=git-apply'; \
+    else \
+      git -C \"${PROJECT_ROOT}\" reset --hard \"${PRE_MERGE_SHA}\" 2>/dev/null || true; \
+      git -C \"${PROJECT_ROOT}\" clean -fd 2>/dev/null || true; \
+      echo 'MERGE_MODE=FAILED'; \
+    fi; \
+  else \
+    git -C \"${PROJECT_ROOT}\" reset --hard \"${PRE_MERGE_SHA}\" 2>/dev/null || true; \
+    git -C \"${PROJECT_ROOT}\" clean -fd 2>/dev/null || true; \
+    echo 'MERGE_MODE=FAILED'; \
+  fi; \
+fi",
+     run_in_background: false,
+     description: "Merge chunk ${c.id}: cherry-pick primary then git-apply fallback"
+   })
+   ```
+   Parse stdout last line. If `MERGE_MODE=FAILED`, enter the Merge Conflict HALT path below. `PRE_MERGE_SHA` MUST be captured at the VERY START of this Bash block (mitigates T-04-03 — ensures safe reset even if the user had uncommitted work prior to sub-loop entry, in which case the worktree_add itself would have warned; reset-to-PRE_MERGE_SHA is the guaranteed recovery anchor).
+
+   (7e) **Remove chunk worktree**:
+   ```
+   Bash({
+     command: "git -C \"${PROJECT_ROOT}\" worktree remove --force \"${CHUNK_PATH}\" 2>/dev/null || true",
+     run_in_background: false,
+     description: "Remove chunk ${c.id} worktree post-merge"
+   })
+   ```
+
+   (7f) **Checkpoint update** — call step 9.5 `checkpoint.py write` with chunk-aware payload:
+   - `current_chunk = c.id` if more chunks remain; else set to `null` when the chunk just merged is the last one (step about to complete)
+   - `completed_chunks = completed_chunks + [c.id]` (append)
+   - `current_step` unchanged (step is still in progress until all chunks merge)
+   - `status = "running"`
+
+   (7g) **Continue to next chunk** (sequential relay).
+
+8. **Verdict branch — FAIL/HALT path (D-10)**:
+
+   Apply the FAIL branch table:
+   | chunk c verdict | halt_reason | cleanup + HALT |
+   |-----------------|-------------|----------------|
+   | dialectic verdict FAIL | `persistent_dialectic_fail` (re-use existing) | yes |
+   | engine HALT (sdk_session_hang / step_transition_hang / bash_wrapper_kill / engine_crash) | engine-emitted halt_reason pass-through | yes |
+   | commit stderr (rare git error, NOT empty diff) | `engine_crash` (re-use existing) | yes |
+   | worktree add failure | `worktree_backlog` (NEW, D-03) | yes (likely pre-flight caught it, but defense-in-depth) |
+
+   Execute the FAIL/HALT cleanup sequence (CONTEXT D-10 — Bash Sketch 4 verbatim):
+   ```
+   Bash({
+     command: "git -C \"${PROJECT_ROOT}\" worktree remove --force \"${CHUNK_PATH}\" 2>/dev/null || true; \
+git -C \"${PROJECT_ROOT}\" worktree prune 2>/dev/null || true",
+     run_in_background: false,
+     description: "Cleanup chunk ${c.id} worktree after FAIL/HALT"
+   })
+   ```
+
+   Then `checkpoint.py write` with HALT payload:
+   - `current_step = S.id` (step never completed)
+   - `completed_steps` unchanged (pre-chunk-subloop value)
+   - `current_chunk = c.id` (the failing chunk — forensic)
+   - `completed_chunks = completed_chunks` (successfully-merged chunks so far — forensic)
+   - `status = "halted"`
+   - `halt_reason = <reason from branch table>`
+   - `updated_at = now`
+
+   Emit HALT JSON to stdout (same format as step 9 HALT JSON contract — `status: halted`, `workspace`, `halt_reason`, `summary` with user-facing Korean recovery guidance, `halted_at: "execute-chunk-subloop-<phase-label>"`, `current_chunk`, `completed_chunks`). Return to the outer Execute Phase 2d loop (which then routes to Phase 2e / final aggregate).
+
+**NO re-chunking / NO within-iter chunk retry** (CONTEXT D-10): Do NOT invoke Classify again from Execute Mode (structurally impossible — Classify is a separate invocation). Do NOT auto-retry the same chunk within the iteration. User recovery path is `/tas {original request}` for a fresh start, optionally with `chunks: 1` override to force single-dialectic execution.
+
+**Merge Conflict HALT path** (when `MERGE_MODE=FAILED`): the cleanup Bash above already ran `git reset --hard PRE_MERGE_SHA` + `git clean -fd` on PROJECT_ROOT. Then emit HALT with:
+- `halt_reason: "chunk_merge_conflict"` (NEW, CONTEXT D-05 — merge domain, justified exception to Phase 3.1 D-TOPO-05 watchdog/hang enum freeze)
+- `summary`: user-facing Korean wording (see SKILL.md Phase 3 Recovery Guidance — Plan 05 adds the row: "Chunk N (title) 머지 충돌. 공유 파일을 여러 chunk가 동시에 수정했을 가능성이 큽니다. plan.json을 재검토하거나 /tas로 새로 시작하세요. /tas --resume은 이 경로에서 지원되지 않습니다.")
+- `merge_log`: `${CHUNK_LOG_DIR}/merge.log` (forensic reference; SKILL.md does NOT read merge.log — info-hiding)
+
+**All chunks merged successfully — sub-loop exit path**:
+
+- `cumulative_context_this_iter += "\n## 구현 step (chunked)\n" + cumulative_chunk_context` (append the accumulated chunk summaries to the iteration-level cross-step context, so downstream verify/test steps can reference)
+- Resume to standard step 9 (deliverable summary append) — use the last chunk's `deliverable.md` as the canonical step deliverable for the iteration DELIVERABLE.md index, OR synthesize a meta-deliverable pointer: `"See chunks/chunk-{1..N}/deliverable.md for per-chunk deliverables; synthesis summary above in cumulative_chunk_context."` — CLAUDE's Discretion; planner locks the synthesis-pointer choice at execution time.
+- Run standard step 9.5 checkpoint update with:
+  - `current_chunk = null` (step completed, all chunks merged — reset)
+  - `completed_chunks = []` (reset at step boundary per CONTEXT D-08)
+  - `current_step = ${next step id}` or `null` if 구현 was the last step
+  - `completed_steps = <prior> + [${S.id}]`
+  - `status = "running"` (or `"finalized"` only at Phase 3 Final Aggregate)
+
 #### Within-Iteration FAIL Handling
 
 Implement the retry/HALT logic exactly as specified in
@@ -748,6 +962,14 @@ Implement the retry/HALT logic exactly as specified in
   This write lets Phase 2 resume surface the last known progress and the halt reason.
 
 **Engine HALT** (circular argumentation etc.): stop iteration, proceed to Phase 2e.
+
+**Chunk FAIL/HALT (Phase 2d.5 chunk sub-loop)**: chunk-level failures route through the Phase 2d.5 FAIL branch table above, NOT through this persistent-failure retry logic. Specifically:
+
+- chunk FAIL/HALT is NEVER auto-retried within the iteration (CONTEXT D-10)
+- chunk FAIL/HALT does NOT increment `consecutive_fail_count` (that counter tracks single-dialectic 검증/테스트 FAIL retries, not chunk-level failures)
+- cleanup Bash is inline at the failure branch (worktree remove + prune + optional reset --hard PRE_MERGE_SHA) — no Bash trap (MetaAgent is a subagent; Python finally is not available at this layer)
+- HALT checkpoint write populates `current_chunk` + `completed_chunks` (forensic — Phase 2 D-06 halt gate blocks resume into a chunked step)
+- Two new halt_reason enums are permitted here: `chunk_merge_conflict` (D-05, merge domain) and `worktree_backlog` (D-03, environment pollution domain). These are justified exceptions to Phase 3.1 D-TOPO-05's watchdog/hang enum freeze because they live in entirely different failure domains. NO new watchdog/hang enum is introduced.
 
 #### Phase 2e: Iteration Synthesis
 
