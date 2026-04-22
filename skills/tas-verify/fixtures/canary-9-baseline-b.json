@@ -1,0 +1,15 @@
+{
+  "_meta": {
+    "sub_canary": "b",
+    "description": "Chunked classify structural baseline (pre-slim meta.md, implementation_chunks populated per CHUNK-02)",
+    "captured_at": "2026-04-22",
+    "captured_from": "skills/tas/agents/meta.md @2f3ad87e46deeecb29ec240b4bdad7eaacc4e235"
+  },
+  "fixture_request": "implement user authentication with DB schema migration, API handlers, and login UI across 3 vertical layers",
+  "structural_fields": {
+    "complexity": "complex",
+    "implementation_chunks_count": 3,
+    "implementation_chunks_ids_ordered": ["1", "2", "3"],
+    "implementation_chunks_deps_structure": [[], ["1"], ["1", "2"]]
+  }
+}
