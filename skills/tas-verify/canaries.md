@@ -294,41 +294,67 @@ TAS_VERIFY_TOPO_DURATION_SEC=1800 python3 \
 
 ---
 
-## Canary #8 — 2-chunk merge + integrated verify (VERIFY-01 c) [PENDING]
+## Canary #8 — 2-chunk merge + integrated verify (VERIFY-01 c)
 
-**STATUS:** Wave 0 scaffolding. Wave 5 (Plan `04-07`) replaces the `[PENDING — Wave 5 fills this]` markers below with the full assertion catalogue. The invocation path already routes to `skills/tas/runtime/tests/simulate_chunk_integration.py`, which currently exits 0 with a PENDING label so `/tas-verify` wiring is functional from Wave 0.
+**STATUS:** Wave 5 complete — Phase 4 shipped. Harness: `skills/tas/runtime/tests/simulate_chunk_integration.py` (stdlib-only, 2-Phase).
 
-**Guards**: `.planning/phases/04-chunk-decomposition/04-CONTEXT.md` D-09; CHUNK-03 (worktree orphan prevention); CHUNK-05 (cherry-pick + apply fallback + HALT); CHUNK-06 (integrated verify synthesis); CHUNK-07 (within-chunk failure handling); **Pitfall 15** (integrated verify missing regression at chunk boundary). Catches regressions where: chunk sub-loop leaves orphan worktrees, cherry-pick failure path skips `git reset --hard PRE_MERGE_SHA`, verify step_assignment loses Synthesis Context injection, or chunk 1 FAIL path triggers a forbidden re-classify.
+**Guards**: `.planning/phases/04-chunk-decomposition/04-CONTEXT.md` D-09; CHUNK-03 (worktree orphan prevention); CHUNK-05 (cherry-pick + apply fallback + HALT); CHUNK-06 (integrated verify synthesis); CHUNK-07 (within-chunk failure handling); **Pitfall 15** (integrated verify missing regression at chunk boundary). Catches regressions where: chunk sub-loop leaves orphan worktrees, cherry-pick failure path skips `git reset --hard PRE_MERGE_SHA`, verify step_assignment loses Synthesis Context injection, chunk 1 FAIL path triggers a forbidden re-Classify, or `implementation_chunks[]` schema drifts from the D-02 6-field contract.
 
 **Exercise (two Phases):**
 
-**Phase 1 — 2-chunk happy path (synthetic mock, CI-default, ~30s):** construct a minimal PROJECT_ROOT fixture in `tempfile.mkdtemp`, build a 2-chunk `plan.json`, replay the meta.md Phase 2d.5 worktree-add + mock-dialectic + MetaAgent-commit + cherry-pick + worktree-remove sequence. Assertions: [PENDING — Wave 5 fills this: worktree_add × 2 succeeds, each chunk has 1 commit with `chunk-{N}:` prefix, cherry-pick × 2 succeeds, verify step_assignment contains Synthesis Context block, post-cleanup `git worktree list --porcelain` has no `chunks/chunk-*` entries].
+**Phase 1 — 2-chunk happy path (synthetic mock, CI-default, ~30s):** Construct a minimal PROJECT_ROOT fixture inside `tempfile.mkdtemp(prefix="tas-canary-8-")` via `git init` + initial commit with 3 source files (`src/schema.py`, `src/api.py`, `src/ui.py`). Build a 2-chunk `plan.json` with D-02 schema (chunk 1 scope = "schema layer", deps = []; chunk 2 scope = "api + ui layer", deps = ["1"]). Replay the meta.md Phase 2d.5 orchestration:
+1. `git worktree add --detach {WORKSPACE}/chunks/chunk-{c.id} HEAD` per chunk.
+2. Mock dialectic writes `deliverable.md` + modifies one source file per chunk (pure Python — no real engine spawn).
+3. `git add -A && git commit -m "chunk-{c.id}: {title}"` (MetaAgent ownership — D-06).
+4. `git cherry-pick {CHUNK_SHA}` into PROJECT_ROOT (primary path — D-05).
+5. `git worktree remove --force {CHUNK_PATH}` post-merge.
+6. Build a mock integrated verify step-config.json with the D-07 Synthesis Context section injected.
 
-**Phase 2 — chunk 1 regression detection (opt-in, `TAS_VERIFY_CHUNK_MODE=full`, ~300s):** same fixture with chunk 1's deliverable embedding a signature mismatch that chunk 2 assumes differently; mock integrated verify emits FAIL with "synthesis boundary" keyword. Assertions: [PENDING — Wave 5 fills this: Phase 1 assertions all hold, integrated verify verdict == FAIL, FAIL reason matches `/synthesis|boundary|regression|chunk.1/i`, no second Classify Agent() invocation in trace].
+**Phase 2 — chunk 1 regression detection (opt-in, `TAS_VERIFY_CHUNK_MODE=full`, ~300s):** Same fixture as Phase 1 BUT `_mock_dialectic(..., regression=True)` for chunk 1 only — chunk 1's deliverable embeds "SIGNATURE_MISMATCH: expected return type `int` but delivers `str`" which chunk 2 implicitly relies on. After merges complete, `_mock_integrated_verify(..., regression_mode=True)` returns `{"verdict": "FAIL", "reason": "synthesis boundary detected: chunk 1 regression — ..."}`. The canary asserts the FAIL verdict is surfaced AND no second Classify invocation path is taken (re-Classify 금지 structural check per D-10).
 
 ```bash
-# Default CI mode (fast, ~30s; currently PENDING exit 0 until Wave 5 lands)
+# Default CI mode (fast, ~30s)
 python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_chunk_integration.py"
 
 # Explicit fast mode
 TAS_VERIFY_CHUNK_MODE=fast python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_chunk_integration.py"
 
-# Extended mode (full, ~300s; regression sub-canary)
+# Extended mode (full, ~300s — regression sub-canary)
 TAS_VERIFY_CHUNK_MODE=full python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_chunk_integration.py"
 ```
 
-**Pass criteria (Phase 1 — mandatory, filled by Wave 5):**
-[PENDING — Wave 5 fills this with the 5 Phase 1 assertions from D-09]
+**Pass criteria (Phase 1 — mandatory):**
+- **Assertion 1**: `git worktree add --detach` succeeds for both chunks (exit 0 + chunk path exists during iteration).
+- **Assertion 2**: each chunk worktree has exactly 1 commit with `chunk-{N}:` subject prefix (verified via `git log --oneline HEAD~..HEAD` before cherry-pick removes the worktree).
+- **Assertion 3**: cherry-pick succeeds for both chunks (primary path, no fallback triggered in happy-path fixture); post-merge `git log --oneline HEAD~2..HEAD` on PROJECT_ROOT shows both `chunk-1:` and `chunk-2:` commits in order.
+- **Assertion 4**: the mock integrated verify `step-config.json` has a `step_assignment` string containing all 6 Synthesis Context substrings: `"## Synthesis Context"`, `"Public API"`, `"Shared file"`, `"Value flow"`, `"Regression"`, `"Not to be re-audited"` (D-07 proof).
+- **Assertion 5**: post-cleanup `git worktree list --porcelain` on PROJECT_ROOT returns a list with zero entries matching `/chunks/chunk-` (all chunk worktrees removed — CHUNK-07 orphan prevention).
 
-**Pass criteria (Phase 2 — mandatory if `MODE=full`, filled by Wave 5):**
-[PENDING — Wave 5 fills this with the 4 Phase 2 assertions from D-09]
+**Pass criteria (Phase 2 — mandatory if MODE=full):**
+- **Assertion 6**: All Phase 1 assertions still hold against the regression-mode fixture.
+- **Assertion 7**: `_mock_integrated_verify(..., regression_mode=True)` returns `verdict == "FAIL"`.
+- **Assertion 8**: FAIL reason matches the regex `/synthesis|boundary|regression|chunk.1/i` (4 keyword alternatives — any match passes; covers D-07 focus items 1/3/4 + chunk id reference).
+- **Assertion 9**: Structural — the canary maintains a `re_classify_called = False` boolean; nothing in the Phase 2 code path flips it to True. At exit, assertion requires `re_classify_called is False`. This proves re-Classify is NOT invoked on chunk 1 FAIL (CHUNK-07 + D-10 "no re-chunking / no re-Classify" regression guard).
 
-**PASS stdout (Wave 5 contract):** `PASS: canary #8 (2-chunk merge + integrated verify; Phase 2: <PASS|SKIP (fast mode)>)`
+**PASS stdout:**
+- Fast mode: `PASS: canary #8 (2-chunk merge + integrated verify; Phase 2: SKIP (fast mode))`
+- Full mode: `PASS: canary #8 (2-chunk merge + integrated verify; Phase 2: PASS)`
 
-**Wave 0 stub stdout (current):** `PENDING: canary #8 (Wave 5 will fill body)` or `PENDING: canary #8 (Wave 5 will fill body; full mode)` — both exit 0.
+**Fail signals (regression):**
+- `FAIL: Phase 1 assertion 1: <reason>` → **CHUNK-03 regression**: `git worktree add --detach` fails; check `{WORKSPACE}/chunks/` parent dir creation + stale-worktree pre-flight (meta.md Phase 2d.5 + Bash Sketch 1).
+- `FAIL: Phase 1 assertion 2: <reason>` → **D-06 regression**: chunk commit is missing or has wrong prefix; check that MetaAgent commit step 7b (meta.md Phase 2d.5) runs `git add -A && git commit -m "chunk-{c.id}: ..."`; verify thesis/antithesis is NOT committing.
+- `FAIL: Phase 1 assertion 3: <reason>` → **CHUNK-05 regression**: cherry-pick fails on clean fixture — check PROJECT_ROOT HEAD state before cherry-pick; Bash Sketch 2's PRE_MERGE_SHA capture may be broken.
+- `FAIL: Phase 1 assertion 4: <reason>` → **D-07 regression**: Synthesis Context section missing from verify step_assignment; check meta.md Prepare Dialectic Config `Synthesis Context injection` block (Plan 05) + condition gate `S.name in {"검증", "테스트"} AND cumulative_chunk_context is non-empty`.
+- `FAIL: Phase 1 assertion 5: <reason>` → **CHUNK-07 / Pitfall 9 regression**: orphan worktrees remain after canary exits; check `git worktree remove --force {CHUNK_PATH}` call site in meta.md Phase 2d.5 step 7e + Bash Sketch 4 cleanup sequence.
+- `FAIL: Phase 2 assertion 6: <reason>` → Phase 1 broken under regression-mode fixture; same as Phase 1 FAIL signals above (regression fixture should not change the structural merge path — only deliverable content).
+- `FAIL: Phase 2 assertion 7: <reason>` → **D-07 regression (depth)**: mock integrated verify returned non-FAIL under regression mode; check that `_mock_integrated_verify(regression_mode=True)` returns FAIL and that the verdict propagates.
+- `FAIL: Phase 2 assertion 8: <reason>` → FAIL reason doesn't contain synthesis keywords; check `_mock_integrated_verify` reason string and `FAIL_KEYWORDS_RE` regex.
+- `FAIL: Phase 2 assertion 9: <reason>` → **CHUNK-07 / D-10 / Pitfall 3 regression**: `re_classify_called` flipped to True — the canary detected a re-Classify path from Execute Mode. This is a HARD failure; chunk FAIL/HALT must never re-invoke Classify. Check meta.md Phase 2d.5 Verdict branch (FAIL/HALT path) + Within-Iteration FAIL Handling chunk branch sub-section.
 
-**Fail signals (regression, Wave 5 populates):**
-[PENDING — Wave 5 fills this with concrete FAIL-prefix-to-regression mapping: e.g., `FAIL: Phase 1 chunk-1 worktree missing` → D-03 regression; `FAIL: Phase 2 re-chunking path triggered` → D-10 regression; `FAIL: Phase 1 Synthesis Context missing` → D-07 regression]
+**Integration with other canaries:**
+- Canary #5/#6 guard watchdog topology (Phase 3 Layer A / Layer B).
+- Canary #7 guards subagent orphan survival + real-chain integration (Phase 3.1 Scenario B).
+- **Canary #8 guards the chunk sub-loop wiring** (this canary) — topology is covered by #7, sub-loop control flow is covered here. Failure of #8 does NOT imply #5/#6/#7 are compromised; they exercise different invariants.
 
 ---
 
