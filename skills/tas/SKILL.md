@@ -169,12 +169,53 @@ All 3 bootstrap failure paths route to the existing `engine_crash` halt_reason e
 ## Phase 0b: Resume Gate (triggered by --resume)
 
 ```text
-# SCOPE: SKILL.md may ONLY Read checkpoint.json / plan.json / REQUEST.md (content).
+# SCOPE: SKILL.md may ONLY Read:
+#   - ${LATEST_LINK} (symlink resolve, single-step — D-04)
+#   - ${WORKSPACE}/checkpoint.json
+#   - ${WORKSPACE}/plan.json
+#   - ${WORKSPACE}/REQUEST.md
 # Directory listing via `ls iteration-*/` is metadata only — allowed.
-# Reading dialogue.md, round-*.md, deliverable.md, or lessons.md is an I-1 regression.
+# Reading dialogue.md, round-*.md, deliverable.md, lessons.md, heartbeat.txt is an I-1 regression.
 ```
 
 If `$ARGUMENTS` contains `--resume`, route here and skip Phase 1 (Classify). On any pre-condition failure below, emit a halt JSON directly — do NOT call MetaAgent.
+
+### Step 0: Resolve Session via LATEST Symlink (Phase 6 D-04 + D-10)
+
+Cold-resume chicken-and-egg: `checkpoint.json` lives inside the session worktree, but the resume gate must know the session worktree path BEFORE it can find `checkpoint.json`. The `${CACHE_ROOT}/LATEST` symlink (atomically updated by Phase 0 Session Bootstrap, D-04) is the single zero-ambiguity entry point.
+
+```bash
+CACHE_ROOT="${XDG_CACHE_HOME:-${HOME}/.cache}/tas-sessions"
+LATEST_LINK="${CACHE_ROOT}/LATEST"
+
+# 0.1 — LATEST symlink must exist (no prior /tas run → no_checkpoint HALT)
+if [ ! -L "${LATEST_LINK}" ]; then
+  HALT_REASON=no_checkpoint
+  SUMMARY="LATEST 세션 인덱스 없음. /tas로 새로 시작하세요."
+  EMIT_HALT
+  exit 0
+fi
+
+# 0.2 — Bare readlink is intentional (1-step resolve; BSD compat — Pitfall 9:
+#       do NOT add the deep-resolve flag). Chain-attack defense is the prefix-check
+#       below, NOT deep resolution. (T-V4-01 mitigation)
+RESOLVED="$(readlink "${LATEST_LINK}")"
+case "${RESOLVED}" in
+  "${CACHE_ROOT}/"*) ;;  # safe — under cache root
+  *)
+    HALT_REASON=workspace_missing
+    SUMMARY="LATEST symlink이 cache root 외부 경로를 가리킵니다."
+    EMIT_HALT
+    exit 0
+    ;;
+esac
+
+# 0.3 — Per D-04: LATEST gestures ${SESSION_WORKTREE} directly (1-step resolution)
+SESSION_WORKTREE="${RESOLVED}"
+WS_BASE="${SESSION_WORKTREE}/_workspace/quick"
+```
+
+After Step 0 succeeds, downstream Step 1 (Workspace Resolution) uses `${WS_BASE}` in place of `${PROJECT_ROOT}/_workspace/quick`. Step 2's 7 pre-condition checks operate on `${WORKSPACE}` resolved from `${WS_BASE}` — no schema bump, no new HALT enums.
 
 ### Step 1: Workspace Resolution
 
@@ -182,17 +223,18 @@ Parse `$ARGUMENTS` for the `--resume` token. If a path argument follows, take it
 
 ```bash
 # Path-arg branch (user supplied `/tas --resume <workspace_path>`)
-WORKSPACE="$(PROJECT_ROOT="${PROJECT_ROOT}" python3 -c '
+# WS_BASE resolved in Step 0 from LATEST symlink (Phase 6 D-04)
+WORKSPACE="$(WS_BASE="${WS_BASE}" python3 -c '
 import os, sys
 p = os.path.realpath(sys.argv[1])
-root = os.path.realpath(os.environ["PROJECT_ROOT"] + "/_workspace/quick")
+root = os.path.realpath(os.environ["WS_BASE"])
 if p == root or p.startswith(root + os.sep):
     print(p); sys.exit(0)
 sys.exit(3)
 ' "$PATH_ARG")"  # non-zero exit → halt `workspace_missing`
 
 # Latest-auto branch (user supplied `/tas --resume` with no path)
-WORKSPACE="$(ls -1dt "${PROJECT_ROOT}/_workspace/quick/"*/ 2>/dev/null \
+WORKSPACE="$(ls -1dt "${WS_BASE}/"*/ 2>/dev/null \
   | grep -v '/classify-' \
   | head -1 | sed 's#/$##')"
 # empty string → halt `no_checkpoint`
