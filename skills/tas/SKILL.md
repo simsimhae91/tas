@@ -56,7 +56,6 @@ invoke MetaAgent via Agent(), present results. If MetaAgent fails → report err
 ```bash
 PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 SKILL_DIR="${CLAUDE_SKILL_DIR}"
-mkdir -p "${PROJECT_ROOT}/_workspace/quick"
 ```
 
 ### SDK Preflight Check
@@ -109,6 +108,61 @@ Examples — NOT trivial: "add sparkle effect", "refactor X", "improve Y", any U
 Cost of bypassing MetaAgent: unreviewed output.
 
 If trivial, respond directly with the answer. No preamble or meta-narration — just answer the question.
+
+### Session Bootstrap (non-trivial path only)
+
+Per Phase 6 ISO-01 + D-01: replace the user-tree workspace with a named-branch git worktree under XDG cache. **This block runs ONLY when the Trivial Gate did not respond directly** (i.e., we are about to enter Classify or Phase 0b Resume). Trivial responses skip session creation entirely (worktree-only-for-real-runs invariant — D-01 Rejected: "Trivial Gate 이전에 session bootstrap" → trivial 응답도 worktree 만들면 stale 누적 가속화).
+
+```bash
+# Phase 0 inline halt JSON helper (used by the bootstrap block below; mirrors Phase 0b EMIT_HALT shape)
+EMIT_HALT() {
+  printf '{"status":"halted","workspace":"","halt_reason":"%s","summary":"%s","halted_at":"phase-0-session-bootstrap"}\n' \
+    "${HALT_REASON}" "${SUMMARY}"
+}
+
+# Phase 6 D-08 backlog guard: refuse new bootstrap if user already has ≥20 stale tas/session-* worktrees
+WT_BACKLOG_COUNT="$(git -C "${PROJECT_ROOT}" worktree list --porcelain 2>/dev/null \
+  | awk '/^worktree/{wt=$2} /^branch refs\/heads\/tas\/session-/{print wt}' \
+  | wc -l | tr -d ' ')"
+if [ "${WT_BACKLOG_COUNT:-0}" -ge 20 ]; then
+  cat <<'EOF'
+⚠ tas/session-* worktree가 20개 이상 누적됐습니다.
+정리: `git worktree list | grep tas/session-` 후
+       `git worktree remove <path>` + `git branch -D <branch>`
+또는: `/tas-workspace clean` (Phase 6 Plan 06-04 — session worktree cleanup 통합)
+EOF
+  exit 0
+fi
+
+# Phase 6 D-01: session worktree bootstrap (ISO-01 + ISO-03)
+TS="$(date -u +%Y%m%dT%H%M%SZ)"
+PROJECT_NAME="$(basename "${PROJECT_ROOT}")"
+case "${PROJECT_NAME}" in
+  ""|"/"|*"/"*) PROJECT_NAME="tas-session" ;;  # D-02 defensive fallback
+esac
+CACHE_ROOT="${XDG_CACHE_HOME:-${HOME}/.cache}/tas-sessions"
+SESSION_DIR="${CACHE_ROOT}/${TS}"
+SESSION_WORKTREE="${SESSION_DIR}/${PROJECT_NAME}"
+SESSION_BRANCH="tas/session-${TS}"
+
+mkdir -p "${SESSION_DIR}" \
+  || { HALT_REASON=engine_crash; SUMMARY="세션 캐시 디렉터리 생성 실패: ${SESSION_DIR}"; EMIT_HALT; exit 0; }
+
+# Named branch worktree — NOT --detach (PROJECT.md Key Decisions: reviewable PR identity)
+git -C "${PROJECT_ROOT}" worktree add -b "${SESSION_BRANCH}" "${SESSION_WORKTREE}" HEAD \
+  || { HALT_REASON=engine_crash; SUMMARY="세션 worktree 생성 실패: ${SESSION_WORKTREE}"; EMIT_HALT; exit 0; }
+
+# Atomic LATEST symlink swap (ln -sfn rename(2) syscall — D-04)
+ln -sfn "${SESSION_WORKTREE}" "${CACHE_ROOT}/LATEST" \
+  || { HALT_REASON=engine_crash; SUMMARY="LATEST symlink 갱신 실패"; EMIT_HALT; exit 0; }
+
+# Workspace inside the session worktree (replaces former ${PROJECT_ROOT}/_workspace/quick)
+mkdir -p "${SESSION_WORKTREE}/_workspace/quick"
+
+export SESSION_WORKTREE SESSION_BRANCH SESSION_DIR  # downstream Phase 1+ consume these
+```
+
+All 3 bootstrap failure paths route to the existing `engine_crash` halt_reason enum (Phase 3.1 D-TOPO-05 freeze — NEVER invent a new enum). The halt JSON shape matches Phase 0b's inline helper so Phase 3 "On HALT" rendering handles display unchanged.
 
 ---
 
