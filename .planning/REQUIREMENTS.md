@@ -1,12 +1,13 @@
-# REQUIREMENTS — tas M1
+# REQUIREMENTS — tas
 
-**마일스톤**: 실행 안정성 + 컨텍스트 효율성 + 프롬프트 군살제거
-**날짜**: 2026-04-21
-**상태**: v1 스코프 확정
+**Active milestone**: v1.1 (TAS-M2) — Session Isolation & Commit Granularity
+**Prior milestone**: v1.0 (TAS-M1) — 실행 안정성 + 컨텍스트 효율성 + 프롬프트 군살제거 (완료 2026-04-22, formal close 대기)
+**날짜**: 2026-04-23
+**상태**: v1.1 스코프 확정 대기 (requirements 검토 중)
 
 ---
 
-## v1 Requirements
+## v1 Requirements (M1 — complete)
 
 ### A. Checkpoint Foundation
 
@@ -66,10 +67,45 @@
 
 ---
 
+## v1.1 Requirements (M2 — active)
+
+### F. Session Worktree Isolation
+
+- [ ] **ISO-01** — `/tas` 진입 시 `~/.cache/tas-sessions/{ts}/<project>/` 경로에 **named branch** `tas/session-{ts}`와 함께 git worktree가 자동 생성된다 (사용자 현재 HEAD에서 fork; `--detach` 사용 금지)
+- [ ] **ISO-02** — SKILL.md Phase 1 dirty-tree 체크가 "세션 worktree에선 사용자의 uncommitted 변경사항이 보이지 않음" 문구로 교체되며, auto-stash나 include-dirty 기능은 제공되지 않는다 (explicit warning + 진행)
+- [ ] **ISO-03** — Session index `~/.cache/tas-sessions/LATEST` symlink가 세션 시작 시 atomic `ln -sfn`으로 갱신되어 `/tas --resume`의 cold-resume 경로를 해결한다 (checkpoint.json이 worktree 내부에 있는 chicken-and-egg 해소)
+- [ ] **ISO-04** — `/tas-explain`, `/tas-workspace`, `/tas-review` 세 동반 명령이 session index 기반으로 latest session을 조회하도록 경로 로직을 재조정한다 (기존 `${PROJECT_ROOT}/_workspace/` 직접 탐색 경로 대체)
+- [ ] **ISO-05** — Phase 4 Chunk Sub-loop의 cherry-pick target을 `${PROJECT_ROOT}`(main repo HEAD)에서 **session worktree HEAD**로 재정의한다 (`meta-execute.md` Phase 2d.5 + `engine-invocation-protocol.md` Sub-loop invocations)
+- [ ] **ISO-06** — HALT/PASS 경로 모두에서 session worktree는 유지되며, 제거는 오직 사용자가 명시적으로 `/tas-workspace --prune <ts>` 또는 `git worktree remove`를 호출할 때만 이뤄진다 (사용자 forensics/review 권한 보호)
+
+### G. Step-Level Commit Granularity
+
+- [ ] **COMMIT-01** — MetaAgent Execute Phase 2d 각 ACCEPT된 step 수렴 시점에 `git -C "${SESSION_WORKTREE}" commit`이 실행된다 (기존 Phase 4 chunk commit 패턴을 non-chunk step에 확장)
+- [ ] **COMMIT-02** — `git diff --quiet`가 true인 step(전형적으로 기획 · 검증)에서는 commit이 생성되지 않는다 (COMMIT_EMPTY skip; 빈 커밋 금지)
+- [ ] **COMMIT-03** — 커밋 메시지 schema를 정의한다: subject `step-{id}-{slug}: {title}`, trailers `Dialectic-Verdict`, `Dialectic-Rounds`, `Iteration`, `Tas-Session: {ts}`, `Step-Id: {id}` (user가 `git log --grep='Tas-Session: {ts}'`로 세션 추적 가능)
+- [ ] **COMMIT-04** — pre-commit hook 실패 시 `halt_reason: pre_commit_hook_failed` (신규 enum, merge/hook 직교 도메인 — Phase 4 `chunk_merge_conflict` 선례 적용)로 HALT하며 hook 출력을 `{workspace}/iteration-*/logs/step-*-precommit.log` 에 기록한다; `--no-verify` 자동 우회는 금지
+- [ ] **COMMIT-05** — PASS 경로 종료 시 `git merge tas/session-{ts}` (또는 `git cherry-pick`) 제안 텍스트가 stdout에 출력된다 (auto-merge 금지 — "reviewable gate" 정체성 보존)
+
+### H. Documentation & Invariants
+
+- [ ] **DOC-01** — `CLAUDE.md` Common Mistakes에 3개 신규 bullet 추가: (a) top-level session worktree 경로 위반 ("프로젝트 tree 내부 배치 금지"), (b) chunk cherry-pick target 실수 ("main repo HEAD 아닌 session HEAD"), (c) pre-commit hook `--no-verify` 자동 우회 금지
+- [ ] **DOC-02** — `references/workspace-convention.md`에 Session Layer 다이어그램 추가 (session worktree 내부에 `_workspace/quick/{ts}/` + `chunks/chunk-N/` 중첩 구조, index symlink 위치)
+
+### I. Canary Tests
+
+- [ ] **VERIFY-ISO-01** — Canary #10 — dirty main tree + in-progress branch 상태에서 /tas 완주 후: (a) 사용자 tree `git status --porcelain` 결과 변화 없음, (b) `tas/session-{ts}` branch 존재, (c) stdout에 merge 제안 커맨드 포함. fast=30s / full=300s 2-Phase
+- [ ] **VERIFY-COMMIT-01** — Canary #11 — 4단 표준 flow 완주 후 session branch의 `git log --oneline` 출력이 기대 commit 수와 일치 (기획=0 empty-skip, 구현≥1, 검증=0-1, 테스트=0-1) + 모든 commit에 `Tas-Session: {ts}` trailer 존재 + pre-commit hook 실패 회귀 시뮬레이션 포함
+
+---
+
 ## v2 Requirements (deferred)
 
-- chunk 병렬 실행 (M1은 순차 릴레이만)
-- chunk boundary 자동 최적화 (M1은 MetaAgent의 heuristic 판단)
+- **Auto-merge-on-PASS** — opt-in 플래그 (`/tas --auto-merge`)로 v2에 추가. v1.1은 manual only
+- **Parallel /tas sessions** — worktree 격리로 구조적으로 가능하나 rate-limit·token 정책 필요 (advertise 안 함)
+- **Remote PR auto-creation** — `gh pr create` 자동 호출 (GitHub 외 플랫폼 매트릭스 필요, v1.1 out-of-scope)
+- **`--squash-iter` 플래그** — iteration 경계에서 step 커밋을 squash하는 편의 기능
+- chunk 병렬 실행 (M1 / v1.1 순차 릴레이만)
+- chunk boundary 자동 최적화 (MetaAgent의 heuristic 판단)
 - Prompt A/B 테스트 프레임워크
 
 ---
@@ -84,6 +120,15 @@
 - **smart prompt compression** — meta.md를 LLM으로 자동 압축하는 기능. M1은 수동·분할만
 - **런타임 토큰 측정** — end user에게 API 키를 요구하지 않기 위해 `count_tokens`는 개발자 스크립트 전용
 - **라운드/이터레이션 경계 체크포인트** — 체크포인트는 스텝 경계에서만
+
+**v1.1 (M2) 추가 Out of Scope**:
+- **Auto-merge to user's original branch** — PASS 시 자동 머지는 "reviewable gate" 정체성 drift. manual only
+- **Session branch 자동 삭제** — `git worktree remove`는 사용자 명시 호출 시에만. tas가 자체 정리 금지 (forensics 보호)
+- **Magic stash of user dirty changes** — uncommitted 변경사항을 tas가 stash + reapply 하지 않음 (user-controlled only)
+- **`--force-resume` 플래그** — session index 손상 시 강제 재개 금지 (M1 원칙 계승)
+- **Session worktree 프로젝트 tree 내부 배치** — `${PROJECT_ROOT}/.tas-sessions/` 경로는 금지 (사용자 tree 오염 방지)
+- **Remote git 작동 의존** — push/fetch/PR 생성은 v1.1 scope 밖 (offline 동작 필수)
+- **Worktree retention auto-expire** — "7일 지나면 자동 삭제" 같은 TTL 정책 금지 (user explicit prune only)
 
 ---
 
@@ -131,7 +176,29 @@
 | TOPO-06 | Phase 3.1 (Engine Invocation Topology Refactor) | Complete (Plan 03.1-07, CLAUDE.md Common Mistakes 3 bullets + 7-invariant regression suite verified; canonical automated verify block exits 0) |
 | VERIFY-TOPO-01 | Phase 3.1 (Engine Invocation Topology Refactor) | Complete (Plan 03.1-06, 2-Phase canary: orphan survival + real-chain integration via sed-copy mock injection) |
 
-**Coverage:** 35/35 v1 requirements mapped (VERIFY-01 split into 3 canaries: a+b → Phase 3, c → Phase 4; Phase 3.1 adds TOPO-01..06 + VERIFY-TOPO-01 family)
+**v1 (M1) Coverage:** 35/35 v1 requirements mapped (VERIFY-01 split into 3 canaries: a+b → Phase 3, c → Phase 4; Phase 3.1 adds TOPO-01..06 + VERIFY-TOPO-01 family)
+
+### v1.1 (M2) Traceability
+
+| REQ-ID | Phase | Status |
+|--------|-------|--------|
+| ISO-01 | Phase 6 (Session Worktree Isolation) | Pending |
+| ISO-02 | Phase 6 (Session Worktree Isolation) | Pending |
+| ISO-03 | Phase 6 (Session Worktree Isolation) | Pending |
+| ISO-04 | Phase 6 (Session Worktree Isolation) | Pending |
+| ISO-05 | Phase 6 (Session Worktree Isolation) | Pending |
+| ISO-06 | Phase 6 (Session Worktree Isolation) | Pending |
+| COMMIT-01 | Phase 7 (Step-Level Commit Granularity) | Pending |
+| COMMIT-02 | Phase 7 (Step-Level Commit Granularity) | Pending |
+| COMMIT-03 | Phase 7 (Step-Level Commit Granularity) | Pending |
+| COMMIT-04 | Phase 7 (Step-Level Commit Granularity) | Pending |
+| COMMIT-05 | Phase 7 (Step-Level Commit Granularity) | Pending |
+| DOC-01 | Phase 7 마무리 (cross-phase invariant layer) | Pending |
+| DOC-02 | Phase 6 (cross-phase invariant layer) | Pending |
+| VERIFY-ISO-01 | Phase 6 (Canary #10) | Pending |
+| VERIFY-COMMIT-01 | Phase 7 (Canary #11) | Pending |
+
+**v1.1 (M2) Coverage:** 15/15 v1.1 requirements mapped; Phase 6 holds 8 (ISO-01..06 + DOC-02 + VERIFY-ISO-01), Phase 7 holds 7 (COMMIT-01..05 + DOC-01 + VERIFY-COMMIT-01). Phase 7 depends on Phase 6 (chunk cherry-pick target 재정의된 상태에서 step commit 동작 검증).
 
 ---
 
@@ -146,6 +213,13 @@
 
 세 테마 모두 "품질 게이트가 기대대로 작동함"을 보존·확장하는 방향이며 Core Value와 정합.
 
+**M2 (v1.1)가 Core Value에 기여하는 방식**:
+- 세션 worktree 격리 → 품질 게이트의 **출력 채널이 사용자 브랜치에서 분리**됨. 게이트가 "통과시킨 변경사항"을 사용자가 독립적으로 리뷰·승인 가능. 게이트 통과 ≠ 자동 반영
+- Step-level atomic 커밋 → 품질 게이트가 각 step에서 "어떤 변경을 승인했는지"가 git history로 **immutable하게 남음**. 사후 revert·bisect로 게이트 판단 재검증 가능
+- Manual merge UX → 게이트의 "reviewable 출력" 정체성을 구조적으로 강제 (automation tool로 drift 방지)
+
+세 요소 모두 "품질 게이트의 출력을 신뢰할 수 있는 리뷰 단위로 만들기" 방향이며 Core Value의 "구조적으로 드러냄" 원칙을 git 레이어로 확장한다.
+
 ---
 
-*Last updated: 2026-04-21 — Phase mappings assigned by gsd-roadmapper (TAS-M1 initialization)*
+*Last updated: 2026-04-23 — v1.1 (M2) requirements defined; Phase 6+7 roadmap pending (gsd-roadmapper 호출 전). v1 (M1) Traceability 보존.*
