@@ -437,7 +437,7 @@ TAS_VERIFY_SLIM_MODE=full python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/t
 
 ## SSOT Invariants (SLIM-03 + ISO-04)
 
-**STATUS:** Wave 3 complete — Phase 5 shipped (SSOT-1/2/3) + Phase 6 shipped (SSOT-4, Plan 06-07). These 4 bash grep invariants guarantee that each load-bearing normative sentence appears in exactly 1 file (or in the exact expected multiplicity for companion commands). Failure of any invariant indicates drift: a definition was copied into a reference file instead of being anchored in its single source-of-truth location, OR a companion command reverted to the old in-tree `${PROJECT_ROOT}/_workspace` path.
+**STATUS:** Wave 5 complete — Phase 5 shipped (SSOT-1/2/3) + Phase 6 shipped (SSOT-4, Plan 06-07) + Phase 7 shipped (SSOT-5/6, Plan 07-07). These 6 bash grep invariants guarantee that each load-bearing normative sentence appears in exactly 1 file (or in the exact expected multiplicity for companion commands). Failure of any invariant indicates drift: a definition was copied into a reference file instead of being anchored in its single source-of-truth location, OR a companion command reverted to the old in-tree `${PROJECT_ROOT}/_workspace` path, OR a `git commit --no-verify` auto-bypass leaked into the tas runtime (D-08 prohibition), OR the subject format literal `step-${S.id}-${slug}: ${S.title}` was duplicated outside workspace-convention.md §Commit Schema.
 
 **Guards:** `.planning/phases/05-prompt-slim/05-CONTEXT.md` D-03 + `.planning/phases/06-session-worktree-isolation/06-CONTEXT.md` D-09 Discretion; Phase 4 D-12 14-invariant lint precedent extended for Phase 5 SSOT-1/2/3 + Phase 6 SSOT-4.
 
@@ -488,7 +488,26 @@ if [ "$LATEST_COUNT" != "3" ]; then
   exit 1
 fi
 
-echo "SSOT-1/2/3/4 PASS: all load-bearing contracts are single-source (Phase 5 SLIM + Phase 6 ISO)"
+# SSOT-5 (Phase 7 D-08): `--no-verify` auto-bypass prohibition — 0 actual-invocation matches allowed
+#   (canary-11 D-08) Regex matches `git commit ... --no-verify` form.
+#   Prohibition references (CLAUDE.md Bullet C / SKILL.md Recovery / Canary #11 assertion body / canaries.md FAIL-signal text) are excluded programmatically via keyword allowlist.
+RAW_NO_VERIFY=$(grep -rEn "git commit[^|]*--no-verify" skills/tas/ skills/tas-verify/ skills/tas-explain/ skills/tas-workspace/ skills/tas-review/ 2>/dev/null || true)
+ACTUAL_NO_VERIFY=$(echo "$RAW_NO_VERIFY" | grep -vE "D-08|prohibition|자동 우회|MUST NOT|forbidden|Canary #11|canary-11|Canary #8 Phase 2" | grep -c . || true)
+if [ "$ACTUAL_NO_VERIFY" -ne 0 ]; then
+  echo "SSOT-5 FAIL (D-08 canary-11 prohibition): $ACTUAL_NO_VERIFY actual 'git commit --no-verify' invocation(s) found in tas skills (expected 0; see CLAUDE.md Common Mistakes Bullet C)" >&2
+  echo "$RAW_NO_VERIFY" >&2
+  exit 1
+fi
+
+# SSOT-6 (Phase 7 D-10): subject format literal `step-{S.id}-{slug}: {title}` anchored in workspace-convention.md §Commit Schema only
+#   Delegates (meta-execute.md step 9.6, canaries.md) use operational copies — they reference but do not normatively define the format.
+COUNT_6=$(grep -cE '^`step-\$\{S\.id\}-\$\{slug\}: \$\{S\.title\}`$' skills/tas/references/workspace-convention.md 2>/dev/null || echo 0)
+if [ "$COUNT_6" -ne 1 ]; then
+  echo "SSOT-6 FAIL: subject format literal anchor matched in $COUNT_6 places in workspace-convention.md (expected exactly 1 in §Commit Schema Subject format subsection)" >&2
+  exit 1
+fi
+
+echo "SSOT-1/2/3/4/5/6 PASS: all load-bearing contracts are single-source (Phase 5 SLIM + Phase 6 ISO + Phase 7 COMMIT)"
 ```
 
 **Pass criteria (each invariant independently mandatory):**
@@ -496,7 +515,9 @@ echo "SSOT-1/2/3/4 PASS: all load-bearing contracts are single-source (Phase 5 S
 - **SSOT-2**: `grep -rn -E` count of the convergence verdict regex == 1 (anchor: single file, currently `skills/tas/references/meta-execute.md` per Wave 1 split; D-03 accepts either meta.md or meta-execute.md as the single location)
 - **SSOT-3**: `grep -rFln` count of the references_read schema fragment == 1 (anchor: `skills/tas/agents/meta.md` §Final JSON Contract)
 - **SSOT-4 (Phase 6 ISO-04)**: 3 companion SKILL.md (`tas-explain` / `tas-workspace` / `tas-review`) have `grep` count == 0 for `${PROJECT_ROOT}/_workspace` AND `grep` count == 3 (one per file) for `tas-sessions/LATEST`. Anchor: `skills/tas-{explain,workspace,review}/SKILL.md` (Plan 06-04 retarget).
-- All 4 PASS → block echoes `SSOT-1/2/3/4 PASS: all load-bearing contracts are single-source (Phase 5 SLIM + Phase 6 ISO)` with exit 0
+- **SSOT-5 (Phase 7 D-08)**: `grep -rEn "git commit[^|]*--no-verify"` across 5 tas skill directories (tas, tas-verify, tas-explain, tas-workspace, tas-review) minus allowlist keyword filter (`D-08`, `prohibition`, `자동 우회`, `MUST NOT`, `forbidden`, `Canary #11`, `canary-11`, `Canary #8 Phase 2`) returns count == 0 actual invocations. Prohibition references are allowed; actual Bash invocations are not.
+- **SSOT-6 (Phase 7 D-10)**: `grep -cE '^\`step-\${S\.id}-\${slug}: \${S\.title}\`$'` on `skills/tas/references/workspace-convention.md` == 1 (anchor: §Commit Schema Subject format subsection; delegates in meta-execute.md step 9.6 + canaries.md §Canary #11 reference but do not normatively define the literal).
+- All 6 PASS → block echoes `SSOT-1/2/3/4/5/6 PASS: all load-bearing contracts are single-source (Phase 5 SLIM + Phase 6 ISO + Phase 7 COMMIT)` with exit 0
 
 **Fail signals:**
 - **SSOT-1 FAIL** → `engine_invocations` definition was copied into `meta-classify.md` or `meta-execute.md` or SKILL.md. Remove the duplicate; replace with a pointer like "(See `${SKILL_DIR}/agents/meta.md` §Final JSON Contract.)"
@@ -504,6 +525,8 @@ echo "SSOT-1/2/3/4 PASS: all load-bearing contracts are single-source (Phase 5 S
 - **SSOT-3 FAIL** → `references_read: ["${SKILL_DIR}/references/meta-` JSON literal appears in a references file or SKILL.md. SKILL.md may mention the field conceptually but must NOT use this exact fragment (use a different quoting style — e.g., single-line inline JSON that does NOT match the literal pattern). References files must use prose pointers, never this JSON literal.
 - **SSOT-4 FAIL** → Plan 06-04 retarget regression: a companion command still has the old `${PROJECT_ROOT}/_workspace` path. Run `grep -l '${PROJECT_ROOT}/_workspace' skills/tas-{explain,workspace,review}/SKILL.md` to find the offender; replace with LATEST resolver block from Plan 06-04.
 - **SSOT-4 mirror FAIL** → companion command lost its `tas-sessions/LATEST` reference (resolver block removed). Restore from Plan 06-04 patterns.
+- **SSOT-5 FAIL** → Plan 07-06 D-08 ban regression: some file under `skills/tas{,-verify,-explain,-workspace,-review}/` contains an actual `git commit --no-verify` Bash invocation without an allowlist keyword. Run the SSOT-5 `grep -rEn "git commit[^|]*--no-verify" ...` command to find the file + line. If it is a prohibition reference, add one of the allowlist keywords (e.g. append `(D-08)` or `(canary-11)`) on the same line. If it is an actual invocation, remove it — `tas` never bypasses hooks automatically; the user must disable hooks via the hook's own env var (HUSKY=0, SKIP=...) before re-running.
+- **SSOT-6 FAIL** → Plan 07-03 + 07-07 D-10 regression: the subject format literal `\`step-${S.id}-${slug}: ${S.title}\`` was either duplicated to a second location (count > 1) or removed entirely (count = 0). The literal must appear exactly once in `skills/tas/references/workspace-convention.md` §Commit Schema Subject format subsection as a standalone backtick-wrapped line. Delegates (meta-execute.md step 9.6 composer, canaries.md §Canary #11 Assertion 3 regex) should reference the format but not reproduce the exact literal form.
 
 **Integration with other canaries:**
 - Canary #9 guards behavioral invariance across the split; SSOT-1/2/3 guard structural uniqueness of load-bearing definitions — complementary. A split that changes Classify/Execute behavior but keeps single-source definitions passes Canary #9 (structural diff) but might still be a conceptual regression elsewhere; a split that keeps behavior identical but duplicates definitions passes Canary #9 but fails SSOT lint. Both must pass for Phase 5 close.
@@ -577,52 +600,61 @@ TAS_VERIFY_ISO_MODE=full python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/te
 
 ## Canary #11 — Step-Level Commit Granularity (VERIFY-COMMIT-01)
 
-**STATUS:** Wave 0 PENDING — scaffolded under Plan 07-01, full 2-Phase body lands Plan 07-07. Harness: `skills/tas-verify/fixtures/simulate_step_commits.py` (stdlib-only, 2-Phase planned, ~300-500 LOC target).
+**STATUS:** Wave 5 complete — Phase 7 shipped. Harness: `skills/tas-verify/fixtures/simulate_step_commits.py` (stdlib-only, 2-Phase, ~450 LOC).
 
-**Guards:** `.planning/phases/07-step-level-commit-granularity/07-CONTEXT.md` D-12; COMMIT-01..05; DOC-01; VERIFY-COMMIT-01. Catches regressions where: step 9.6 fires on empty-diff (COMMIT-02), one of the 5 trailers is dropped (COMMIT-03), pre-commit hook failure does not HALT with `pre_commit_hook_failed` (COMMIT-04), `--no-verify` auto-bypass leaks back into tas runtime (COMMIT-04 D-08), HALT path emits the manual-merge proposal meant for PASS only (COMMIT-05 D-09).
+**Guards:** `.planning/phases/07-step-level-commit-granularity/07-CONTEXT.md` D-01..D-12; COMMIT-01 (step 9.6 ACCEPT commit hook); COMMIT-02 (empty-diff gate via `git diff --cached --quiet`); COMMIT-03 (subject format + 5-trailer schema fixed order); COMMIT-04 (`pre_commit_hook_failed` HALT + precommit.log persist + D-08 prohibition ban on `--no-verify` auto-bypass); COMMIT-05 (manual merge stdout on PASS path only); DOC-01 (CLAUDE.md 3 new bullets); VERIFY-COMMIT-01. Catches regressions where: step 9.6 fires on empty-diff 기획 OR skips on non-empty 구현 (COMMIT-01/02); one of the 5 trailers is dropped from the `-m` composer (COMMIT-03); subject slug mapping drifts (COMMIT-03); pre-commit hook failure does not HALT with `pre_commit_hook_failed` (COMMIT-04); `precommit.log` is not captured (COMMIT-04 D-07); `--no-verify` auto-bypass leaks back into tas runtime (COMMIT-04 D-08 prohibition); HALT path emits the manual-merge proposal meant for PASS only (COMMIT-05 D-09).
 
-**Exercise (two Phases — body PENDING):**
+**Exercise (two Phases):**
 
-**Phase 1 — happy path (synthetic stdlib-only mock, CI-default, `TAS_VERIFY_COMMIT_MODE=fast`, ~30s):** 4단 standard flow simulation (기획 → 구현 → 검증 → 테스트) with mock dialectic verdict=ACCEPT. Fixture body PENDING — Plan 07-07 lands.
+**Phase 1 — happy path (synthetic stdlib-only mock, CI-default, `TAS_VERIFY_COMMIT_MODE=fast`, ~30s):** Constructs a temp git repo with one initial commit on `main` inside `tempfile.mkdtemp(prefix="tas-canary-11-")`. Mirrors SKILL.md Phase 0 bootstrap: `git worktree add -b tas/session-${TS} ${SESSION_WORKTREE} HEAD` + `LATEST` symlink. Simulates the 4단 standard flow (기획 → 구현 → 검증 → 테스트) with mock dialectic verdict=ACCEPT/rounds=3. Each step invokes the Python replay of meta-execute.md step 9.6 heredoc (`_compose_commit`): slug map + `git add -A` + `git diff --cached --quiet` gate + 6 `-m` flags (1 subject + 5 trailers) + stderr redirect to `precommit.log`.
 
-**Phase 2 — regression (opt-in, `TAS_VERIFY_COMMIT_MODE=full`, ~300s):** pre-commit hook forced-failure fixture (`.git/hooks/pre-commit` with `#!/bin/sh\necho 'tas-canary-11 forced failure' >&2\nexit 1`). Fixture body PENDING — Plan 07-07 lands.
+**Phase 2 — regression (opt-in, `TAS_VERIFY_COMMIT_MODE=full`, ~300s):** Installs a forced-failure pre-commit hook (`#!/bin/sh\necho 'tas-canary-11 forced failure' >&2\nexit 1\n`, chmod 0o755) at the user repo's shared `.git/hooks/pre-commit` (the session worktree shares hooks with the main repo). Runs a single 구현 step with a file modification; expects `COMMIT_HOOK_FAIL` sentinel; synthesizes the HALT JSON that meta-execute.md FAIL branch would emit; asserts HALT JSON shape + precommit.log content + `--no-verify` grep-0 + HALT rendering has no merge proposal.
 
 ```bash
-# Default CI mode (fast, ~30s — PENDING stub exits 0)
+# Default CI mode (fast, ~30s)
 python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas-verify/fixtures/simulate_step_commits.py"
 
 # Explicit fast mode
 TAS_VERIFY_COMMIT_MODE=fast python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas-verify/fixtures/simulate_step_commits.py"
 
-# Extended mode (full, ~300s — PENDING stub exits 0)
+# Extended mode (full, ~300s — regression sub-canary with forced hook failure)
 TAS_VERIFY_COMMIT_MODE=full python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas-verify/fixtures/simulate_step_commits.py"
 ```
 
-**Pass criteria (Phase 1 — mandatory, 4 assertions PENDING Plan 07-07):**
-- **Assertion 1** (PENDING): commit count matches expected per-step pattern (기획=0, 구현≥1, 검증=0-1, 테스트=0-1) — ROADMAP SC 1
-- **Assertion 2** (PENDING): 5-trailer presence in every session-branch commit body via `git log --grep='Tas-Session: {TS}' --all` — ROADMAP SC 2
-- **Assertion 3** (PENDING): subject format matches `^step-[0-9]+-(plan|implement|verify|test|step): ` regex — COMMIT-03
-- **Assertion 4** (PENDING): 기획 step produced 0 commits (empty-diff gate) — COMMIT-02
+**Pass criteria (Phase 1 — mandatory):**
+- **Assertion 1**: `git log --oneline ${SESSION_BRANCH} ^main` yields 1-3 commits (expected 2: step 2 구현 + step 4 테스트); 기획 (step 1) + 검증 (step 3) skipped via empty-diff gate — ROADMAP SC 1 / COMMIT-01..02.
+- **Assertion 2**: every commit body from `git log --format=%B%x00 ${SESSION_BRANCH} ^main` contains all 5 trailer name prefixes (`Tas-Session:`, `Step-Id:`, `Iteration:`, `Dialectic-Verdict:`, `Dialectic-Rounds:`) AND `Tas-Session: ${FIXTURE_TS_PHASE_1}` substring — ROADMAP SC 2 / COMMIT-03 D-04.
+- **Assertion 3**: every commit subject matches regex `^step-[0-9]+-(plan|implement|verify|test|step): ` — COMMIT-03 D-04 slug mapping.
+- **Assertion 4**: 기획 step (step 1) `_compose_commit` return value is `COMMIT_EMPTY` — empty-diff gate fires per COMMIT-02 D-03.
 
-**Pass criteria (Phase 2 — mandatory if MODE=full, 4 assertions PENDING Plan 07-07):**
-- **Assertion 5** (PENDING): HALT JSON has `status: halted`, `halt_reason: pre_commit_hook_failed`
-- **Assertion 6** (PENDING): `precommit.log` exists at `${SESSION_WORKTREE}/_workspace/quick/{TS}/iteration-1/logs/step-{S.id}-{slug}/precommit.log` AND contains stderr `tas-canary-11 forced failure`
-- **Assertion 7** (PENDING): `grep -E "git commit[^|]*--no-verify"` across `skills/tas/` + `skills/tas-verify/` + `skills/tas-explain/` + `skills/tas-workspace/` + `skills/tas-review/` returns 0 actual-invocation matches (CLAUDE.md Bullet C + Canary #11 assertion body are the allowed prohibition references) — COMMIT-04 D-08
-- **Assertion 8** (PENDING): HALT-path stdout does NOT contain `git merge ${SESSION_BRANCH}` — merge proposal is PASS-path-only (D-09)
+**Pass criteria (Phase 2 — mandatory if MODE=full):**
+- **Assertion 5**: `_compose_commit` for the single 구현 step returns `COMMIT_HOOK_FAIL`, and the synthesized HALT JSON has `status: "halted"`, `halt_reason: "pre_commit_hook_failed"`, `current_step: "2"`, `completed_steps: []` (step 2 never completed) — COMMIT-04 D-06.
+- **Assertion 6**: `precommit.log` file exists at `${SESSION_WORKTREE}/_workspace/quick/${FIXTURE_TS_PHASE_2}/iteration-1/logs/step-2-implement/precommit.log` AND contains the stderr `tas-canary-11 forced failure` — COMMIT-04 D-07.
+- **Assertion 7**: (canary-11 D-08) `grep -rEn "git commit[^|]*--no-verify" skills/tas/ skills/tas-verify/ skills/tas-explain/ skills/tas-workspace/ skills/tas-review/` minus programmatic allowlist (lines containing `D-08`, `prohibition`, `자동 우회`, `MUST NOT`, `forbidden`, `Canary #11`, `canary-11`, `Canary #8 Phase 2`) returns 0 actual-invocation matches — COMMIT-04 D-08 prohibition.
+- **Assertion 8**: regex extraction of SKILL.md's `**On HALT**` block (from heading to next `**On` heading or `## ` heading or EOF) does NOT contain `git merge ${SESSION_BRANCH}` or `git merge tas/session` — COMMIT-05 D-09 HALT-path exclusion.
 
 **PASS stdout:**
-- Fast mode (PENDING): `PASS: canary #11 (step-level commit granularity; PENDING — Wave 0 stub, body lands Plan 07-07; Phase 2: SKIP (fast mode))`
-- Full mode (PENDING): `PASS: canary #11 (step-level commit granularity; PENDING — Wave 0 stub, body lands Plan 07-07; Phase 2: PASS (full mode, stub))`
-- Fast mode (final, Plan 07-07): `PASS: canary #11 (step-level commit granularity; Phase 2: SKIP (fast mode))`
-- Full mode (final, Plan 07-07): `PASS: canary #11 (step-level commit granularity; Phase 2: PASS)`
+- Fast mode: `PASS: canary #11 (step-level commit granularity; Phase 2: SKIP (fast mode))`
+- Full mode: `PASS: canary #11 (step-level commit granularity; Phase 2: PASS)`
 
-**Fail signals (regression):** PENDING — 8-row FAIL-prefix → regression-class → fix-pointer table lands Plan 07-07 per 07-PATTERNS.md template.
+**Fail signals (regression):**
+
+| FAIL prefix | Regression class | Fix pointer |
+|-------------|------------------|-------------|
+| `FAIL: Phase 1 assertion 1: commit count` | **COMMIT-01/02 regression**: step 9.6 fired on empty-diff 기획 OR skipped on non-empty 구현 | Plan 07-02 `references/meta-execute.md` step 9.6 — verify `git add -A && git diff --cached --quiet` gate; verify D-02 entry condition `S.name == "구현" AND implementation_chunks non-null + non-empty → skip` |
+| `FAIL: Phase 1 assertion 2: trailer missing` | **COMMIT-03 regression**: one of 5 trailers dropped from `-m` composer | Plan 07-02 `references/meta-execute.md` step 9.6 + Plan 07-03 `references/workspace-convention.md` §Commit Schema — verify 6 `-m` flags (1 subject + 5 trailers in fixed order: Tas-Session → Step-Id → Iteration → Dialectic-Verdict → Dialectic-Rounds) |
+| `FAIL: Phase 1 assertion 3: subject format mismatch` | **COMMIT-03 regression**: slug mapping drift or missing slug `case` arm | Plan 07-02 step 9.6 inline Bash — verify `case "${S.name}" in 기획) SLUG=plan ;; 구현) SLUG=implement ;; 검증) SLUG=verify ;; 테스트) SLUG=test ;; *) SLUG=step ;; esac` (5 arms) |
+| `FAIL: Phase 1 assertion 4: 기획 step emitted` | **COMMIT-02 regression**: empty-diff gate bypassed OR `--allow-empty` added | Plan 07-02 step 9.6 — verify `if git diff --cached --quiet; then echo 'COMMIT_EMPTY'; exit 0; fi` exists BEFORE the `git commit` call; verify NO `--allow-empty` flag |
+| `FAIL: Phase 2 assertion 5: expected COMMIT_HOOK_FAIL` (or `HALT JSON missing pre_commit_hook_failed`) | **COMMIT-04 regression**: halt_reason enum not wired OR heredoc did not capture hook failure | Plan 07-04 — verify SKILL.md L747 label row + L784 Recovery row + meta-execute.md Within-Iteration FAIL step-level subsection each contain `pre_commit_hook_failed` |
+| `FAIL: Phase 2 assertion 6: precommit.log missing or empty` | **COMMIT-04 D-07 regression**: stderr redirect dropped | Plan 07-02 step 9.6 — verify `2> "${STEP_LOG_DIR}/precommit.log"` is present in the `git commit` Bash heredoc |
+| `FAIL: Phase 2 assertion 7 (canary-11 D-08): N actual git commit --no-verify invocation(s)` | **COMMIT-04 D-08 prohibition regression**: 3-layer guard breached | Plan 07-02 heredoc (layer 1) + Plan 07-06 CLAUDE.md Bullet C (layer 2) + SSOT-5 lint (layer 3) — check `grep -E "git commit[^|]*--no-verify"` across tas skills; only prohibition-reference matches allowed |
+| `FAIL: Phase 2 assertion 8: HALT stdout contains merge proposal` | **COMMIT-05 D-09 regression**: manual merge block appeared on HALT path | Plan 07-05 — verify merge block `## ▶ Next: merge this session into your branch (manual)` is INSIDE `**On success**` implementation-steps branch only (not `**On HALT**`) |
 
 **Integration with other canaries:**
-- **Canary #4 (Resume info-hiding I-1 regression guard)** — unaffected; Phase 7 `precommit.log` is NOT in Phase 6 D-10 Read scope 4-tuple. SKILL.md Phase 0b does NOT Read precommit.log; Canary #4 grep regex unchanged.
-- **Canary #8 (chunk sub-loop wiring)** — directly relevant. Phase 7 Plan 07-03 extends Phase 4 chunk heredoc with 4 additional `-m` trailer flags (3 → 5 total trailers). Canary #8 assertions are trailer-agnostic (subject-prefix match); NO Canary #8 regression expected.
-- **Canary #10 (session worktree isolation)** — directly relevant. Phase 7 step 9.6 commits to `${SESSION_WORKTREE}` (Phase 6 D-01 export). Canary #10 Phase 2 Assertion 7 forward-references `git merge ${SESSION_BRANCH}` — Plan 07-05 replaces the placeholder with the full block; Assertion 7 remains forward-compatible (substring check).
-- **SSOT lint candidates** — Plan 07-07 may codify SSOT-5 (`--no-verify` count == 0 actual invocations) + SSOT-6 (subject format literal anchored to workspace-convention.md §Commit Schema only). Decision deferred to Plan 07-07.
+- **Canary #4 (Resume info-hiding I-1 regression guard)** — preserved. Phase 7 `precommit.log` is NOT in Phase 6 D-10 Read scope 4-tuple (LATEST, checkpoint.json, plan.json, REQUEST.md). SKILL.md Phase 0b does NOT Read precommit.log; Canary #4 grep regex unchanged.
+- **Canary #8 (chunk sub-loop wiring)** — directly relevant. Phase 7 Plan 07-03 extends Phase 4 chunk 7b heredoc with 4 additional `-m` trailer flags (3 → 5 total). Canary #8 Phase 1 Assertion 2 and Assertion 3 are trailer-agnostic (subject-prefix match + cherry-pick success); NO Canary #8 regression expected. This canary's Phase 1 Assertion 2 covers trailer-content regression for the unified schema.
+- **Canary #10 (session worktree isolation)** — directly relevant. Phase 7 step 9.6 commits to `${SESSION_WORKTREE}` (the Phase 6 D-01 export). Canary #10 Phase 2 Assertion 7 already checks `git merge ${SESSION_BRANCH}` forward-reference substring match — Phase 7 Plan 07-05 replaced the placeholder with the full block; Canary #10 Assertion 7 remains forward-compatible (substring-match-satisfied).
+- **SSOT-5 / SSOT-6 lint** (newly codified in §SSOT Invariants above; Plan 07-07) — complementary structural guard; Canary #11 exercises behavior + regression scenarios, SSOT-5/6 lint exercises single-source structural invariants. Both must pass for Phase 7 close.
 
 ---
 
