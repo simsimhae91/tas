@@ -519,29 +519,33 @@ mkdir -p "$WORKSPACE"
 
 Write `$WORKSPACE/REQUEST.md` with original request text.
 
-### Dirty-Tree Check (implement/refactor only)
+### Dirty-Tree Information (Phase 6 ISO-02 — explicit warning + auto-proceed)
+
+Per Phase 6 D-03: dirty-tree abort UX is REMOVED. Session worktree isolation makes "uncommitted changes endanger your work" no longer true — `/tas` operates inside `${SESSION_WORKTREE}` (a separate git checkout under `~/.cache/tas-sessions/`), so user's main worktree files are never directly modified.
 
 ```bash
-DIRTY="$(git status --porcelain 2>/dev/null | head -5)"
-DIRTY_COUNT="$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+DIRTY_COUNT="$(git -C "${PROJECT_ROOT}" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+if [ "${DIRTY_COUNT}" -gt 0 ]; then
+  cat <<EOF
+ℹ /tas는 사용자 작업 트리와 분리된 session worktree (${SESSION_WORKTREE}) 에서 실행됩니다.
+  현재 작업 트리의 uncommitted 변경사항 (${DIRTY_COUNT}개)은 session worktree에 보이지 않으며,
+  session 결과물은 사용자 main 브랜치에 자동 머지되지 않습니다 (manual review only).
+  계속 진행합니다.
+EOF
+fi
+# (No abort prompt — explicit information only, then continue.)
 ```
 
-If non-empty, warn: "⚠ You have uncommitted changes ({DIRTY_COUNT} file(s))... tas will
-modify files directly. `git stash` first?" If user declines → abort.
-
-### Pre-Execution Message
+### Pre-Execution Message (Phase 6 ISO-02 — session-aware)
 
 Display a brief scope message before invoking MetaAgent:
 
 ```
 Running {len(steps)} step(s) × {loop_count} iteration(s)...
+Session: ${SESSION_WORKTREE} (branch: ${SESSION_BRANCH})
 ```
 
-For `request_type` in `[implement, refactor]` and the working tree passed the dirty-tree check (clean or user confirmed), append:
-
-```
-⚠ Code will be modified directly (코드가 직접 수정됩니다). Review after: `git diff` | Undo: `git stash`
-```
+The legacy "직접 수정됩니다" warning (formerly appended for implement/refactor request types) is REMOVED — under session isolation, code lands inside the session worktree, NOT the user's main tree. Review path is `git -C "${SESSION_WORKTREE}" diff`, NOT `git diff`. Phase 7 (COMMIT-05) will append a manual `git merge tas/session-{ts}` proposal at PASS time.
 
 Invoke MetaAgent via Agent():
 
@@ -628,7 +632,11 @@ Converged (정반합) — {iterations} iteration(s), {rounds_total} rounds.
 {if early_exit: "ℹ Early exit (조기 종료): completed {iterations} of {loop_count} planned — further refinement deemed unproductive."}
 {summary from JSON}
 
-Changed files: `git diff --stat` output
+Session: ${SESSION_WORKTREE} (branch: ${SESSION_BRANCH})
+Review: `git -C "${SESSION_WORKTREE}" log --oneline ${SESSION_BRANCH}`
+Diff:   `git -C "${SESSION_WORKTREE}" diff main..${SESSION_BRANCH}`
+
+Changed files (in session worktree): `git -C "${SESSION_WORKTREE}" diff --stat` output
 Deliverable: {workspace}/DELIVERABLE.md
 Lessons: {workspace}/lessons.md
 
@@ -637,10 +645,11 @@ Lessons: {workspace}/lessons.md
 > `/tas-workspace` — manage workspace artifacts
 ```
 
-The user can review and revert if needed:
-  · Review: `git diff` to see all changes
-  · Selective revert: `git checkout -- <file>` to undo specific files
-  · Full revert: `git stash` to shelve all changes (recoverable via `git stash pop`)
+The user can review the session branch (changes are NOT in their main tree):
+  · Review log: `git -C "${SESSION_WORKTREE}" log --oneline ${SESSION_BRANCH}`
+  · Review diff: `git -C "${SESSION_WORKTREE}" diff main..${SESSION_BRANCH}`
+  · Discard session: `git -C "${PROJECT_ROOT}" worktree remove "${SESSION_WORKTREE}" && git -C "${PROJECT_ROOT}" branch -D ${SESSION_BRANCH}` (manual — Phase 6 D-08 retention policy: tas does NOT auto-clean)
+  · Phase 7 (COMMIT-05, future): `git merge ${SESSION_BRANCH}` proposal will appear here when COMMIT-05 ships
 
 **Design/analysis steps** (`request_type`: design, analyze, review, general):
 
@@ -659,6 +668,8 @@ Converged (정반합) — {iterations} iteration(s), {rounds_total} rounds.
 {if early_exit: "ℹ Early exit (조기 종료): completed {iterations} of {loop_count} planned — further refinement deemed unproductive."}
 {summary from JSON}
 
+Session: ${SESSION_WORKTREE} (branch: ${SESSION_BRANCH})
+
 ---
 {DELIVERABLE_CONTENT}
 ---
@@ -676,6 +687,8 @@ If the deliverable exceeds 200 lines, show a preview:
 Converged (정반합) — {iterations} iteration(s), {rounds_total} rounds.
 {if early_exit: "ℹ Early exit (조기 종료): completed {iterations} of {loop_count} planned — further refinement deemed unproductive."}
 {summary from JSON}
+
+Session: ${SESSION_WORKTREE} (branch: ${SESSION_BRANCH})
 
 ---
 {DELIVERABLE_CONTENT (first 200 lines)}
