@@ -558,6 +558,8 @@ REQUEST: {user's request}
 WORKSPACE: {WORKSPACE}
 PROJECT_ROOT: {PROJECT_ROOT}
 SKILL_DIR: {SKILL_DIR}
+SESSION_WORKTREE: {SESSION_WORKTREE}
+SESSION_BRANCH: {SESSION_BRANCH}
 REQUEST_TYPE: {request_type from classify}
 COMPLEXITY: {complexity from classify}
 PLAN: {steps array JSON from classify}
