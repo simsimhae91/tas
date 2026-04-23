@@ -97,7 +97,7 @@ touch {WORKSPACE}/lessons.md  # if not exists
 
 3. **Initial checkpoint.json** (CHKPT-01 · `status: running` · `completed_steps: []`):
 
-   Build payload with all 9 required fields:
+   Build payload with all 11 required fields (schema_version still `1` — additive Phase 6 D-06 extension):
    - `schema_version`: `1` (integer — CONTEXT D-03)
    - `workspace`: `"{WORKSPACE}"` (absolute path)
    - `plan_hash`: `"{PLAN_HASH}"`
@@ -111,6 +111,8 @@ touch {WORKSPACE}/lessons.md  # if not exists
      completes — iteration-scoped per CONTEXT D-08)
    - `status`: `"running"`
    - `updated_at`: `<ISO 8601 UTC, microsecond precision, +00:00 suffix>`
+   - `session_branch`: `"{SESSION_BRANCH}"` (string — Phase 6 ISO-01 additive; e.g., `"tas/session-20260423T143000Z"`. Read from the Agent prompt's `SESSION_BRANCH` field which SKILL.md Phase 0 bootstrap exported. `null` allowed only for legacy pre-Phase-6 checkpoints — new writes always populate. Information-only field, NOT validated by Phase 0b 7-check; redundant with LATEST symlink resolve but enables forensics from `cat checkpoint.json` alone.)
+   - `session_worktree_path`: `"{SESSION_WORKTREE}"` (string absolute path — Phase 6 ISO-01 additive; e.g., `"/Users/foo/.cache/tas-sessions/20260423T143000Z/tas"`. Read from the Agent prompt's `SESSION_WORKTREE` field. Same null-rules + information-only semantics as `session_branch`.)
 
    ```
    Bash({
@@ -119,6 +121,8 @@ touch {WORKSPACE}/lessons.md  # if not exists
      description: "Initial checkpoint write (CHKPT-01)"
    })
    ```
+
+**Phase 6 D-06 schema_version preservation note:** the 2 new fields (`session_branch` + `session_worktree_path`) are **additive only** — `schema_version` stays at `1`. Phase 1 D-03's 9-field contract is preserved (read functions in `checkpoint.py` use `dict.get(key, default)` patterns; new fields surface naturally to callers without KeyError). Phase 2 D-07's resume gate Step 5 (`[ "$SCHEMA_V" = "1" ]`) is therefore unaffected — bumping to `2` would trigger `checkpoint_schema_unsupported` HALT for ALL in-progress legacy checkpoints, an unacceptable regression. `runtime/checkpoint.py` requires NO code change — its `write_checkpoint(workspace, /, **fields)` signature already accepts arbitrary additive fields per Phase 1 D-03's design intent (verified by Phase 6 RESEARCH §Sources). `plan.json` is UNCHANGED → `plan_hash` is unaffected → Phase 0b 7-check `plan_hash` validation continues to pass byte-identically.
 
 **Info-hiding invariant**: Only MetaAgent writes these files. `SKILL.md` has no
 awareness of `checkpoint.json` or `plan.json` in Phase 1 (readers arrive in
