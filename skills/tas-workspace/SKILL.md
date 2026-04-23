@@ -13,19 +13,36 @@ show stats, display specific deliverables, and clean up old workspaces.
 
 **SCOPE PROHIBITION** — identical to `/tas`:
 - NEVER read project source code
-- Only read files inside `_workspace/quick/` directories
+- Only read files inside the resolved session worktree's `_workspace/quick/` directories (via LATEST symlink — Phase 6 ISO-04)
 - Only delete workspace directories (never project files)
 
 ---
 
 ## Setup
 
+Phase 6 ISO-04: companion commands resolve workspace via the `tas-sessions/LATEST` session-index symlink (replaces the former direct workspace scan).
+
 ```bash
+# Resolve via tas-sessions/LATEST symlink (Phase 6 ISO-03 / D-04)
+CACHE_ROOT="${XDG_CACHE_HOME:-${HOME}/.cache}/tas-sessions"
+LATEST_LINK="${CACHE_ROOT}/LATEST"
+if [ ! -L "${LATEST_LINK}" ]; then
+  echo "No tas session found. Run /tas first to create one."
+  exit 0
+fi
+SESSION_WORKTREE="$(readlink "${LATEST_LINK}")"
+# Phase 6 D-10 chain-attack defense (T-V4-01) — bare 1-step readlink + cache-root prefix check
+case "${SESSION_WORKTREE}" in
+  "${CACHE_ROOT}/"*) ;;
+  *) echo "LATEST symlink이 cache root 외부를 가리킵니다 (보안)."; exit 0 ;;
+esac
+WS_BASE="${SESSION_WORKTREE}/_workspace/quick"
+
+# Retain user PROJECT_ROOT for the `clean` subcommand session-worktree extension below
 PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-WS_BASE="${PROJECT_ROOT}/_workspace/quick"
 ```
 
-If `_workspace/quick/` does not exist:
+If no workspaces exist yet inside the session worktree:
 ```
 No tas workspace found. Run /tas first to create one.
 ```
@@ -152,6 +169,44 @@ rm -rf "${WS_BASE}/{timestamp}"
 ```
 {N} workspaces cleaned. {remaining} remaining.
 ```
+
+### Phase 6 D-08 + Q-G extension: session-worktree pruning (after workspace cleanup)
+
+After the workspace `_workspace/quick/{timestamp}/` cleanup completes, ALSO scan the user's git repo for stale `tas/session-*` worktrees (Phase 6 ISO-06 retention policy: tas does NOT auto-clean session worktrees; `/tas-workspace clean` is the user-explicit prune entry point).
+
+```bash
+# Discover tas/session-* worktrees registered in user's git repo
+SESSION_WORKTREES="$(git -C "${PROJECT_ROOT}" worktree list --porcelain 2>/dev/null \
+  | awk '/^worktree/{wt=$2} /^branch refs\/heads\/tas\/session-/{print wt}')"
+
+if [ -n "${SESSION_WORKTREES}" ]; then
+  COUNT=$(echo "${SESSION_WORKTREES}" | wc -l | tr -d ' ')
+  echo ""
+  echo "## tas/session-* Worktrees (Phase 6)"
+  echo ""
+  echo "Found ${COUNT} session worktree(s):"
+  echo "${SESSION_WORKTREES}" | sed 's/^/  - /'
+  echo ""
+  echo "Remove all listed session worktrees + their tas/session-* branches? (y/n)"
+fi
+```
+
+On user `y` confirmation, iterate the discovered list and remove each. The order matters: `git worktree remove` must run **before** `git branch -D` because git refuses to delete a branch that is still checked out by a worktree (Phase 6 Q-F).
+
+```bash
+echo "${SESSION_WORKTREES}" | while read -r wt_path; do
+  [ -z "${wt_path}" ] && continue
+  branch_name="$(git -C "${PROJECT_ROOT}" worktree list --porcelain 2>/dev/null \
+    | awk -v wt="${wt_path}" '/^worktree/{cur=$2} cur==wt && /^branch refs\/heads\//{sub("refs/heads/","",$2); print $2}')"
+  # Phase 6 Q-F order: worktree remove FIRST, then branch -D
+  git -C "${PROJECT_ROOT}" worktree remove --force "${wt_path}" 2>/dev/null && \
+    git -C "${PROJECT_ROOT}" branch -D "${branch_name}" 2>/dev/null
+done
+git -C "${PROJECT_ROOT}" worktree prune 2>/dev/null
+echo "${COUNT} session worktree(s) pruned."
+```
+
+On `n` (or any non-`y`), skip session-worktree removal — the `_workspace` cleanup above remains complete. Session worktrees are preserved for forensics per D-08. This extension is the user-explicit prune entry point referenced by SKILL.md Phase 0 D-08 backlog guard; the `clean` subcommand extension was chosen over a new `--prune <ts>` sub-command (D-08 Discretion + Q-G recommendation: simpler UX, reuses the existing Y/N confirmation pattern).
 
 ---
 

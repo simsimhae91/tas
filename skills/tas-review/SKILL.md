@@ -16,14 +16,53 @@ to MetaAgent for dialectic review. You do NOT perform the review yourself.
 - NEVER read project source code to make review judgments yourself
 - NEVER analyze diff content to decide whether review is needed
 - Collect diff mechanically, pass to MetaAgent, present results
+- Workspace lives in the resolved session worktree's `_workspace/quick/` (via LATEST symlink — Phase 6 ISO-04); review-only flow inline-creates a session if none exists (D-05)
 
 ---
 
 ## Step 1: Collect Diff Context
 
+Phase 6 ISO-04: workspace lives under the resolved session worktree (replaces the former direct workspace scan under the project root). If no session exists yet, inline-bootstrap one (D-05 Recommendation: review-only flow benefits from session isolation; inline-reproduce SKILL.md Phase 0 D-01 bootstrap, NOT shared function — over-engineering avoided per 4-layer info-hiding consistency).
+
 ```bash
 PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 SKILL_DIR="${CLAUDE_SKILL_DIR}/../tas"
+
+# Resolve via tas-sessions/LATEST symlink (Phase 6 ISO-03 / D-04)
+CACHE_ROOT="${XDG_CACHE_HOME:-${HOME}/.cache}/tas-sessions"
+LATEST_LINK="${CACHE_ROOT}/LATEST"
+
+if [ -L "${LATEST_LINK}" ]; then
+  # Existing session — resolve via LATEST symlink
+  SESSION_WORKTREE="$(readlink "${LATEST_LINK}")"
+  # Phase 6 D-10 chain-attack defense (T-V4-01) — bare 1-step readlink + cache-root prefix check
+  case "${SESSION_WORKTREE}" in
+    "${CACHE_ROOT}/"*) ;;
+    *) echo "LATEST symlink이 cache root 외부를 가리킵니다 (보안)."; exit 0 ;;
+  esac
+  SESSION_BRANCH="$(git -C "${PROJECT_ROOT}" worktree list --porcelain 2>/dev/null \
+    | awk -v wt="${SESSION_WORKTREE}" '/^worktree/{cur=$2} cur==wt && /^branch refs\/heads\//{sub("refs/heads/","",$2); print $2}')"
+else
+  # No prior session — inline-reproduce SKILL.md Phase 0 D-01 bootstrap (D-05 Recommendation)
+  TS="$(date -u +%Y%m%dT%H%M%SZ)"
+  PROJECT_NAME="$(basename "${PROJECT_ROOT}")"
+  case "${PROJECT_NAME}" in
+    ""|"/"|*"/"*) PROJECT_NAME="tas-session" ;;
+  esac
+  SESSION_DIR="${CACHE_ROOT}/${TS}"
+  SESSION_WORKTREE="${SESSION_DIR}/${PROJECT_NAME}"
+  SESSION_BRANCH="tas/session-${TS}"
+
+  mkdir -p "${SESSION_DIR}" \
+    || { echo "세션 캐시 디렉터리 생성 실패: ${SESSION_DIR}"; exit 0; }
+  git -C "${PROJECT_ROOT}" worktree add -b "${SESSION_BRANCH}" "${SESSION_WORKTREE}" HEAD \
+    || { echo "세션 worktree 생성 실패: ${SESSION_WORKTREE}"; exit 0; }
+  ln -sfn "${SESSION_WORKTREE}" "${CACHE_ROOT}/LATEST" \
+    || { echo "LATEST symlink 갱신 실패"; exit 0; }
+  mkdir -p "${SESSION_WORKTREE}/_workspace/quick"
+fi
+
+WS_BASE="${SESSION_WORKTREE}/_workspace/quick"
 ```
 
 Parse `$ARGUMENTS` for review target:
@@ -79,7 +118,7 @@ Create workspace and invoke MetaAgent with review-specific context:
 
 ```bash
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
-WORKSPACE="${PROJECT_ROOT}/_workspace/quick/${TIMESTAMP}/"
+WORKSPACE="${WS_BASE}/${TIMESTAMP}/"
 mkdir -p "$WORKSPACE"
 ```
 
