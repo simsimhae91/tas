@@ -151,7 +151,7 @@ async def _sdk_timeout(coro: Awaitable[T], timeout: float) -> T:
 
 
 async def query_and_collect(
-    client: Any, prompt: str, timeout: int = 600
+    client: Any, prompt: str, timeout: int = 1800
 ) -> str:
     """Send a query and collect the full response with timeout."""
 
@@ -179,7 +179,7 @@ async def query_with_reconnect(
     client: Any,
     prompt: str,
     agent_name: str,
-    timeout: int = 600,
+    timeout: int = 1800,
 ) -> str:
     """Query with one reconnect attempt on CLI death."""
     # CONTEXT D-01 / Research §4.2 validation:
@@ -556,7 +556,7 @@ async def run_dialectic(config: dict[str, Any]) -> dict[str, Any]:
     step_goal = config["step_goal"]
     model = config.get("model", "claude-sonnet-4-6")
     project_root = config["project_root"]
-    query_timeout = config.get("query_timeout", 600)
+    query_timeout = config.get("query_timeout", 1800)
     language = config.get("language", "English")
     # ISSUE-01: Read convergence model to handle inverted-mode terminal verdicts
     convergence_model = config.get("convergence_model", "standard")

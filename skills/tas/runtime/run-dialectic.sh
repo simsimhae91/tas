@@ -50,7 +50,7 @@ trap 'rc=$?; echo "$rc" > "${LOG_DIR}/engine.exit.tmp" && mv -f "${LOG_DIR}/engi
 # Override via environment (see 03-CONTEXT.md "user override path"):
 #   TAS_WATCHDOG_TIMEOUT_SEC     total step budget before SIGTERM
 #   TAS_WATCHDOG_KILL_GRACE_SEC  grace after SIGTERM before SIGKILL
-WATCHDOG_TIMEOUT_SEC="${TAS_WATCHDOG_TIMEOUT_SEC:-1200}"
+WATCHDOG_TIMEOUT_SEC="${TAS_WATCHDOG_TIMEOUT_SEC:-7200}"
 WATCHDOG_KILL_GRACE_SEC="${TAS_WATCHDOG_KILL_GRACE_SEC:-30}"
 
 # Detect coreutils `timeout` (GNU default on Linux; `gtimeout` via Homebrew
