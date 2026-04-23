@@ -572,10 +572,10 @@ else:
 ```
 Bash({
   command: "mkdir -p \"${WORKSPACE}/chunks\" && \
-git -C \"${PROJECT_ROOT}\" worktree prune --expire=1.hour.ago && \
-STALE=\"$(git -C \"${PROJECT_ROOT}\" worktree list --porcelain 2>/dev/null | awk -v ws=\"${WORKSPACE}/chunks/chunk-\" '$1==\"worktree\" && index($2,ws)==1 {print $2}')\" && \
-for stale in ${STALE}; do git -C \"${PROJECT_ROOT}\" worktree remove --force \"${stale}\" 2>/dev/null || true; done && \
-WT_COUNT=\"$(git -C \"${PROJECT_ROOT}\" worktree list --porcelain 2>/dev/null | awk '$1==\"worktree\"' | wc -l | tr -d ' ')\" && \
+git -C \"${SESSION_WORKTREE}\" worktree prune --expire=1.hour.ago && \
+STALE=\"$(git -C \"${SESSION_WORKTREE}\" worktree list --porcelain 2>/dev/null | awk -v ws=\"${WORKSPACE}/chunks/chunk-\" '$1==\"worktree\" && index($2,ws)==1 {print $2}')\" && \
+for stale in ${STALE}; do git -C \"${SESSION_WORKTREE}\" worktree remove --force \"${stale}\" 2>/dev/null || true; done && \
+WT_COUNT=\"$(git -C \"${SESSION_WORKTREE}\" worktree list --porcelain 2>/dev/null | awk '$1==\"worktree\"' | wc -l | tr -d ' ')\" && \
 echo \"WT_COUNT=${WT_COUNT}\"",
   run_in_background: false,
   description: "Phase 2d.5 pre-flight: prune + stale cleanup + count"
@@ -600,7 +600,7 @@ Initialize sub-loop locals:
 
 2. **Create worktree**:
    ```
-   git -C "${PROJECT_ROOT}" worktree add --detach "${CHUNK_PATH}" HEAD
+   git -C "${SESSION_WORKTREE}" worktree add --detach "${CHUNK_PATH}" HEAD
    ```
    `--detach` is MANDATORY (no branch pollution). `HEAD` = current PROJECT_ROOT HEAD, which already reflects prior chunks' merges (sequential stacking per D-03).
 
@@ -674,24 +674,24 @@ fi",
    ```
    Bash({
      command: "CHUNK_SHA=\"$(git -C \\\"${CHUNK_PATH}\\\" rev-parse HEAD)\"; \
-PRE_MERGE_SHA=\"$(git -C \\\"${PROJECT_ROOT}\\\" rev-parse HEAD)\"; \
+PRE_MERGE_SHA=\"$(git -C \\\"${SESSION_WORKTREE}\\\" rev-parse HEAD)\"; \
 MERGE_LOG=\"${CHUNK_LOG_DIR}/merge.log\"; \
 touch \"${MERGE_LOG}\"; \
-if git -C \"${PROJECT_ROOT}\" cherry-pick \"${CHUNK_SHA}\" 2> >(tee -a \"${MERGE_LOG}\" >&2); then \
+if git -C \"${SESSION_WORKTREE}\" cherry-pick \"${CHUNK_SHA}\" 2> >(tee -a \"${MERGE_LOG}\" >&2); then \
   echo 'MERGE_MODE=cherry-pick'; \
 else \
-  git -C \"${PROJECT_ROOT}\" cherry-pick --abort 2>/dev/null || true; \
-  if git -C \"${CHUNK_PATH}\" diff HEAD~..HEAD --binary 2>> \"${MERGE_LOG}\" | git -C \"${PROJECT_ROOT}\" apply --index --binary 2>> \"${MERGE_LOG}\"; then \
-    if git -C \"${PROJECT_ROOT}\" commit -m \"chunk-${c.id}: ${c.title}\" 2>> \"${MERGE_LOG}\"; then \
+  git -C \"${SESSION_WORKTREE}\" cherry-pick --abort 2>/dev/null || true; \
+  if git -C \"${CHUNK_PATH}\" diff HEAD~..HEAD --binary 2>> \"${MERGE_LOG}\" | git -C \"${SESSION_WORKTREE}\" apply --index --binary 2>> \"${MERGE_LOG}\"; then \
+    if git -C \"${SESSION_WORKTREE}\" commit -m \"chunk-${c.id}: ${c.title}\" 2>> \"${MERGE_LOG}\"; then \
       echo 'MERGE_MODE=git-apply'; \
     else \
-      git -C \"${PROJECT_ROOT}\" reset --hard \"${PRE_MERGE_SHA}\" 2>/dev/null || true; \
-      git -C \"${PROJECT_ROOT}\" clean -fd 2>/dev/null || true; \
+      git -C \"${SESSION_WORKTREE}\" reset --hard \"${PRE_MERGE_SHA}\" 2>/dev/null || true; \
+      git -C \"${SESSION_WORKTREE}\" clean -fd 2>/dev/null || true; \
       echo 'MERGE_MODE=FAILED'; \
     fi; \
   else \
-    git -C \"${PROJECT_ROOT}\" reset --hard \"${PRE_MERGE_SHA}\" 2>/dev/null || true; \
-    git -C \"${PROJECT_ROOT}\" clean -fd 2>/dev/null || true; \
+    git -C \"${SESSION_WORKTREE}\" reset --hard \"${PRE_MERGE_SHA}\" 2>/dev/null || true; \
+    git -C \"${SESSION_WORKTREE}\" clean -fd 2>/dev/null || true; \
     echo 'MERGE_MODE=FAILED'; \
   fi; \
 fi",
@@ -704,7 +704,7 @@ fi",
    (7e) **Remove chunk worktree**:
    ```
    Bash({
-     command: "git -C \"${PROJECT_ROOT}\" worktree remove --force \"${CHUNK_PATH}\" 2>/dev/null || true",
+     command: "git -C \"${SESSION_WORKTREE}\" worktree remove --force \"${CHUNK_PATH}\" 2>/dev/null || true",
      run_in_background: false,
      description: "Remove chunk ${c.id} worktree post-merge"
    })
@@ -731,8 +731,8 @@ fi",
    Execute the FAIL/HALT cleanup sequence (CONTEXT D-10 — Bash Sketch 4 verbatim):
    ```
    Bash({
-     command: "git -C \"${PROJECT_ROOT}\" worktree remove --force \"${CHUNK_PATH}\" 2>/dev/null || true; \
-git -C \"${PROJECT_ROOT}\" worktree prune 2>/dev/null || true",
+     command: "git -C \"${SESSION_WORKTREE}\" worktree remove --force \"${CHUNK_PATH}\" 2>/dev/null || true; \
+git -C \"${SESSION_WORKTREE}\" worktree prune 2>/dev/null || true",
      run_in_background: false,
      description: "Cleanup chunk ${c.id} worktree after FAIL/HALT"
    })
