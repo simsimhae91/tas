@@ -782,6 +782,7 @@ Blockers (from lessons.md):
 | `bash_wrapper_kill`    | "Watchdog이 설정된 시간 내 응답 부재로 프로세스를 종료했습니다. 긴 step이면 `TAS_WATCHDOG_TIMEOUT_SEC`을 늘린 후 `/tas --resume`으로 재시도하세요." |
 | `chunk_merge_conflict` | "Chunk 머지 충돌: cherry-pick + git apply 모두 실패했습니다. 공유 파일을 여러 chunk가 동시에 수정했을 가능성이 큽니다. `plan.json`의 `implementation_chunks`를 재검토하거나 `chunks: 1` 로 override하여 `/tas`로 새로 시작하세요. `merge.log`는 `{workspace}/iteration-*/logs/step-*-implement-chunk-*/merge.log` 에서 확인. 이 경로에서는 `/tas --resume`이 지원되지 않습니다 (mid-chunk resume은 M1 범위 외)." |
 | `worktree_backlog`     | "git worktree 엔트리가 10개 이상 누적되어 sub-loop 진입이 차단됐습니다. `git worktree prune` 으로 stale 메타데이터를 정리하거나, `/tas-workspace clean` 으로 workspace 정리 후 다시 시도하세요. 이 halt는 환경 정리 신호일 뿐 chunk 실행 실패가 아닙니다." |
+| `pre_commit_hook_failed` | "Pre-commit hook 이 실패해 session branch 에 커밋할 수 없었습니다. Hook 출력은 `{session_workspace}/iteration-{N}/logs/step-{id}-{slug}/precommit.log` 에서 확인하세요. Hook 문제를 수정한 뒤 `/tas --resume` 으로 재시도하거나, hook 을 의도적으로 우회하려면 `HUSKY=0 /tas` / `SKIP=...` 등 hook 자체의 환경변수로 비활성화 후 재실행하세요. tas 는 `--no-verify` 자동 우회를 수행하지 않습니다." |
 | (other) | "Check lessons.md for details." |
 
 All HALT messages end with:
