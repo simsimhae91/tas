@@ -261,7 +261,7 @@ cross-iteration synthesis records partial progress and halt reason.
 
 This workspace persists two state files: `plan.json` (the approved Classify output, immutable after write) and `checkpoint.json` (step-boundary progress, atomically rewritten after each completed step). Together they are the sole trust source for Phase 2 resume — other files (`dialogue.md`, `round-*.md`, `deliverable.md`) are opaque to the resume path.
 
-### checkpoint.json fields (schema_version 1)
+### checkpoint.json fields (schema_version 1, 11 fields — 9 M1 + 2 Phase 6 additive)
 
 | Field | Type | Required | Null allowed? | Values / Constraints |
 |-------|------|----------|---------------|----------------------|
@@ -275,20 +275,24 @@ This workspace persists two state files: `plan.json` (the approved Classify outp
 | `status` | string | yes | no | Enum: `"running"` \| `"halted"` \| `"finalized"` |
 | `updated_at` | string | yes | no | ISO 8601 UTC timestamp (e.g., `"2026-04-21T12:34:56.789012+00:00"`); regenerated on each write |
 | `halt_reason` | string \| null | no (optional) | yes | Present only when `status == "halted"` |
+| `session_branch` | string \| null | yes (Phase 6+) | yes | Named branch created by SKILL.md Phase 0 session bootstrap (e.g., `"tas/session-20260423T143000Z"`). `null` allowed only for legacy pre-Phase-6 checkpoints. Information-only field — Phase 0b 7-check does NOT validate it; redundant with LATEST symlink resolve but enables forensics from `cat checkpoint.json` alone. Plan 06-03 Task 2 documents the payload composition. |
+| `session_worktree_path` | string \| null | yes (Phase 6+) | yes | Absolute path to session worktree (e.g., `"/Users/foo/.cache/tas-sessions/20260423T143000Z/tas"`). Same null-rules + information-only semantics as `session_branch`. Phase 6 D-06 additive — `schema_version` remains `1` (NO bump — Phase 1 D-03 9-field contract preserved + Phase 2 D-07 resume gate Step 5 unchanged). |
 
 ### Example — initial write (after Classify approval, before step 1 starts)
 
 ```json
 {
   "schema_version": 1,
-  "workspace": "/Users/name/project/_workspace/quick/20260421_123456",
+  "workspace": "/Users/name/.cache/tas-sessions/20260421T123456Z/project/_workspace/quick/20260421_123456",
   "plan_hash": "7c9e6679f1a3f83e1d2a4b2c5e3d7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e",
   "current_step": "1",
   "completed_steps": [],
   "current_chunk": null,
   "completed_chunks": [],
   "status": "running",
-  "updated_at": "2026-04-21T12:34:56.789012+00:00"
+  "updated_at": "2026-04-21T12:34:56.789012+00:00",
+  "session_branch": "tas/session-20260421T123456Z",
+  "session_worktree_path": "/Users/name/.cache/tas-sessions/20260421T123456Z/project"
 }
 ```
 
@@ -297,14 +301,16 @@ This workspace persists two state files: `plan.json` (the approved Classify outp
 ```json
 {
   "schema_version": 1,
-  "workspace": "/Users/name/project/_workspace/quick/20260421_123456",
+  "workspace": "/Users/name/.cache/tas-sessions/20260421T123456Z/project/_workspace/quick/20260421_123456",
   "plan_hash": "7c9e6679f1a3f83e1d2a4b2c5e3d7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e",
   "current_step": "3",
   "completed_steps": ["1", "2"],
   "current_chunk": null,
   "completed_chunks": [],
   "status": "running",
-  "updated_at": "2026-04-21T12:48:12.345678+00:00"
+  "updated_at": "2026-04-21T12:48:12.345678+00:00",
+  "session_branch": "tas/session-20260421T123456Z",
+  "session_worktree_path": "/Users/name/.cache/tas-sessions/20260421T123456Z/project"
 }
 ```
 
@@ -313,14 +319,16 @@ This workspace persists two state files: `plan.json` (the approved Classify outp
 ```json
 {
   "schema_version": 1,
-  "workspace": "/Users/name/project/_workspace/quick/20260422_100000",
+  "workspace": "/Users/name/.cache/tas-sessions/20260422T100000Z/project/_workspace/quick/20260422_100000",
   "plan_hash": "7c9e6679f1a3f83e1d2a4b2c5e3d7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e",
   "current_step": "2",
   "completed_steps": ["1"],
   "current_chunk": "2",
   "completed_chunks": ["1"],
   "status": "running",
-  "updated_at": "2026-04-22T10:12:34.567890+00:00"
+  "updated_at": "2026-04-22T10:12:34.567890+00:00",
+  "session_branch": "tas/session-20260422T100000Z",
+  "session_worktree_path": "/Users/name/.cache/tas-sessions/20260422T100000Z/project"
 }
 ```
 
@@ -329,7 +337,7 @@ This workspace persists two state files: `plan.json` (the approved Classify outp
 ```json
 {
   "schema_version": 1,
-  "workspace": "/Users/name/project/_workspace/quick/20260422_100000",
+  "workspace": "/Users/name/.cache/tas-sessions/20260422T100000Z/project/_workspace/quick/20260422_100000",
   "plan_hash": "7c9e6679f1a3f83e1d2a4b2c5e3d7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e",
   "current_step": "2",
   "completed_steps": ["1"],
@@ -337,7 +345,9 @@ This workspace persists two state files: `plan.json` (the approved Classify outp
   "completed_chunks": ["1"],
   "status": "halted",
   "halt_reason": "chunk_merge_conflict",
-  "updated_at": "2026-04-22T10:15:01.000000+00:00"
+  "updated_at": "2026-04-22T10:15:01.000000+00:00",
+  "session_branch": "tas/session-20260422T100000Z",
+  "session_worktree_path": "/Users/name/.cache/tas-sessions/20260422T100000Z/project"
 }
 ```
 
@@ -346,7 +356,7 @@ This workspace persists two state files: `plan.json` (the approved Classify outp
 ```json
 {
   "schema_version": 1,
-  "workspace": "/Users/name/project/_workspace/quick/20260421_123456",
+  "workspace": "/Users/name/.cache/tas-sessions/20260421T123456Z/project/_workspace/quick/20260421_123456",
   "plan_hash": "7c9e6679f1a3f83e1d2a4b2c5e3d7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e",
   "current_step": "3",
   "completed_steps": ["1", "2"],
@@ -354,7 +364,9 @@ This workspace persists two state files: `plan.json` (the approved Classify outp
   "completed_chunks": [],
   "status": "halted",
   "halt_reason": "persistent_verify_failure",
-  "updated_at": "2026-04-21T13:02:44.567890+00:00"
+  "updated_at": "2026-04-21T13:02:44.567890+00:00",
+  "session_branch": "tas/session-20260421T123456Z",
+  "session_worktree_path": "/Users/name/.cache/tas-sessions/20260421T123456Z/project"
 }
 ```
 
