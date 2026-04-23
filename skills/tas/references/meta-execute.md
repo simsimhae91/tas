@@ -31,6 +31,13 @@ mkdir -p {WORKSPACE}
 touch {WORKSPACE}/lessons.md  # if not exists
 ```
 
+**Session worktree awareness (Phase 6 ISO-01)**: SKILL.md Phase 0 has already created a named-branch git worktree at `${SESSION_WORKTREE}` (a path under `${HOME}/.cache/tas-sessions/{TS}/<project>/`, with named branch `tas/session-{TS}`). MetaAgent receives this path as the `SESSION_WORKTREE` field in the Agent prompt (alongside the long-standing `PROJECT_ROOT`, `WORKSPACE`, `SKILL_DIR` fields). For Phase 6:
+
+- All `git -C` operations in **Phase 2d.5 chunk sub-loop** use `${SESSION_WORKTREE}` as the source HEAD (the named session branch's checkout), NOT `${PROJECT_ROOT}` (which remains the user's untouched main tree). The cherry-pick + git apply --binary fallback + PRE_MERGE_SHA rollback + chunk_merge_conflict HALT 4 behaviors are byte-identical — only the `git -C` target variable changes (Plan 06-05 ISO-05 retarget).
+- The non-chunked step-config.json `project_root` field is set to `{SESSION_WORKTREE}` (see step 6 below) — the dialectic engine operates ON the session worktree's HEAD, where ThesisAgent will write code with bypassPermissions.
+- The chunk-specific step-config.json `project_root = ${CHUNK_PATH}` (Phase 4 Phase 2d.5 step 3) is UNCHANGED — chunks already use the chunk worktree path, not PROJECT_ROOT.
+- `${WORKSPACE}` (= `${SESSION_WORKTREE}/_workspace/quick/{ts}/`) naturally nests inside the session worktree after SKILL.md Phase 0 bootstrap. Therefore `${CHUNK_PATH}` (= `$(cd "${WORKSPACE}" && pwd)/chunks/chunk-{c.id}`) ALSO nests inside the session worktree — Phase 4 chunk path rule preserved without code change (CLAUDE.md "chunks must live at `$(cd ${WORKSPACE} && pwd)/chunks/chunk-N/`" — ${WORKSPACE} now relocates inside session worktree).
+
 ### Initial checkpoint write (CHKPT-03 + CHKPT-01)
 
 **Branch on MODE:**
@@ -364,7 +371,7 @@ For each step, build the config the Python engine consumes.
      "log_dir": "{LOG_DIR}",
      "step_id": "{S.id}",
      "step_goal": "{S.goal}",
-     "project_root": "{PROJECT_ROOT}",
+     "project_root": "{SESSION_WORKTREE}",
      "model": "claude-sonnet-4-6",
      "convergence_model": "{standard|inverted}",
      "language": "{ONLY set non-English if user explicitly requested a specific output language (e.g. '한국어로 작성'). Default: English. A Korean request with no language instruction means English output.}"
