@@ -454,6 +454,88 @@ Per Phase 6 D-08 + REQUIREMENTS ISO-06: HALT/PASS path **both retain** the sessi
 
 ---
 
+## Commit Schema (Phase 7)
+
+Every ACCEPT'd step produces one atomic commit on the session branch
+(`tas/session-{ts}`) with a fixed subject format and 5-trailer schema.
+Empty-diff steps (typical for 기획) skip commit entirely
+(`COMMIT_EMPTY` — Phase 7 D-03). Pre-commit hook failures HALT with
+`halt_reason: pre_commit_hook_failed` (new enum, merge/hook orthogonal
+domain — Phase 3.1 D-TOPO-05 freeze justified exception; Phase 4
+`chunk_merge_conflict` precedent). `--no-verify` auto-bypass is
+**forbidden** (Phase 7 D-08).
+
+### Subject format
+
+`step-${S.id}-${slug}: ${S.title}`
+
+| `${S.name}` (Korean) | `${slug}` (ASCII) |
+|----------------------|-------------------|
+| `기획` | `plan` |
+| `구현` | `implement` |
+| `검증` | `verify` |
+| `테스트` | `test` |
+| (other) | `step` |
+
+Example: `step-2-implement: 구현 step 수렴 — CLI refactor complete`
+
+### Trailer schema (5 trailers, fixed order)
+
+```
+Tas-Session: {session_ts}
+Step-Id: {S.id}
+Iteration: {iter_n}
+Dialectic-Verdict: {ACCEPT|PASS|FAIL}
+Dialectic-Rounds: {rounds_n}
+```
+
+Order rationale: identity-first (`Tas-Session` → `Step-Id` → `Iteration`
+— grep filter anchors), evidence-last (`Dialectic-Verdict` →
+`Dialectic-Rounds` — forensic convergence metadata). Multi-`-m` produces
+paragraph-separated trailer LINES, not a canonical git trailer block;
+`git log --grep='<Trailer>: <value>'` line-match works identically, and
+`git interpret-trailers --parse` is NOT part of Phase 7 contracts.
+
+### Session retrieval via trailer grep
+
+- All commits for one session:
+  `git log --grep='Tas-Session: 20260423T163000Z' --all --format='%H %s'`
+- All commits for one step (includes all chunks if chunked 구현):
+  `git log --grep='Step-Id: 2' --all --format='%H %s'`
+- Session + step combined (AND of both grep expressions):
+  `git log --grep='Tas-Session: 20260423T163000Z' --grep='Step-Id: 2' --all --all-match --format='%H %s'`
+
+### Chunked 구현 special case (Phase 7 D-02)
+
+For 구현 steps decomposed into chunks (Phase 4 Chunk Sub-loop), each
+chunk commit uses subject `chunk-${c.id}: ${c.title}` but the same
+5-trailer schema (trailer unification). Phase 7 step-level commit (step
+9.6) is SKIPPED for chunked 구현 steps to avoid duplicate empty-diff
+commits — the chunk commits ARE the step's atomic history.
+
+### SSOT boundary
+
+| Concept | SSOT (owner) | Delegates (must point; must NOT duplicate) |
+|---------|--------------|--------------------------------------------|
+| Subject format `step-${S.id}-${slug}: ${S.title}` | This section, Subject format subsection | `references/meta-execute.md` step 9.6 composer (`-m` subject flag — operational copy); `skills/tas-verify/canaries.md` §Canary #11 Assertion 3 regex |
+| 4단 slug mapping | This section, Subject format table | `references/meta-execute.md` step 9.6 inline Bash `case` (operational copy); `skills/tas-verify/canaries.md` §Canary #11 regex alternation |
+| 5-trailer schema + fixed order | This section, Trailer schema subsection | `references/meta-execute.md` step 9.6 `-m` composer (6 `-m` flags); `references/meta-execute.md` Phase 2d.5 chunk 7b (same 6 `-m` pattern, chunk-scoped subject); `skills/tas-verify/canaries.md` §Canary #11 Assertion 2 |
+
+SSOT drift prevention: if the subject format, slug mapping, or trailer
+order changes, update ONLY this section and then update the delegate
+operational copies to match. Never anchor the normative definition in
+meta-execute.md or canaries.md — those are consumer surfaces.
+
+### Cross-references
+
+- Plan 07-02 (`meta-execute.md` step 9.6) — inline Bash composer + empty-diff gate + slug case + 6 `-m` trailers
+- Plan 07-03 (Phase 4 chunk 7b trailer extension + this section) — 3 → 5 trailer byte-additive + SSOT pointer comments
+- Plan 07-04 (`SKILL.md` HALT Labels + Recovery + `meta-execute.md` FAIL branch) — `pre_commit_hook_failed` enum + precommit.log path wiring
+- Plan 07-05 (`SKILL.md` Phase 3 "Display to User" PASS path) — manual `git merge ${SESSION_BRANCH}` proposal stdout template
+- Plan 07-07 (`skills/tas-verify/fixtures/simulate_step_commits.py` + §Canary #11) — runtime regression guard for this schema
+
+---
+
 ## Chunk Merge Workflow (Phase 4)
 
 When `plan.implementation_chunks` is non-null + non-empty, the 구현 step runs as a sub-loop of chunks (MetaAgent Execute Phase 2d.5). This section documents the workspace-side workflow — the orchestration sequence itself lives in `agents/meta.md` Phase 2d.5, and the per-chunk engine invocation contract lives in `references/engine-invocation-protocol.md` §Standard invocation pattern + §Sub-loop invocations.
