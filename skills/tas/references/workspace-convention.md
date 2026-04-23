@@ -386,6 +386,74 @@ Both `plan.json` and `checkpoint.json` writes follow the tempfile + `fsync` + `o
 
 ---
 
+## Session Layer (Phase 6)
+
+Phase 6 introduced a session-isolation layer **outside the project tree**. Every `/tas` invocation creates a named-branch git worktree under `${HOME}/.cache/tas-sessions/`, isolating tas's output channel from the user's main branch + working tree. The workspace home (`_workspace/quick/{ts}/`), Phase 4 chunk worktrees (`chunks/chunk-N/`), and all dialectic logs nest INSIDE the session worktree — `${PROJECT_ROOT}/_workspace/` no longer exists post-Phase-6 for new runs (existing M1 directories remain on disk for forensics; companion commands stop seeing them per Plan 06-04 grep-0-matches guarantee).
+
+### Directory Structure
+
+```
+~/.cache/tas-sessions/                            ← CACHE_ROOT (= ${XDG_CACHE_HOME:-${HOME}/.cache}/tas-sessions)
+├── LATEST → 20260423T143000Z/<project>/         ← atomic ln -sfn (Phase 6 D-04: gestures SESSION_WORKTREE directly, NOT SESSION_DIR)
+├── 20260423T143000Z/                            ← SESSION_DIR (= CACHE_ROOT/${TS}, where TS = `date -u +%Y%m%dT%H%M%SZ`)
+│   └── <project>/                               ← SESSION_WORKTREE (named branch tas/session-{TS})
+│       ├── (full project source — git checkout) ← user code at named branch's HEAD (sequential chunk merges land here)
+│       └── _workspace/quick/{ts}/               ← workspace home (NOW nested inside session worktree, was ${PROJECT_ROOT}/_workspace/quick/)
+│           ├── REQUEST.md
+│           ├── plan.json                        ← schema unchanged (Plan 06-03 explicit: plan.json UNCHANGED → plan_hash unaffected)
+│           ├── checkpoint.json                  ← +2 fields session_branch + session_worktree_path (Phase 6 D-06 additive, schema_version still 1)
+│           ├── DELIVERABLE.md
+│           ├── lessons.md
+│           ├── chunks/                          ← Phase 4 chunk worktrees (NOW nested inside session worktree — CLAUDE.md "chunks must live at $(cd ${WORKSPACE} && pwd)/chunks/chunk-N/" preserved)
+│           │   └── chunk-N/                     ← detached HEAD off SESSION_WORKTREE HEAD (Phase 4 D-03 sequential stacking on session branch)
+│           └── iteration-N/logs/...
+└── 20260420T101122Z/<project>/                  ← prior session, retained (Phase 6 ISO-06 + D-08 forensics policy)
+```
+
+### Naming Variables
+
+| Variable | Definition | Example |
+|----------|-----------|---------|
+| `${CACHE_ROOT}` | `${XDG_CACHE_HOME:-${HOME}/.cache}/tas-sessions` | `/Users/foo/.cache/tas-sessions` |
+| `${SESSION_DIR}` | `${CACHE_ROOT}/${TS}` (TS = `date -u +%Y%m%dT%H%M%SZ`) | `${CACHE_ROOT}/20260423T143000Z` |
+| `${SESSION_WORKTREE}` | `${SESSION_DIR}/$(basename ${PROJECT_ROOT})` (Phase 6 D-02 defensive `basename`) | `${SESSION_DIR}/tas` |
+| `${SESSION_BRANCH}` | `tas/session-${TS}` | `tas/session-20260423T143000Z` |
+
+### Session Layer SSOT Boundary
+
+| Surface | SSOT location | Notes |
+|---------|--------------|-------|
+| Session bootstrap (worktree create + LATEST symlink) | `skills/tas/SKILL.md` Phase 0 (Plan 06-02) | 4-layer info hiding — SKILL.md owns workspace lifecycle. MetaAgent inherits worktree, never creates one. |
+| Cold-resume LATEST resolve + chain-attack defense | `skills/tas/SKILL.md` Phase 0b Step 0 (Plan 06-02 + D-10) | Bare `readlink` (1-step, NOT `readlink -f`) + `case "${RESOLVED}" in "${CACHE_ROOT}/"*) ;; *) HALT ;;` |
+| MetaAgent SESSION_WORKTREE awareness + step-config.json non-chunk project_root | `skills/tas/references/meta-execute.md` Phase 1 Initialize (Plan 06-03 Task 1) | Substitutes `{PROJECT_ROOT}` → `{SESSION_WORKTREE}` for non-chunked steps; chunk-specific `project_root = ${CHUNK_PATH}` UNCHANGED. |
+| Phase 4 chunk cherry-pick target retarget | `skills/tas/references/meta-execute.md` Phase 2d.5 (Plan 06-05 — 16 substitutions) | Variable swap only; cherry-pick + git apply --index --binary fallback + PRE_MERGE_SHA rollback + chunk_merge_conflict HALT 4 behaviors byte-identical. |
+| Per-chunk engine spawn contract documentation | `skills/tas/references/engine-invocation-protocol.md` §Sub-loop invocations (Plan 06-05 — added cherry-pick target bullet) | Standard invocation pattern + Return metadata + Failure classification UNCHANGED — only adds a documentation bullet for the new target variable. |
+| Companion command session-index resolution | `skills/tas-{explain,workspace,review}/SKILL.md` (Plan 06-04 — inline duplication, D-05 Discretion) | Each companion has its own LATEST resolver + chain-attack defense; `/tas-workspace clean` extends with session-worktree pruning (Q-G recommendation). |
+| Checkpoint schema 11-field documentation | this file (Task 1 above) — §Checkpoint Schema | Additive 2 fields; `schema_version: 1` preserved; Phase 2 D-07 resume gate Step 5 unchanged; `runtime/checkpoint.py` requires NO code change (verified accepts `**fields`). |
+
+### ISO-06 Forensics Retention Policy
+
+Per Phase 6 D-08 + REQUIREMENTS ISO-06: HALT/PASS path **both retain** the session worktree + branch. Auto-cleanup is forbidden — tas never deletes session worktrees without user consent. Removal is exclusively user-initiated via one of:
+
+1. **`/tas-workspace clean`** (Phase 6 D-08 + Q-G extension — Plan 06-04 Task 2) — recommended UX. Lists discovered `tas/session-*` worktrees + presents Y/N confirmation + runs `git worktree remove --force` then `git branch -D` (Q-F: this order is mandatory; git refuses `branch -D` of a checked-out branch).
+2. **Direct `git worktree remove "${SESSION_WORKTREE}"`** + `git branch -D tas/session-${TS}` — manual surgical removal of one session.
+3. **`rm -rf ~/.cache/tas-sessions/`** — nuclear cache wipe (loses all forensic history; user accepts).
+4. **`/tas-workspace --prune <ts>`** — RESERVED but NOT IMPLEMENTED in Phase 6 (D-08 Discretion: chose `clean` extension over a new sub-command per Q-G recommendation; future Phase 7+ may revisit).
+
+**Backlog signal:** SKILL.md Phase 0 D-08 backlog guard (Plan 06-02) emits an inline abort with cleanup guidance when `git worktree list | grep tas/session- | wc -l ≥ 20`. This is NOT a halt enum (Phase 3.1 D-TOPO-05 freeze respected) — it is an environmental cleanup signal.
+
+**Phase 0b cold-resume + LATEST corruption handling:** if user manually deletes a session worktree but `~/.cache/tas-sessions/LATEST` still points to it, Phase 0b Step 1 `test -d "$WORKSPACE"` fails → existing `workspace_missing` HALT (Phase 2 D-04) — no new code path, no new enum. If the `~/.cache/tas-sessions/LATEST` symlink itself is missing (no prior /tas), Phase 0b Step 0 emits `no_checkpoint` HALT (existing enum).
+
+### Cross-references
+
+- Plan 06-02 (SKILL.md Phase 0 + 0b + Phase 1 + Phase 4 Present Result) — bootstrap + cold-resume + dirty-tree + display
+- Plan 06-03 (meta-execute.md Phase 1 Initialize + checkpoint payload) — MetaAgent SESSION_WORKTREE awareness + 11-field payload composition
+- Plan 06-04 (3 companion command SKILL.md) — LATEST resolver + Q-G clean extension + /tas-review bootstrap reuse
+- Plan 06-05 (meta-execute.md Phase 2d.5 + engine-invocation-protocol.md) — 16 chunk sub-loop substitutions + protocol addendum
+- Plan 06-07 (Canary #10 simulate_session_isolation.py) — runtime regression guard for the entire layer
+
+---
+
 ## Chunk Merge Workflow (Phase 4)
 
 When `plan.implementation_chunks` is non-null + non-empty, the 구현 step runs as a sub-loop of chunks (MetaAgent Execute Phase 2d.5). This section documents the workspace-side workflow — the orchestration sequence itself lives in `agents/meta.md` Phase 2d.5, and the per-chunk engine invocation contract lives in `references/engine-invocation-protocol.md` §Standard invocation pattern + §Sub-loop invocations.
