@@ -575,6 +575,57 @@ TAS_VERIFY_ISO_MODE=full python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/te
 
 ---
 
+## Canary #11 — Step-Level Commit Granularity (VERIFY-COMMIT-01)
+
+**STATUS:** Wave 0 PENDING — scaffolded under Plan 07-01, full 2-Phase body lands Plan 07-07. Harness: `skills/tas-verify/fixtures/simulate_step_commits.py` (stdlib-only, 2-Phase planned, ~300-500 LOC target).
+
+**Guards:** `.planning/phases/07-step-level-commit-granularity/07-CONTEXT.md` D-12; COMMIT-01..05; DOC-01; VERIFY-COMMIT-01. Catches regressions where: step 9.6 fires on empty-diff (COMMIT-02), one of the 5 trailers is dropped (COMMIT-03), pre-commit hook failure does not HALT with `pre_commit_hook_failed` (COMMIT-04), `--no-verify` auto-bypass leaks back into tas runtime (COMMIT-04 D-08), HALT path emits the manual-merge proposal meant for PASS only (COMMIT-05 D-09).
+
+**Exercise (two Phases — body PENDING):**
+
+**Phase 1 — happy path (synthetic stdlib-only mock, CI-default, `TAS_VERIFY_COMMIT_MODE=fast`, ~30s):** 4단 standard flow simulation (기획 → 구현 → 검증 → 테스트) with mock dialectic verdict=ACCEPT. Fixture body PENDING — Plan 07-07 lands.
+
+**Phase 2 — regression (opt-in, `TAS_VERIFY_COMMIT_MODE=full`, ~300s):** pre-commit hook forced-failure fixture (`.git/hooks/pre-commit` with `#!/bin/sh\necho 'tas-canary-11 forced failure' >&2\nexit 1`). Fixture body PENDING — Plan 07-07 lands.
+
+```bash
+# Default CI mode (fast, ~30s — PENDING stub exits 0)
+python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas-verify/fixtures/simulate_step_commits.py"
+
+# Explicit fast mode
+TAS_VERIFY_COMMIT_MODE=fast python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas-verify/fixtures/simulate_step_commits.py"
+
+# Extended mode (full, ~300s — PENDING stub exits 0)
+TAS_VERIFY_COMMIT_MODE=full python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas-verify/fixtures/simulate_step_commits.py"
+```
+
+**Pass criteria (Phase 1 — mandatory, 4 assertions PENDING Plan 07-07):**
+- **Assertion 1** (PENDING): commit count matches expected per-step pattern (기획=0, 구현≥1, 검증=0-1, 테스트=0-1) — ROADMAP SC 1
+- **Assertion 2** (PENDING): 5-trailer presence in every session-branch commit body via `git log --grep='Tas-Session: {TS}' --all` — ROADMAP SC 2
+- **Assertion 3** (PENDING): subject format matches `^step-[0-9]+-(plan|implement|verify|test|step): ` regex — COMMIT-03
+- **Assertion 4** (PENDING): 기획 step produced 0 commits (empty-diff gate) — COMMIT-02
+
+**Pass criteria (Phase 2 — mandatory if MODE=full, 4 assertions PENDING Plan 07-07):**
+- **Assertion 5** (PENDING): HALT JSON has `status: halted`, `halt_reason: pre_commit_hook_failed`
+- **Assertion 6** (PENDING): `precommit.log` exists at `${SESSION_WORKTREE}/_workspace/quick/{TS}/iteration-1/logs/step-{S.id}-{slug}/precommit.log` AND contains stderr `tas-canary-11 forced failure`
+- **Assertion 7** (PENDING): `grep -E "git commit[^|]*--no-verify"` across `skills/tas/` + `skills/tas-verify/` + `skills/tas-explain/` + `skills/tas-workspace/` + `skills/tas-review/` returns 0 actual-invocation matches (CLAUDE.md Bullet C + Canary #11 assertion body are the allowed prohibition references) — COMMIT-04 D-08
+- **Assertion 8** (PENDING): HALT-path stdout does NOT contain `git merge ${SESSION_BRANCH}` — merge proposal is PASS-path-only (D-09)
+
+**PASS stdout:**
+- Fast mode (PENDING): `PASS: canary #11 (step-level commit granularity; PENDING — Wave 0 stub, body lands Plan 07-07; Phase 2: SKIP (fast mode))`
+- Full mode (PENDING): `PASS: canary #11 (step-level commit granularity; PENDING — Wave 0 stub, body lands Plan 07-07; Phase 2: PASS (full mode, stub))`
+- Fast mode (final, Plan 07-07): `PASS: canary #11 (step-level commit granularity; Phase 2: SKIP (fast mode))`
+- Full mode (final, Plan 07-07): `PASS: canary #11 (step-level commit granularity; Phase 2: PASS)`
+
+**Fail signals (regression):** PENDING — 8-row FAIL-prefix → regression-class → fix-pointer table lands Plan 07-07 per 07-PATTERNS.md template.
+
+**Integration with other canaries:**
+- **Canary #4 (Resume info-hiding I-1 regression guard)** — unaffected; Phase 7 `precommit.log` is NOT in Phase 6 D-10 Read scope 4-tuple. SKILL.md Phase 0b does NOT Read precommit.log; Canary #4 grep regex unchanged.
+- **Canary #8 (chunk sub-loop wiring)** — directly relevant. Phase 7 Plan 07-03 extends Phase 4 chunk heredoc with 4 additional `-m` trailer flags (3 → 5 total trailers). Canary #8 assertions are trailer-agnostic (subject-prefix match); NO Canary #8 regression expected.
+- **Canary #10 (session worktree isolation)** — directly relevant. Phase 7 step 9.6 commits to `${SESSION_WORKTREE}` (Phase 6 D-01 export). Canary #10 Phase 2 Assertion 7 forward-references `git merge ${SESSION_BRANCH}` — Plan 07-05 replaces the placeholder with the full block; Assertion 7 remains forward-compatible (substring check).
+- **SSOT lint candidates** — Plan 07-07 may codify SSOT-5 (`--no-verify` count == 0 actual invocations) + SSOT-6 (subject format literal anchored to workspace-convention.md §Commit Schema only). Decision deferred to Plan 07-07.
+
+---
+
 ## When to add a new canary
 
 Add one whenever:
