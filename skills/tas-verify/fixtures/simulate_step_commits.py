@@ -312,7 +312,7 @@ def _phase_2_regression(tmp: Path) -> tuple[bool, str]:
     ts = FIXTURE_TS_PHASE_2
     user_repo = _init_user_repo(tmp)
     cache_root = tmp / "cache" / "tas-sessions"
-    session_worktree, session_branch = _bootstrap_session(user_repo, cache_root, ts)
+    session_worktree, _ = _bootstrap_session(user_repo, cache_root, ts)
     workspace = session_worktree / "_workspace" / "quick" / ts
     workspace.mkdir(parents=True)
     _install_failing_hook(user_repo)
