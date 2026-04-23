@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: session-isolation-commit-granularity
-status: defining-requirements
-stopped_at: Milestone v1.1 started (requirements not yet defined)
-last_updated: "2026-04-23T00:00:00.000Z"
+status: roadmap-created
+stopped_at: Phase 6 + Phase 7 roadmap created (15/15 v1.1 REQs mapped); awaiting /gsd-plan-phase 6
+last_updated: "2026-04-23T10:30:00.000Z"
 last_activity: 2026-04-23
 progress:
-  total_phases: 0
+  total_phases: 2
   completed_phases: 0
-  total_plans: 0
+  total_plans: 14
   completed_plans: 0
   percent: 0
 previous_milestone:
