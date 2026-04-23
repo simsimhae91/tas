@@ -492,6 +492,70 @@ echo "SSOT-1/2/3 PASS: all load-bearing contracts are single-source"
 
 ---
 
+## Canary #10 — Session Worktree Isolation (VERIFY-ISO-01)
+
+**STATUS:** Wave 0 PENDING placeholder — Phase 6 in progress. Harness: `skills/tas/runtime/tests/simulate_session_isolation.py` (stdlib-only, 2-Phase). Full body + concrete assertion contract land in Plan 06-07.
+
+**Guards:** `.planning/phases/06-session-worktree-isolation/06-CONTEXT.md` D-09; ISO-01 (named branch worktree); ISO-02 (dirty-tree warning); ISO-03 (LATEST symlink); ISO-04 (companion-command session-index); ISO-05 (chunk cherry-pick target retarget — Pitfall 1: 16 substitutions in meta-execute.md Phase 2d.5); ISO-06 (worktree retention); VERIFY-ISO-01.
+
+**Exercise (two Phases — concrete contract in Plan 06-07):**
+
+**Phase 1 — happy path (synthetic stdlib-only mock, CI-default, ~30s, Plan 06-07):** dirty fixture (untracked + modified files in a temp git repo) + session bootstrap simulation (mirror SKILL.md Phase 0 D-01 block — `git worktree add -b "tas/session-${TS}" ${SESSION_WORKTREE} HEAD`) + sentinel file write inside session worktree + assert (1) `git -C ${user_repo} status --porcelain` line count delta=0 vs baseline, (2) `tas/session-${TS}` branch exists in user repo, (3) `readlink ${LATEST}` resolves under cache root, (4) sentinel file present in session worktree but NOT leaked to user repo.
+
+**Phase 2 — regression (opt-in, `TAS_VERIFY_ISO_MODE=full`, ~300s, Plan 06-07):** HALT-path session retention (ISO-06) + Canary #8 PASS on session worktree fixture (ISO-05 byte-identical regression guard) + manual merge stdout placeholder check (Phase 7 prep) + companion-command grep-0-matches (`grep -l '${PROJECT_ROOT}/_workspace' skills/tas-{explain,workspace,review}/SKILL.md` outputs 0 lines + `grep -l 'tas-sessions/LATEST' skills/tas-{explain,workspace,review}/SKILL.md` outputs 3 lines).
+
+```bash
+# Default CI mode (fast, ~30s)
+python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_session_isolation.py"
+
+# Explicit fast mode
+TAS_VERIFY_ISO_MODE=fast python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_session_isolation.py"
+
+# Extended mode (full, ~300s — regression sub-canary)
+TAS_VERIFY_ISO_MODE=full python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/runtime/tests/simulate_session_isolation.py"
+```
+
+**Pass criteria (Phase 1 — Wave 0 PENDING; concrete in Plan 06-07):**
+- **Assertion 1**: dirty status delta=0 — user tree status_porcelain line count unchanged after session bootstrap + sentinel write
+- **Assertion 2**: `tas/session-${TS}` branch exists in user repo (`git branch --list "tas/session-*"` non-empty)
+- **Assertion 3**: `readlink LATEST` resolves to a path under `${CACHE_ROOT}/`
+- **Assertion 4**: sentinel file present in session worktree, absent in user worktree
+
+**Pass criteria (Phase 2 — Wave 0 PENDING; concrete in Plan 06-07):**
+- **Assertion 5**: After synthesized HALT, session worktree directory + branch still exist (ISO-06 retention)
+- **Assertion 6**: Canary #8 (Phase 4) reused inside session worktree fixture exits 0 in both fast and full modes (ISO-05 byte-identical guard)
+- **Assertion 7**: stdout block contains `git merge tas/session-` substring (Phase 7 placeholder — Plan 06-07 records it as a forward-compatible assertion that may be a no-op until Phase 7 ships COMMIT-05)
+- **Assertion 8**: `grep -l '${PROJECT_ROOT}/_workspace' skills/tas-{explain,workspace,review}/SKILL.md` outputs 0 lines AND `grep -l 'tas-sessions/LATEST' skills/tas-{explain,workspace,review}/SKILL.md` outputs 3 lines (ISO-04 grep-0-matches regression guard)
+
+**PASS stdout (Wave 0 PENDING):**
+- Fast mode: `PASS: canary #10 (PENDING — Wave 0 stub; full body Plan 06-07; mode=fast SKIP)`
+- Full mode: `PASS: canary #10 (PENDING — Wave 0 stub; full body Plan 06-07; mode=full SKIP)`
+
+**PASS stdout (post Plan 06-07 — placeholder format):**
+- Fast mode: `PASS: canary #10 (session worktree isolation; Phase 2: SKIP (fast mode))`
+- Full mode: `PASS: canary #10 (session worktree isolation; Phase 2: PASS)`
+
+**Fail signals (regression — Plan 06-07 fills concrete table):**
+
+| FAIL prefix | Regression class | Fix pointer |
+|-------------|------------------|-------------|
+| `FAIL: Phase 1 assertion 1:` (delta != 0) | **ISO-01 regression**: session worktree did not isolate user tree — D-01 bootstrap leaks file ops to PROJECT_ROOT | SKILL.md Phase 0 bootstrap block (Plan 06-02) — verify `git -C "${PROJECT_ROOT}" worktree add -b ... HEAD` + downstream code uses ${SESSION_WORKTREE} |
+| `FAIL: Phase 1 assertion 2:` (branch missing) | **ISO-01 regression**: named branch not created — `--detach` may have been reintroduced | SKILL.md Phase 0 D-01 — verify `worktree add -b "${SESSION_BRANCH}" ${SESSION_WORKTREE} HEAD` (NOT `--detach`) |
+| `FAIL: Phase 1 assertion 3:` (LATEST resolve) | **ISO-03 regression**: symlink not created or chain-attack defense triggered on legitimate path | SKILL.md Phase 0 — verify `ln -sfn "${SESSION_DIR}" "${CACHE_ROOT}/LATEST"`; check D-10 prefix-check `case "${RESOLVED}" in "${CACHE_ROOT}/"*)` accepts the resolved target |
+| `FAIL: Phase 2 assertion 5:` (HALT removed worktree) | **ISO-06 regression**: HALT path auto-cleaned worktree | meta-execute.md FAIL/HALT path (Plan 06-05) — verify session worktree NOT removed on halt; only chunk worktrees |
+| `FAIL: Phase 2 assertion 6:` (Canary #8 fails on session worktree) | **ISO-05 regression (byte-identical)**: Plan 06-05 retarget broke Phase 4 chunk merge logic | Plan 06-05 grep audit — `! sed -n '545,750p' skills/tas/references/meta-execute.md \| grep -q 'git -C "${PROJECT_ROOT}"'` (must be 0 matches in Phase 2d.5 region) |
+| `FAIL: Phase 2 assertion 8:` (companion grep) | **ISO-04 regression**: companion command still references `${PROJECT_ROOT}/_workspace` OR missing `tas-sessions/LATEST` | Plan 06-04 — verify all 3 SKILL.md (tas-explain/workspace/review) replaced setup with LATEST resolve |
+
+**Integration with other canaries:**
+- Canary #4 guards info-hiding (SKILL.md does not Read forbidden dialectic artifacts). Phase 6 expands SCOPE comment to allow LATEST symlink only (D-10) — Canary #4 grep regex must continue to return 0 matches for `dialogue|round|deliverable|lessons|heartbeat`.
+- Canary #5/#6 guard watchdog topology (Phase 3 Layer A/B). Unaffected by Phase 6 (runtime/* unchanged).
+- Canary #7 guards subagent orphan survival + real-chain integration. Unaffected by Phase 6 (run-dialectic.sh + nohup spawn preserved byte-identical).
+- **Canary #8 guards chunk sub-loop wiring.** Plan 06-05 retargets the cherry-pick target to ${SESSION_WORKTREE} — Phase 6 ISO-05 contract is "byte-identical except variable substitution"; Canary #8 must continue to PASS as a regression guard (Canary #10 Phase 2 Assertion 6 explicitly re-runs Canary #8 on a session worktree fixture).
+- Canary #9 guards prompt-slim behavioral invariance. Unaffected by Phase 6 (meta-classify.md untouched; meta-execute.md edits are localized to Phase 1 Initialize + Phase 2d.5 with byte-identical-elsewhere contract).
+- **Canary #10 guards session worktree isolation** (this canary) — Phase 6 wiring across SKILL.md Phase 0/0b/1, meta-execute.md, 3 companion commands, and the chunk sub-loop retarget.
+
+---
+
 ## When to add a new canary
 
 Add one whenever:
