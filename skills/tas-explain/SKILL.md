@@ -14,16 +14,30 @@ and what the final decision was.
 
 **SCOPE PROHIBITION** — identical to `/tas`:
 - NEVER read project source code
-- Only read files inside `_workspace/quick/` directories
+- Only read files inside the resolved session worktree's `_workspace/quick/` directories (via LATEST symlink — Phase 6 ISO-04)
 - Summarize the dialectic process, not the project code itself
 
 ---
 
 ## Setup
 
+Phase 6 ISO-04: companion commands resolve workspace via the `tas-sessions/LATEST` session-index symlink (replaces the former direct workspace scan).
+
 ```bash
-PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-WS_BASE="${PROJECT_ROOT}/_workspace/quick"
+# Resolve via tas-sessions/LATEST symlink (Phase 6 ISO-03 / D-04)
+CACHE_ROOT="${XDG_CACHE_HOME:-${HOME}/.cache}/tas-sessions"
+LATEST_LINK="${CACHE_ROOT}/LATEST"
+if [ ! -L "${LATEST_LINK}" ]; then
+  echo "No tas session found. Run /tas first to create one."
+  exit 0
+fi
+SESSION_WORKTREE="$(readlink "${LATEST_LINK}")"
+# Phase 6 D-10 chain-attack defense (T-V4-01) — bare 1-step readlink + cache-root prefix check
+case "${SESSION_WORKTREE}" in
+  "${CACHE_ROOT}/"*) ;;
+  *) echo "LATEST symlink이 cache root 외부를 가리킵니다 (보안)."; exit 0 ;;
+esac
+WS_BASE="${SESSION_WORKTREE}/_workspace/quick"
 ```
 
 ---
