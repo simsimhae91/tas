@@ -650,8 +650,30 @@ Lessons: {workspace}/lessons.md
 The user can review the session branch (changes are NOT in their main tree):
   · Review log: `git -C "${SESSION_WORKTREE}" log --oneline ${SESSION_BRANCH}`
   · Review diff: `git -C "${SESSION_WORKTREE}" diff main..${SESSION_BRANCH}`
-  · Discard session: `git -C "${PROJECT_ROOT}" worktree remove "${SESSION_WORKTREE}" && git -C "${PROJECT_ROOT}" branch -D ${SESSION_BRANCH}` (manual — Phase 6 D-08 retention policy: tas does NOT auto-clean)
-  · Phase 7 (COMMIT-05, future): `git merge ${SESSION_BRANCH}` proposal will appear here when COMMIT-05 ships
+
+---
+
+## ▶ Next: merge this session into your branch (manual)
+
+The dialectic run committed {N} step(s) to `${SESSION_BRANCH}`. Review the history before merging:
+
+  git -C "${PROJECT_ROOT}" log --oneline ${SESSION_BRANCH} ^HEAD
+  git -C "${PROJECT_ROOT}" diff HEAD..${SESSION_BRANCH}
+
+Then merge (or cherry-pick individual commits — commit-level granularity; Phase 7 trailer schema preserved):
+
+  git -C "${PROJECT_ROOT}" merge ${SESSION_BRANCH}
+  # OR, select specific commits (useful when session contains multiple step commits + chunk commits):
+  git -C "${PROJECT_ROOT}" cherry-pick <commit-sha>
+
+To discard this session without merging (Phase 6 D-08 retention — manual only):
+
+  git -C "${PROJECT_ROOT}" worktree remove "${SESSION_WORKTREE}" && \
+    git -C "${PROJECT_ROOT}" branch -D ${SESSION_BRANCH}
+
+tas does NOT auto-merge — you review and decide (Phase 6 D-08 retention + Phase 7 COMMIT-05; PASS path only, HALT paths never suggest merging broken work).
+
+---
 
 **Design/analysis steps** (`request_type`: design, analyze, review, general):
 
