@@ -914,7 +914,21 @@ Implement the retry/HALT logic exactly as specified in
 - chunk FAIL/HALT does NOT increment `consecutive_fail_count` (that counter tracks single-dialectic 검증/테스트 FAIL retries, not chunk-level failures)
 - cleanup Bash is inline at the failure branch (worktree remove + prune + optional reset --hard PRE_MERGE_SHA) — no Bash trap (MetaAgent is a subagent; Python finally is not available at this layer)
 - HALT checkpoint write populates `current_chunk` + `completed_chunks` (forensic — Phase 2 D-06 halt gate blocks resume into a chunked step)
-- Two new halt_reason enums are permitted here: `chunk_merge_conflict` (D-05, merge domain) and `worktree_backlog` (D-03, environment pollution domain). These are justified exceptions to Phase 3.1 D-TOPO-05's watchdog/hang enum freeze because they live in entirely different failure domains. NO new watchdog/hang enum is introduced.
+- Three new halt_reason enums are permitted here (2 chunk-domain + 1 hook-domain): `chunk_merge_conflict` (Phase 4 D-05, merge domain), `worktree_backlog` (Phase 4 D-03, environment pollution domain), and `pre_commit_hook_failed` (Phase 7 D-06, hook domain — see Step 9.6 FAIL subsection below). These are justified exceptions to Phase 3.1 D-TOPO-05's watchdog/hang enum freeze because they live in entirely different failure domains. NO new watchdog/hang enum is introduced.
+
+**Step 9.6 FAIL (ACCEPT commit hook — Phase 7 D-06)**: step-level commit failures (non-chunk) route through the step 9.6 heredoc stdout classification (Plan 07-02), NOT through chunk FAIL branch. Specifically:
+
+- step 9.6 runs on ACCEPT/PASS steps (기획 / 비-chunked 구현 / 검증 / 테스트). Chunked 구현 SKIPS step 9.6 — those use Phase 2d.5 chunk 7b commit path.
+- Step-level FAIL is NEVER auto-retried within the iteration (same discipline as chunk FAIL — simple recovery via `/tas --resume` after hook fix).
+- Step-level FAIL does NOT increment `consecutive_fail_count` (that counter tracks 검증/테스트 FAIL retries only — dialectic-level failures, not commit-hook failures).
+- Step-level FAIL table:
+  | step 9.6 stdout | halt_reason | cleanup + HALT |
+  |-----------------|-------------|----------------|
+  | `COMMIT_HOOK_FAIL` | `pre_commit_hook_failed` (NEW, Phase 7 D-06 — merge/hook orthogonal domain, Phase 3.1 D-TOPO-05 freeze justified exception; Phase 4 `chunk_merge_conflict` precedent) | checkpoint `status: halted`, `current_step: S.id` (NOT added to `completed_steps`), `halt_reason: pre_commit_hook_failed`, `updated_at: <HALT moment>`; hook stderr persists at `${STEP_LOG_DIR}/precommit.log` for user forensics (SKILL.md does NOT Read this file — Phase 6 D-10 info-hiding preserved); emit HALT JSON to stdout with `halted_at: "execute-step-${S.id}-commit"`; Return to outer Execute Phase 2d loop |
+
+- **`--no-verify` absolute prohibition (Phase 7 D-08)**: the step 9.6 heredoc does NOT emit `--no-verify` under any condition, and MetaAgent MUST NOT retry with `--no-verify` after `COMMIT_HOOK_FAIL`. User escape hatches (`HUSKY=0`, `SKIP=hook1`, `chmod -x .git/hooks/pre-commit`) are user-controlled environment variables — tas does not wrap them. Recovery guidance in SKILL.md Recovery Guidance table routes the user accordingly.
+
+- **No commit-only retry**: `/tas --resume` after `pre_commit_hook_failed` HALT re-executes the entire step (full dialectic + step 9.6 commit retry), not a commit-only retry. Dialectic re-runs are deterministic-convergent enough that re-execution reaches ACCEPT quickly; commit-only retry adds deterministic-vs-stochastic complexity without UX gain (Phase 7 Claude Discretion locked toward simplicity).
 
 ### Phase 2e: Iteration Synthesis
 
