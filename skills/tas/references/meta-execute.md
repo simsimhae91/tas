@@ -530,8 +530,7 @@ For each step, build the config the Python engine consumes.
      directly to step 9.5. Otherwise, execute step 9.6 body below.
 
      **Body** — inline Bash heredoc (MetaAgent owns commit, NOT thesis; same
-     ownership discipline as Phase 4 D-06; see `workspace-convention.md`
-     §Commit Schema for the normative trailer definitions — Plan 07-03).
+     ownership discipline as Phase 4 D-06; see `workspace-convention.md` §Commit Schema for the normative trailer definitions — Plan 07-03).
 
      **Trailer order (fixed, Phase 7 D-04)**: `Tas-Session:` → `Step-Id:` → `Iteration:` → `Dialectic-Verdict:` → `Dialectic-Rounds:` (identity trailers first, evidence trailers last; the subject line precedes this 5-trailer block):
 
@@ -726,20 +725,41 @@ Initialize sub-loop locals:
    })
    ```
 
-   (7b) **MetaAgent commit** (CONTEXT D-06 — MetaAgent owns, NOT thesis):
+   (7b) **MetaAgent commit** (CONTEXT D-06 — MetaAgent owns, NOT thesis;
+   see `references/workspace-convention.md` §Commit Schema for the
+   normative 5-trailer schema — Phase 7 D-02/D-04/D-10):
+
+   **Trailer order (fixed, Phase 7 D-04)**: `Tas-Session:` → `Step-Id:` → `Iteration:` → `Dialectic-Verdict:` → `Dialectic-Rounds:` (identity trailers first, evidence trailers last; chunk subject line `chunk-${c.id}: ${c.title}` precedes this 5-trailer block — same schema as step 9.6 per D-02 unification):
    ```
    Bash({
      command: "if [ -n \"$(git -C \\\"${CHUNK_PATH}\\\" status --porcelain)\" ]; then \
   git -C \"${CHUNK_PATH}\" add -A && \
-  git -C \"${CHUNK_PATH}\" commit -m \"chunk-${c.id}: ${c.title}\" -m \"dialectic verdict: ${VERDICT}\" -m \"rounds: ${ROUNDS}\"; \
+  git -C \"${CHUNK_PATH}\" commit \
+    -m \"chunk-${c.id}: ${c.title}\" \
+    -m \"Tas-Session: ${TS}\" \
+    -m \"Step-Id: ${S.id}\" \
+    -m \"Iteration: ${ITER_N}\" \
+    -m \"Dialectic-Verdict: ${VERDICT}\" \
+    -m \"Dialectic-Rounds: ${ROUNDS}\"; \
   echo \"COMMIT_OK\"; \
 else \
   echo \"COMMIT_EMPTY\"; \
 fi",
      run_in_background: false,
-     description: "MetaAgent commit chunk ${c.id}"
+     description: "MetaAgent commit chunk ${c.id} (Phase 7 D-02: 5 trailers)"
    })
    ```
+
+   **Phase 7 D-02 — trailer unification**: chunk commits carry the same
+   5-trailer schema as step 9.6 commits, so `git log --grep='Step-Id: 2' --all`
+   returns all chunks of step 2 (including the aggregate 구현 step if any).
+   Subject is scope-local (`chunk-${c.id}: ${c.title}`) — the step-level
+   `step-${S.id}-${slug}: ${S.title}` subject is NOT emitted at chunk layer
+   (step 9.6 SKIPS when chunked; see step 9.6 entry condition). Multi-`-m`
+   produces paragraph-separated trailer LINES (not canonical git trailer
+   block); all Phase 7 user-facing contracts use `git log --grep='Tas-Session: {ts}'`
+   line-match which works identically — `git interpret-trailers --parse`
+   is not used.
    If stdout == `COMMIT_EMPTY`, this chunk had no file changes — skip the cherry-pick merge step below, skip summary generation (no diff to summarize), mark chunk c as completed (add to `completed_chunks`), continue to next chunk.
 
    (7c) **Compose chunk summary** (CONTEXT D-04 — Bash Sketch 3 adaptation; MetaAgent composes the summary from the template in D-04 using `cat deliverable.md` + `git diff HEAD~..HEAD --name-only` + `git log HEAD~..HEAD --format='%s%n%b'`). The template (verbatim from D-04):
