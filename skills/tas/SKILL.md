@@ -185,6 +185,18 @@ If `$ARGUMENTS` contains `--resume`, route here and skip Phase 1 (Classify). On 
 Cold-resume chicken-and-egg: `checkpoint.json` lives inside the session worktree, but the resume gate must know the session worktree path BEFORE it can find `checkpoint.json`. The `${CACHE_ROOT}/LATEST` symlink (atomically updated by Phase 0 Session Bootstrap, D-04) is the single zero-ambiguity entry point.
 
 ```bash
+# Phase 0b inline halt emitter — scoped to resume-gate (distinct from Phase 0's
+# bootstrap-scoped EMIT_HALT which hardcodes halted_at:"phase-0-session-bootstrap").
+# Redefined here because (a) Phase 0b may run in a separate Bash tool invocation
+# from Phase 0 (different shell process, function would not persist) and
+# (b) halted_at must be "resume-gate" per L282 halt JSON shape — Phase 0's
+# function emits the wrong halted_at if inherited. WORKSPACE may be unset at
+# Step 0 (not resolved yet) — default to empty string to match the schema.
+EMIT_HALT() {
+  printf '{"status":"halted","workspace":"%s","halt_reason":"%s","summary":"%s","halted_at":"resume-gate"}\n' \
+    "${WORKSPACE:-}" "${HALT_REASON}" "${SUMMARY}"
+}
+
 CACHE_ROOT="${XDG_CACHE_HOME:-${HOME}/.cache}/tas-sessions"
 LATEST_LINK="${CACHE_ROOT}/LATEST"
 
@@ -288,7 +300,12 @@ The `{korean-message}` values come from the Phase 3 Recovery Guidance table for 
 
 Derive display values without reading any dialectic artifact. Directory listing via `ls iteration-*/` is metadata only — it does NOT count as reading iteration content (SCOPE comment above).
 
+Read the original request text at the top of this step — it is needed for both the cancel-branch message (`Resume 취소됨. /tas {original request}로 새 run을 시작하세요.`) and the Step 4 Agent() prompt. `REQUEST.md` is in-scope per the SCOPE comment (L176).
+
 ```bash
+# Original request — in SCOPE (L176); used by both cancel branch and Step 4 approve path
+ORIGINAL_REQUEST="$(cat "$WORKSPACE/REQUEST.md")"
+
 # Iteration count (derived from directory structure — metadata only)
 ITER_LATEST="$(ls -1d "${WORKSPACE}/iteration-"*/ 2>/dev/null \
   | sed -E 's#.*iteration-([0-9]+)/$#\1#' \
@@ -354,11 +371,7 @@ Y/N handling (natural-language prompt + wait-for-response — do NOT use `AskUse
 
 ### Step 4: Invoke MetaAgent Execute with MODE: resume
 
-Read the original request from the workspace's trust source (do NOT re-read `$ARGUMENTS` — REQUEST.md is canonical for resume):
-
-```bash
-ORIGINAL_REQUEST="$(cat "$WORKSPACE/REQUEST.md")"
-```
+`ORIGINAL_REQUEST` was already captured at the top of Step 3 from `$WORKSPACE/REQUEST.md` — REQUEST.md is canonical for resume (do NOT re-read `$ARGUMENTS`). No additional read is needed here; the same shell variable carries through to the Agent() prompt.
 
 Parse `plan.json` fields needed for the Agent() prompt (`steps`, `loop_policy`, `project_domain`, `focus_angle`) — SKILL.md passes these through verbatim and does NOT interpret them.
 
@@ -768,6 +781,9 @@ Extract `{timestamp}` from the workspace path (`YYYYmmdd_HHMMSS`).
 | `chunk_merge_conflict` | Chunk merge conflict (Chunk 머지 충돌) |
 | `worktree_backlog`     | Worktree backlog (worktree 누적 — 환경 정리 필요) |
 | `pre_commit_hook_failed` | Pre-commit hook failed (커밋 훅 실패) |
+| `resume_plan_mismatch` | Plan mismatch on resume (재개 시 plan 불일치) |
+| `chunk_resume_not_supported_in_m1` | Chunk resume not supported in M1 (Chunk 재개 M1 미지원) |
+| `resume_iteration_damaged` | Resume iteration damaged (재개 iteration 손상) |
 | (other) | Use `halt_reason` as-is |
 
 #### HALT Display
@@ -805,6 +821,9 @@ Blockers (from lessons.md):
 | `chunk_merge_conflict` | "Chunk 머지 충돌: cherry-pick + git apply 모두 실패했습니다. 공유 파일을 여러 chunk가 동시에 수정했을 가능성이 큽니다. `plan.json`의 `implementation_chunks`를 재검토하거나 `chunks: 1` 로 override하여 `/tas`로 새로 시작하세요. `merge.log`는 `{workspace}/iteration-*/logs/step-*-implement-chunk-*/merge.log` 에서 확인. 이 경로에서는 `/tas --resume`이 지원되지 않습니다 (mid-chunk resume은 M1 범위 외)." |
 | `worktree_backlog`     | "git worktree 엔트리가 10개 이상 누적되어 sub-loop 진입이 차단됐습니다. `git worktree prune` 으로 stale 메타데이터를 정리하거나, `/tas-workspace clean` 으로 workspace 정리 후 다시 시도하세요. 이 halt는 환경 정리 신호일 뿐 chunk 실행 실패가 아닙니다." |
 | `pre_commit_hook_failed` | "Pre-commit hook 이 실패해 session branch 에 커밋할 수 없었습니다. Hook 출력은 `{session_workspace}/iteration-{N}/logs/step-{id}-{slug}/precommit.log` 에서 확인하세요. Hook 문제를 수정한 뒤 `/tas --resume` 으로 재시도하거나, hook 을 의도적으로 우회하려면 `HUSKY=0 /tas` / `SKIP=...` 등 hook 자체의 환경변수로 비활성화 후 재실행하세요. tas 는 `--no-verify` 자동 우회를 수행하지 않습니다." |
+| `resume_plan_mismatch` | "SKILL.md가 전달한 PLAN과 workspace의 `plan.json`이 일치하지 않습니다. `plan.json`이 Classify 승인 이후 수정됐을 가능성이 높습니다. 원본을 복구하거나 `/tas`로 새로 시작하세요. `/tas --resume`은 지원되지 않습니다." |
+| `chunk_resume_not_supported_in_m1` | "Chunk sub-loop 재개는 M1 Phase 2 범위 외입니다 (mid-chunk resume은 Phase 4 릴리스 후 지원 예정). `/tas`로 새 요청을 시작하세요. `plan.json`에서 `implementation_chunks`를 재검토하여 `chunks: 1` override 가능." |
+| `resume_iteration_damaged` | "재개 대상 iteration 디렉터리의 `DELIVERABLE.md`가 누락되어 일관성이 깨졌습니다. `/tas-workspace {workspace}`로 내용을 확인한 뒤 `/tas`로 새로 시작하세요. 이 halt 경로에서는 `/tas --resume`이 지원되지 않습니다." |
 | (other) | "Check lessons.md for details." |
 
 All HALT messages end with:
