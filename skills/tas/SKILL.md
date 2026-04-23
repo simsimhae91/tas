@@ -745,6 +745,7 @@ Extract `{timestamp}` from the workspace path (`YYYYmmdd_HHMMSS`).
 | `bash_wrapper_kill`    | Watchdog forced termination (워치독 강제 종료) |
 | `chunk_merge_conflict` | Chunk merge conflict (Chunk 머지 충돌) |
 | `worktree_backlog`     | Worktree backlog (worktree 누적 — 환경 정리 필요) |
+| `pre_commit_hook_failed` | Pre-commit hook failed (커밋 훅 실패) |
 | (other) | Use `halt_reason` as-is |
 
 #### HALT Display
