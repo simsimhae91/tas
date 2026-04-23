@@ -197,28 +197,38 @@ Iteration 3: 다음 초점 각도 + 이전까지의 모든 교훈
 
 ### 워크스페이스 구조
 
+**0.2.5** 부터 모든 `/tas` 실행은 XDG cache 아래의 **세션 격리 git worktree** 에서 진행됩니다 — 변증법 엔진이 사용자의 프로젝트 트리를 직접 수정하는 일은 더 이상 없습니다.
+
 ```
-_workspace/
-  quick/
-    {YYYYmmdd_HHMMSS}/
-      REQUEST.md
-      DELIVERABLE.md                 # iteration 전체 최종 합성
-      lessons.md                     # 누적 교훈
-      iteration-1/
-        DELIVERABLE.md               # 이 iteration의 출력
-        logs/
-          step-1-plan/
-            round-1-thesis.md, round-1-antithesis.md, ...
-            deliverable.md
-          step-2-implement/
-          step-3-verify/
-          step-3-verify-retry-1/     # iteration 내부 FAIL 재시도
-          step-4-test/
-      iteration-2/                   # loop_count > 1 일 때만
-        ...
+~/.cache/tas-sessions/
+  LATEST → 20260423T060506Z/myproject/           # 가장 최근 세션을 가리키는 심볼릭 링크
+  20260423T060506Z/
+    myproject/                                   # git worktree (named branch tas/session-20260423T060506Z)
+      _workspace/
+        quick/
+          {YYYYmmdd_HHMMSS}/
+            REQUEST.md
+            DELIVERABLE.md                       # iteration 전체 최종 합성
+            lessons.md                           # 누적 교훈
+            checkpoint.json                      # resume 상태 (11-field 스키마)
+            plan.json                            # 분류된 계획
+            iteration-1/
+              DELIVERABLE.md                     # 이 iteration의 출력
+              logs/
+                step-1-plan/
+                  round-1-thesis.md, round-1-antithesis.md, ...
+                  deliverable.md
+                step-2-implement/
+                step-3-verify/
+                step-3-verify-retry-1/           # iteration 내부 FAIL 재시도
+                step-4-test/
+            iteration-2/                         # loop_count > 1 일 때만
+              ...
 ```
 
-모든 실행은 타임스탬프로 격리됩니다. 재개(resume) 메커니즘이 없습니다 — 매 `/tas` 호출은 새 세션입니다. 과거 실행 조회·정리는 `/tas-workspace`를 사용하세요.
+각 세션은 이름 있는 브랜치 (`tas/session-{ts}`) 위에 올라가므로, 작업 전체를 하나의 단위로 리뷰하고 병합할 수 있습니다: `git merge tas/session-{ts}`. `LATEST` 심볼릭 링크는 `/tas --resume` 과 동반 명령 (`/tas-explain`, `/tas-workspace`, `/tas-review`) 모두의 단일 진입점입니다. PASS/HALT 이후에도 세션은 포렌식용으로 보존되며, 오래된 세션 정리는 `/tas-workspace clean` 으로 수행합니다.
+
+`/tas` 가 중단된 경우 (컨텍스트 리셋, HALT, 네트워크 등) `/tas --resume` 으로 마지막 step 체크포인트부터 이어서 실행할 수 있습니다.
 
 ---
 
@@ -241,7 +251,7 @@ _workspace/
 |------|--------|-----------|
 | MetaAgent 모델 | `opus` | 고정 — 분류/실행은 최고 성능 모델에서 |
 | 변증법 모델 (Thesis/Antithesis) | `claude-sonnet-4-6` | `agents/meta.md` step-config `model` 필드 + `runtime/dialectic.py` 폴백 |
-| 워크스페이스 | `{PROJECT_ROOT}/_workspace/quick/{timestamp}/` | 실행마다 타임스탬프로 분리 |
+| 워크스페이스 | `~/.cache/tas-sessions/{ts}/<project>/_workspace/quick/{timestamp}/` | 실행마다 세션 worktree + 타임스탬프로 분리 (0.2.5+); `LATEST` 심볼릭 링크가 최신 세션을 가리킴 |
 | Loop count | 1 | 계획 승인 시 사용자 지정 (`loop_count`) |
 | Reentry point | `구현` | 계획 승인 시 사용자 지정 (`loop_policy.reentry_point`) |
 | 지속 실패 HALT | 동일 블로커 3회 연속 FAIL 후 | `loop_policy.persistent_failure_halt_after` |

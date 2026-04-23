@@ -1,7 +1,7 @@
 {
   "name": "tas",
   "description": "Dialectic (정반합) workflow plugin for Claude Code. 3-layer orchestration: MainOrchestrator → MetaAgent → thesis/antithesis agents.",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "author": { "name": "hosoo" },
   "homepage": "https://github.com/simsimhae91/tas",
   "repository": "https://github.com/simsimhae91/tas",

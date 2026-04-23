@@ -197,28 +197,38 @@ The 테스트 step adapts to project domain (detected during classify):
 
 ### Workspace layout
 
+Since **0.2.5**, every `/tas` run lands in a **session-isolated git worktree** under the XDG cache — your project tree is never modified directly by the dialectic engine.
+
 ```
-_workspace/
-  quick/
-    {YYYYmmdd_HHMMSS}/
-      REQUEST.md
-      DELIVERABLE.md                 # final cross-iteration synthesis
-      lessons.md                     # cumulative lessons learned
-      iteration-1/
-        DELIVERABLE.md               # this iteration's output
-        logs/
-          step-1-plan/
-            round-1-thesis.md, round-1-antithesis.md, ...
-            deliverable.md
-          step-2-implement/
-          step-3-verify/
-          step-3-verify-retry-1/     # within-iter FAIL retry
-          step-4-test/
-      iteration-2/                   # only if loop_count > 1
-        ...
+~/.cache/tas-sessions/
+  LATEST → 20260423T060506Z/myproject/           # symlink to the most recent session
+  20260423T060506Z/
+    myproject/                                   # git worktree on branch tas/session-20260423T060506Z
+      _workspace/
+        quick/
+          {YYYYmmdd_HHMMSS}/
+            REQUEST.md
+            DELIVERABLE.md                       # final cross-iteration synthesis
+            lessons.md                           # cumulative lessons learned
+            checkpoint.json                      # resume state (11-field schema)
+            plan.json                            # classified plan
+            iteration-1/
+              DELIVERABLE.md                     # this iteration's output
+              logs/
+                step-1-plan/
+                  round-1-thesis.md, round-1-antithesis.md, ...
+                  deliverable.md
+                step-2-implement/
+                step-3-verify/
+                step-3-verify-retry-1/           # within-iter FAIL retry
+                step-4-test/
+            iteration-2/                         # only if loop_count > 1
+              ...
 ```
 
-Every run is timestamped and isolated. No resume mechanism — each `/tas` invocation is a fresh session. Use `/tas-workspace` to list or clean old runs.
+Each session lives on a named branch (`tas/session-{ts}`) so the work is reviewable and mergeable as a single unit: `git merge tas/session-{ts}`. The `LATEST` symlink is the single entry point for `/tas --resume` and the companion commands (`/tas-explain`, `/tas-workspace`, `/tas-review`). Sessions are retained after PASS or HALT for forensics — use `/tas-workspace clean` to prune old ones.
+
+If `/tas` is interrupted (context reset, HALT, network hiccup), re-run with `/tas --resume` to pick up from the last step checkpoint.
 
 ---
 
@@ -241,7 +251,7 @@ Both hooks no-op in non-`tas` sessions and respect `stop_hook_active` to prevent
 |---------|---------|---------------|
 | MetaAgent model | `opus` | Fixed — classify/execute run on the most capable model |
 | Dialectic model (Thesis/Antithesis) | `claude-sonnet-4-6` | `agents/meta.md` step-config `model` field + `runtime/dialectic.py` fallback |
-| Workspace | `{PROJECT_ROOT}/_workspace/quick/{timestamp}/` | Timestamped per run |
+| Workspace | `~/.cache/tas-sessions/{ts}/<project>/_workspace/quick/{timestamp}/` | Session worktree per run (0.2.5+); `LATEST` symlink resolves the most recent |
 | Loop count | 1 | User at plan approval (`loop_count`) |
 | Reentry point | `구현` | User at plan approval (`loop_policy.reentry_point`) |
 | Persistent-fail HALT | after 3 consecutive same-blocker FAILs | `loop_policy.persistent_failure_halt_after` |
