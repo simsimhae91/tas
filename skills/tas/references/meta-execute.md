@@ -513,6 +513,100 @@ For each step, build the config the Python engine consumes.
 9. **Read deliverable** at `deliverable_path` and append a summary to
    `cumulative_context_this_iter` (so downstream steps within this iteration can reference).
 
+9.6. **ACCEPT commit hook** (Phase 7 COMMIT-01..03): after step 9's
+     deliverable read completes and **before** step 9.5's checkpoint write,
+     commit the session-worktree state as one atomic step commit on the
+     session branch. Execution order is `9 → 9.6 → 9.5` (commit before
+     checkpoint) so that `completed_steps[]` never records a step whose
+     artifacts are absent from the session branch (atomic consistency —
+     Phase 7 D-01; Phase 4 chunk 7b → 7f precedent).
+
+     **Entry condition (Phase 7 D-02 — chunked 구현 skip)**:
+
+     If `S.name == "구현"` AND `plan.implementation_chunks` is non-null AND
+     non-empty, SKIP step 9.6 entirely — Phase 2d.5 chunk sub-loop 7b has
+     already emitted per-chunk commits on the session branch with the same
+     5-trailer schema (Plan 07-03 aligns chunk 7b trailers). Proceed
+     directly to step 9.5. Otherwise, execute step 9.6 body below.
+
+     **Body** — inline Bash heredoc (MetaAgent owns commit, NOT thesis; same
+     ownership discipline as Phase 4 D-06; see `workspace-convention.md`
+     §Commit Schema for the normative trailer definitions — Plan 07-03).
+
+     **Trailer order (fixed, Phase 7 D-04)**: `Tas-Session:` → `Step-Id:` → `Iteration:` → `Dialectic-Verdict:` → `Dialectic-Rounds:` (identity trailers first, evidence trailers last; the subject line precedes this 5-trailer block):
+
+     ```
+     Bash({
+       command: "set -e; \
+STEP_LOG_DIR=\"${WORKSPACE}/iteration-${ITER_N}/logs/step-${S.id}-${SLUG}\"; \
+mkdir -p \"${STEP_LOG_DIR}\"; \
+case \"${S.name}\" in \
+  기획)   SLUG=plan ;; \
+  구현)   SLUG=implement ;; \
+  검증)   SLUG=verify ;; \
+  테스트) SLUG=test ;; \
+  *)      SLUG=step ;; \
+esac; \
+SUBJECT=\"step-${S.id}-${SLUG}: ${S.title}\"; \
+cd \"${SESSION_WORKTREE}\"; \
+git add -A; \
+if git diff --cached --quiet; then \
+  echo 'COMMIT_EMPTY'; exit 0; \
+fi; \
+if git commit \
+  -m \"${SUBJECT}\" \
+  -m \"Tas-Session: ${TS}\" \
+  -m \"Step-Id: ${S.id}\" \
+  -m \"Iteration: ${ITER_N}\" \
+  -m \"Dialectic-Verdict: ${VERDICT}\" \
+  -m \"Dialectic-Rounds: ${ROUNDS}\" \
+  2> \"${STEP_LOG_DIR}/precommit.log\"; then \
+  echo 'COMMIT_OK'; \
+else \
+  echo 'COMMIT_HOOK_FAIL'; exit 0; \
+fi",
+       run_in_background: false,
+       description: "Step ${S.id} ACCEPT commit hook (Phase 7 COMMIT-01..04)"
+     })
+     ```
+
+     **Stdout classification** (Phase 7 D-01 + D-06 — Plan 07-04 wires the
+     HALT branch into Within-Iteration FAIL Handling):
+
+     - `COMMIT_OK` → commit landed on `${SESSION_BRANCH}`. Proceed to step
+       9.5 with `status: "running"`.
+     - `COMMIT_EMPTY` → no staged changes (typical for 기획 steps whose
+       deliverables live under `.gitignore`-protected `_workspace/`). Skip
+       commit entirely; proceed to step 9.5 with `status: "running"`. Do
+       NOT use `git commit --allow-empty` — history pollution (Phase 7 D-03
+       Rejected alternatives).
+     - `COMMIT_HOOK_FAIL` → pre-commit hook rejected the commit. Plan 07-04
+       wires this into the FAIL-branch table with
+       `halt_reason: pre_commit_hook_failed`. Hook stderr was captured at
+       `${STEP_LOG_DIR}/precommit.log` (Phase 7 D-07). DO NOT emit
+       `--no-verify` as a fallback (Phase 7 D-08 runtime-layer guard;
+       CLAUDE.md Bullet C / Plan 07-06).
+
+     **Input variables** (all already exported by Phase 6 bootstrap /
+     MetaAgent Phase 1 Initialize / step-config synthesis):
+
+     - `${SESSION_WORKTREE}`, `${SESSION_BRANCH}`, `${TS}` — Phase 6 D-01
+     - `${WORKSPACE}`, `${ITER_N}`, `${S.id}`, `${S.name}`, `${S.title}` — Phase 1 Initialize + current step entry
+     - `${VERDICT}`, `${ROUNDS}` — synthesized from step 9's last JSON line
+
+     **SSOT pointer**: subject format + slug table + trailer schema are
+     normatively defined in `references/workspace-convention.md` §Commit
+     Schema (Plan 07-03 lands that section). This Bash heredoc is an
+     operational copy — if the SSOT changes, update BOTH this block AND
+     §Commit Schema to keep them aligned (Plan 07-07 Canary #11 Assertion
+     2 + Assertion 3 catches drift).
+
+     **Phase 4 byte-identical preservation**: this insertion MUST NOT
+     modify Phase 4 chunk heredoc at L635-L644 (that is Plan 07-03's
+     scope). Canary #8 fast mode must continue to pass after this edit
+     (runnable check: `TAS_VERIFY_CHUNK_MODE=fast python3
+     skills/tas/runtime/tests/simulate_chunk_integration.py`).
+
 9.5. **Update checkpoint.json** (CHKPT-01): after appending the step's deliverable
      summary to `cumulative_context_this_iter`, atomically update the workspace
      checkpoint.
