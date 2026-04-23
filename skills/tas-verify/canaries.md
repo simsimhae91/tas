@@ -104,33 +104,36 @@ Catches the regression class where `SKILL.md` Phase 0b (or any other Phase) read
 dialectic artifacts — breaks the MainOrchestrator info-hiding boundary.
 
 **Exercise**: run the grep check against `skills/tas/SKILL.md`. This is a
-static lint — no `/tas` invocation needed:
+static lint — no `/tas` invocation needed. The regex specifically targets
+the `Read(...)` tool-invocation pattern rather than bare filename mentions,
+because the I-1 boundary is about *reading* artifacts (a tool call), not
+*referencing* their paths in user-facing output templates (legitimate —
+users must know where to find `/tas-explain` inputs and `lessons.md` logs).
 
 ```bash
 SKILL_PATH="${CLAUDE_PLUGIN_ROOT:-.}/skills/tas/SKILL.md"
-grep -nE 'dialogue\.md|round-[0-9]+-(thesis|antithesis)\.md|deliverable\.md|lessons\.md|heartbeat\.txt' "$SKILL_PATH"
+grep -nE 'Read\("[^"]*(dialogue|round-[0-9]+-(thesis|antithesis)|deliverable|lessons|heartbeat)\.' "$SKILL_PATH"
 ```
 
 **Pass criteria**:
-- Command exit code **1** (zero matches — SKILL.md does not reference any
-  dialectic artifact filename as a Read target)
-- No stdout lines
-- Note: matches within SCOPE warning comments or anti-feature HTML blocks are
-  ALLOWED (the regex is intentionally strict; reviewer visually confirms
-  matches are only in forbidden-list documentation, not in Read() calls).
-  Running this canary should still exit 1 overall — the SCOPE comment uses
-  the filenames *as examples of forbidden targets*, and the line should be
-  structured so the bare filenames do not appear literally in the SCOPE line
-  (the SCOPE line uses them inside a narrative sentence — verify via diff
-  against Plan 01 acceptance criteria).
+- Command exit code **1** (zero matches — SKILL.md contains no `Read(...)`
+  tool invocation targeting a dialectic artifact filename).
+- No stdout lines.
+- Bare filename mentions in SCOPE comments (e.g. `# Reading lessons.md ... is
+  an I-1 regression.`), HALT recovery guidance (e.g. `"Check lessons.md for
+  details."`), and output templates (e.g. `Lessons: {workspace}/lessons.md`)
+  are ALLOWED and do NOT cause regex hits because they lack the `Read(` token
+  before the filename. Those string mentions are how SKILL.md points users to
+  the files for inspection via `/tas-explain` / `/tas-workspace` — removing
+  them would harm UX without strengthening info-hiding.
 
 **Fail signals (regression)**:
-- Exit code 0 (any match found) → MainOrchestrator has developed an info-leak
-  path; remove the reference and route users to `/tas-explain` or
-  `/tas-workspace` for dialectic inspection instead (per CLAUDE.md line 128
-  post-Phase-2 wording).
-- Any stdout line like `NNN:<content containing dialogue.md, round-N-thesis.md,
-  round-N-antithesis.md, deliverable.md, or lessons.md>` in a Read/Bash context
+- Exit code 0 (any match found) → SKILL.md has introduced a `Read()` tool
+  call on a dialectic artifact, which is an I-1 boundary crossing. Remove
+  the Read call and route inspection through `/tas-explain` or
+  `/tas-workspace` instead (per CLAUDE.md line 128 post-Phase-2 wording +
+  Phase 6 D-10 note `Canary #4 grep regex Read.*\(dialogue|round|deliverable|lessons|heartbeat\) MUST continue to return 0 matches`).
+- Any stdout line like `NNN:Read("{workspace}/dialogue.md")` or similar.
 
 ---
 
